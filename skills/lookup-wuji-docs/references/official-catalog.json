@@ -1,0 +1,5610 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-11T08:27:36+00:00",
+  "source_origin": "https://docs.wuji.tech",
+  "language": "zh",
+  "docsets": [
+    {
+      "category": "hardware",
+      "name": "Wuji Hand 2 (Beta 1)",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-1"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.02",
+              "id": "20260602"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-2"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "产品介绍",
+              "id": "产品介绍"
+            },
+            {
+              "level": 3,
+              "title": "用户须知",
+              "id": "用户须知"
+            },
+            {
+              "level": 3,
+              "title": "使用约束",
+              "id": "使用约束"
+            },
+            {
+              "level": 3,
+              "title": "SDK 接口",
+              "id": "sdk-接口"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "产品介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/overview/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "产品介绍"
+            },
+            {
+              "level": 2,
+              "title": "1. 产品概述",
+              "id": "1-产品概述"
+            },
+            {
+              "level": 2,
+              "title": "2. 产品参数",
+              "id": "2-产品参数"
+            },
+            {
+              "level": 2,
+              "title": "3. 产品结构特性",
+              "id": "3-产品结构特性"
+            },
+            {
+              "level": 3,
+              "title": "3.1 外形尺寸",
+              "id": "31-外形尺寸"
+            },
+            {
+              "level": 3,
+              "title": "3.2 结构示意图",
+              "id": "32-结构示意图"
+            },
+            {
+              "level": 3,
+              "title": "3.3 自由度配置",
+              "id": "33-自由度配置"
+            },
+            {
+              "level": 3,
+              "title": "3.4 各关节运动方向与范围",
+              "id": "34-各关节运动方向与范围"
+            },
+            {
+              "level": 3,
+              "title": "3.5 通信与电源接口示意图",
+              "id": "35-通信与电源接口示意图"
+            },
+            {
+              "level": 3,
+              "title": "3.6 三层结构：骨骼、软体、皮肤",
+              "id": "36-三层结构骨骼软体皮肤"
+            },
+            {
+              "level": 2,
+              "title": "4. 产品电气特性",
+              "id": "4-产品电气特性"
+            },
+            {
+              "level": 2,
+              "title": "5. 内容物清单",
+              "id": "5-内容物清单"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "用户须知",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/user-notice/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "用户须知"
+            },
+            {
+              "level": 2,
+              "title": "1. 电源使用安全",
+              "id": "1-电源使用安全"
+            },
+            {
+              "level": 2,
+              "title": "2. 机械操作安全",
+              "id": "2-机械操作安全"
+            },
+            {
+              "level": 2,
+              "title": "3. 环境要求",
+              "id": "3-环境要求"
+            },
+            {
+              "level": 2,
+              "title": "4. 线缆与排线保护",
+              "id": "4-线缆与排线保护"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "使用约束",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/usage-constraints/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "使用约束"
+            },
+            {
+              "level": 2,
+              "title": "1. 能力边界与暂未提供项",
+              "id": "1-能力边界与暂未提供项"
+            },
+            {
+              "level": 2,
+              "title": "2. 电气与供电（强约束）",
+              "id": "2-电气与供电强约束"
+            },
+            {
+              "level": 2,
+              "title": "3. 软体与皮肤层",
+              "id": "3-软体与皮肤层"
+            },
+            {
+              "level": 2,
+              "title": "4. 散热",
+              "id": "4-散热"
+            },
+            {
+              "level": 2,
+              "title": "5. 可靠性与耐用性",
+              "id": "5-可靠性与耐用性"
+            },
+            {
+              "level": 2,
+              "title": "6. 电机负载能力",
+              "id": "6-电机负载能力"
+            },
+            {
+              "level": 2,
+              "title": "7. 关节零位标定",
+              "id": "7-关节零位标定"
+            },
+            {
+              "level": 2,
+              "title": "8. 关节反驱与力矩透明性",
+              "id": "8-关节反驱与力矩透明性"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "SDK 接口",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/latest/sdk-reference/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "SDK 接口"
+            },
+            {
+              "level": 2,
+              "title": "1. 连接",
+              "id": "1-连接"
+            },
+            {
+              "level": 3,
+              "title": "1.1 通过 SdkManager 连接（推荐）",
+              "id": "11-通过-sdkmanager-连接推荐"
+            },
+            {
+              "level": 3,
+              "title": "1.2 ConnectOptions",
+              "id": "12-connectoptions"
+            },
+            {
+              "level": 3,
+              "title": "1.3 实例属性",
+              "id": "13-实例属性"
+            },
+            {
+              "level": 2,
+              "title": "2. Hand 级资源",
+              "id": "2-hand-级资源"
+            },
+            {
+              "level": 3,
+              "title": "2.1 handedness（GET）",
+              "id": "21-handednessget"
+            },
+            {
+              "level": 3,
+              "title": "2.2 online_joints_count（GET）",
+              "id": "22-online_joints_countget"
+            },
+            {
+              "level": 3,
+              "title": "2.3 diagnostics（GET）",
+              "id": "23-diagnosticsget"
+            },
+            {
+              "level": 3,
+              "title": "2.4 comm_diag（GET，1 Hz）",
+              "id": "24-comm_diagget1-hz"
+            },
+            {
+              "level": 3,
+              "title": "2.5 control_mode（SET）",
+              "id": "25-control_modeset"
+            },
+            {
+              "level": 3,
+              "title": "2.6 effort_limit（SET/GET）",
+              "id": "26-effort_limitsetget"
+            },
+            {
+              "level": 3,
+              "title": "2.7 mit_params（SET/GET）",
+              "id": "27-mit_paramssetget"
+            },
+            {
+              "level": 3,
+              "title": "2.8 clear_fault（SET）",
+              "id": "28-clear_faultset"
+            },
+            {
+              "level": 3,
+              "title": "2.9 用户零点（origin）",
+              "id": "29-用户零点origin"
+            },
+            {
+              "level": 3,
+              "title": "2.10 软限位（soft_limit）",
+              "id": "210-软限位soft_limit"
+            },
+            {
+              "level": 3,
+              "title": "2.11 使能 / 失能",
+              "id": "211-使能--失能"
+            },
+            {
+              "level": 3,
+              "title": "2.12 joint_state（SUB）",
+              "id": "212-joint_statesub"
+            },
+            {
+              "level": 3,
+              "title": "2.13 joint_command（PUB）",
+              "id": "213-joint_commandpub"
+            },
+            {
+              "level": 3,
+              "title": "2.14 Flash 日志导出（诊断）",
+              "id": "214-flash-日志导出诊断"
+            },
+            {
+              "level": 2,
+              "title": "3. 关节遍历",
+              "id": "3-关节遍历"
+            },
+            {
+              "level": 3,
+              "title": "3.1 JointHandle",
+              "id": "31-jointhandle"
+            },
+            {
+              "level": 3,
+              "title": "3.2 FingerHandle",
+              "id": "32-fingerhandle"
+            },
+            {
+              "level": 2,
+              "title": "4. 数据类型",
+              "id": "4-数据类型"
+            },
+            {
+              "level": 3,
+              "title": "4.1 DiagnosticArray / DiagnosticStatus",
+              "id": "41-diagnosticarray--diagnosticstatus"
+            },
+            {
+              "level": 3,
+              "title": "4.2 MitParam / MitParams",
+              "id": "42-mitparam--mitparams"
+            },
+            {
+              "level": 3,
+              "title": "4.3 JointState",
+              "id": "43-jointstate"
+            },
+            {
+              "level": 3,
+              "title": "4.4 JointEntry",
+              "id": "44-jointentry"
+            },
+            {
+              "level": 3,
+              "title": "4.5 HandCommunicationDiagnostics",
+              "id": "45-handcommunicationdiagnostics"
+            },
+            {
+              "level": 2,
+              "title": "5. 关节编号",
+              "id": "5-关节编号"
+            },
+            {
+              "level": 2,
+              "title": "6. 异常处理",
+              "id": "6-异常处理"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "hardware",
+      "name": "Wuji Hand",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-hand/v1/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/v1/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.02",
+              "id": "20260202"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-1"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.01.19",
+              "id": "20260119"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-2"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.01.04",
+              "id": "20260104"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-3"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            },
+            {
+              "level": 2,
+              "title": "2025.12.22",
+              "id": "20251222"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-4"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-4"
+            },
+            {
+              "level": 2,
+              "title": "2025.12.05",
+              "id": "20251205"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-5"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-5"
+            },
+            {
+              "level": 2,
+              "title": "2025.11.07",
+              "id": "20251107"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-6"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-6"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/v1/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "产品介绍",
+              "id": "产品介绍"
+            },
+            {
+              "level": 3,
+              "title": "用户须知",
+              "id": "用户须知"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "产品资料",
+          "title": "产品介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/v1/overview/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "产品介绍"
+            },
+            {
+              "level": 2,
+              "title": "1. 产品概述",
+              "id": "1-产品概述"
+            },
+            {
+              "level": 2,
+              "title": "2. 产品参数",
+              "id": "2-产品参数"
+            },
+            {
+              "level": 2,
+              "title": "3. 产品结构特征",
+              "id": "3-产品结构特征"
+            },
+            {
+              "level": 3,
+              "title": "3.1 结构示意图",
+              "id": "31-结构示意图"
+            },
+            {
+              "level": 3,
+              "title": "3.2 Wuji Hand 自由度配置",
+              "id": "32-wuji-hand-自由度配置"
+            },
+            {
+              "level": 3,
+              "title": "3.3 各自由度运动方向及角度范围",
+              "id": "33-各自由度运动方向及角度范围"
+            },
+            {
+              "level": 3,
+              "title": "3.4 通信与电源接口示意图",
+              "id": "34-通信与电源接口示意图"
+            },
+            {
+              "level": 2,
+              "title": "4. 产品电气特征",
+              "id": "4-产品电气特征"
+            },
+            {
+              "level": 3,
+              "title": "4.1 引脚定义",
+              "id": "41-引脚定义"
+            },
+            {
+              "level": 3,
+              "title": "4.2 指示灯对照表",
+              "id": "42-指示灯对照表"
+            },
+            {
+              "level": 2,
+              "title": "5. 产品配件介绍",
+              "id": "5-产品配件介绍"
+            },
+            {
+              "level": 3,
+              "title": "5.1 产品配件表",
+              "id": "51-产品配件表"
+            },
+            {
+              "level": 3,
+              "title": "5.2 触觉感知手套",
+              "id": "52-触觉感知手套"
+            },
+            {
+              "level": 4,
+              "title": "5.2.1 系统要求",
+              "id": "521-系统要求"
+            },
+            {
+              "level": 4,
+              "title": "5.2.2 产品参数",
+              "id": "522-产品参数"
+            },
+            {
+              "level": 4,
+              "title": "5.2.3 连接方式",
+              "id": "523-连接方式"
+            },
+            {
+              "level": 4,
+              "title": "5.2.4 通信接口",
+              "id": "524-通信接口"
+            },
+            {
+              "level": 4,
+              "title": "5.2.5 软件支持",
+              "id": "525-软件支持"
+            },
+            {
+              "level": 3,
+              "title": "5.3 抗冲击转接座",
+              "id": "53-抗冲击转接座"
+            },
+            {
+              "level": 2,
+              "title": "6. 安装与拆卸",
+              "id": "6-安装与拆卸"
+            },
+            {
+              "level": 3,
+              "title": "6.1 安装步骤",
+              "id": "61-安装步骤"
+            },
+            {
+              "level": 3,
+              "title": "6.2 注意事项",
+              "id": "62-注意事项"
+            },
+            {
+              "level": 4,
+              "title": "6.2.1 紧固检查",
+              "id": "621-紧固检查"
+            },
+            {
+              "level": 4,
+              "title": "6.2.2 维护与检修",
+              "id": "622-维护与检修"
+            }
+          ]
+        },
+        {
+          "group": "产品资料",
+          "title": "用户须知",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand/v1/user-notice/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "用户须知"
+            },
+            {
+              "level": 2,
+              "title": "1. 安全注意事项",
+              "id": "1-安全注意事项"
+            },
+            {
+              "level": 3,
+              "title": "1.1 电源使用安全",
+              "id": "11-电源使用安全"
+            },
+            {
+              "level": 3,
+              "title": "1.2 固件更新安全",
+              "id": "12-固件更新安全"
+            },
+            {
+              "level": 3,
+              "title": "1.3 机械操作安全",
+              "id": "13-机械操作安全"
+            },
+            {
+              "level": 3,
+              "title": "1.4 环境要求",
+              "id": "14-环境要求"
+            },
+            {
+              "level": 3,
+              "title": "1.5 线缆与排线保护",
+              "id": "15-线缆与排线保护"
+            },
+            {
+              "level": 2,
+              "title": "2. 条款与声明",
+              "id": "2-条款与声明"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "hardware",
+      "name": "Wuji Glove",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.18",
+              "id": "20260618"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-1"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-2"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-3"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.28",
+              "id": "20260428"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-4"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-4"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.27",
+              "id": "20260427"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-5"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-5"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.07",
+              "id": "20260407"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-6"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-6"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.24",
+              "id": "20260324"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-7"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-7"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.23",
+              "id": "20260323"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-8"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-8"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.14",
+              "id": "20260214"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-9"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-9"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.09",
+              "id": "20260209"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-10"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-10"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "产品介绍",
+              "id": "产品介绍"
+            },
+            {
+              "level": 3,
+              "title": "使用前准备",
+              "id": "使用前准备"
+            },
+            {
+              "level": 3,
+              "title": "SDK 数据参考",
+              "id": "sdk-数据参考"
+            },
+            {
+              "level": 3,
+              "title": "原始数据转换",
+              "id": "原始数据转换"
+            },
+            {
+              "level": 3,
+              "title": "坐标系说明",
+              "id": "坐标系说明"
+            },
+            {
+              "level": 3,
+              "title": "故障排查",
+              "id": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "软件文档",
+              "id": "软件文档"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "产品资料",
+          "title": "产品介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/introduction/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "产品介绍"
+            },
+            {
+              "level": 2,
+              "title": "产品概述",
+              "id": "产品概述"
+            },
+            {
+              "level": 2,
+              "title": "产品参数",
+              "id": "产品参数"
+            },
+            {
+              "level": 3,
+              "title": "手套参数",
+              "id": "手套参数"
+            },
+            {
+              "level": 3,
+              "title": "EMF 相关参数",
+              "id": "emf-相关参数"
+            },
+            {
+              "level": 2,
+              "title": "结构介绍",
+              "id": "结构介绍"
+            },
+            {
+              "level": 3,
+              "title": "指示灯状态",
+              "id": "指示灯状态"
+            },
+            {
+              "level": 2,
+              "title": "产品配件介绍",
+              "id": "产品配件介绍"
+            },
+            {
+              "level": 2,
+              "title": "软件",
+              "id": "软件"
+            }
+          ]
+        },
+        {
+          "group": "产品资料",
+          "title": "使用前准备",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/getting-started/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "使用前准备"
+            },
+            {
+              "level": 2,
+              "title": "连接与配置",
+              "id": "连接与配置"
+            },
+            {
+              "level": 3,
+              "title": "步骤一：连接采集主板",
+              "id": "步骤一连接采集主板"
+            },
+            {
+              "level": 3,
+              "title": "步骤二：接入网线和电源",
+              "id": "步骤二接入网线和电源"
+            },
+            {
+              "level": 3,
+              "title": "步骤三：配置电脑网络",
+              "id": "步骤三配置电脑网络"
+            },
+            {
+              "level": 3,
+              "title": "步骤四：穿戴 Wuji Glove",
+              "id": "步骤四穿戴-wuji-glove"
+            },
+            {
+              "level": 3,
+              "title": "步骤五：安装 Tracker（可选）",
+              "id": "步骤五安装-tracker可选"
+            },
+            {
+              "level": 2,
+              "title": "软件安装",
+              "id": "软件安装"
+            }
+          ]
+        },
+        {
+          "group": "参考材料",
+          "title": "原始数据转换",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/offline-pipeline/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "原始数据转换"
+            },
+            {
+              "level": 2,
+              "title": "何时使用",
+              "id": "何时使用"
+            },
+            {
+              "level": 2,
+              "title": "工作流",
+              "id": "工作流"
+            },
+            {
+              "level": 2,
+              "title": "创建离线 pipeline",
+              "id": "创建离线-pipeline"
+            },
+            {
+              "level": 3,
+              "title": "标定查找顺序",
+              "id": "标定查找顺序"
+            },
+            {
+              "level": 2,
+              "title": "复算手部产物",
+              "id": "复算手部产物"
+            },
+            {
+              "level": 2,
+              "title": "复算 IMU 融合",
+              "id": "复算-imu-融合"
+            },
+            {
+              "level": 2,
+              "title": "构造输入帧",
+              "id": "构造输入帧"
+            }
+          ]
+        },
+        {
+          "group": "参考材料",
+          "title": "坐标系说明",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/coordinate-frames/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "坐标系说明"
+            },
+            {
+              "level": 2,
+              "title": "坐标系约定",
+              "id": "坐标系约定"
+            },
+            {
+              "level": 3,
+              "title": "右手系",
+              "id": "右手系"
+            },
+            {
+              "level": 3,
+              "title": "轴向定义",
+              "id": "轴向定义"
+            },
+            {
+              "level": 4,
+              "title": "body 根节点",
+              "id": "body-根节点"
+            },
+            {
+              "level": 4,
+              "title": "wrist 节点",
+              "id": "wrist-节点"
+            },
+            {
+              "level": 2,
+              "title": "Frame 树形结构",
+              "id": "frame-树形结构"
+            },
+            {
+              "level": 3,
+              "title": "全身 Frame 层级",
+              "id": "全身-frame-层级"
+            },
+            {
+              "level": 3,
+              "title": "手套传感器 Frame 层级",
+              "id": "手套传感器-frame-层级"
+            },
+            {
+              "level": 2,
+              "title": "线圈坐标系",
+              "id": "线圈坐标系"
+            },
+            {
+              "level": 3,
+              "title": "定义",
+              "id": "定义"
+            },
+            {
+              "level": 3,
+              "title": "线圈位置参数",
+              "id": "线圈位置参数"
+            },
+            {
+              "level": 4,
+              "title": "手背发射线圈",
+              "id": "手背发射线圈"
+            },
+            {
+              "level": 4,
+              "title": "手指接收线圈",
+              "id": "手指接收线圈"
+            }
+          ]
+        },
+        {
+          "group": "附录",
+          "title": "故障排查",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "无法连接手套",
+              "id": "无法连接手套"
+            },
+            {
+              "level": 2,
+              "title": "ping 有响应但连不上手套",
+              "id": "ping-有响应但连不上手套"
+            },
+            {
+              "level": 3,
+              "title": "网络层：ping 实际未到达手套",
+              "id": "network-layer"
+            },
+            {
+              "level": 3,
+              "title": "软件层：ping 已到达手套但客户端连不上",
+              "id": "software-layer"
+            },
+            {
+              "level": 2,
+              "title": "获取技术支持",
+              "id": "获取技术支持"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "数据流概览",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "数据流概览"
+            },
+            {
+              "level": 2,
+              "title": "可用数据流",
+              "id": "可用数据流"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "触觉数据",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/tactile/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "触觉数据"
+            },
+            {
+              "level": 2,
+              "title": "触觉矩阵布局",
+              "id": "触觉矩阵布局"
+            },
+            {
+              "level": 2,
+              "title": "TactileFrame",
+              "id": "tactileframe"
+            },
+            {
+              "level": 2,
+              "title": "TactileZones",
+              "id": "tactilezones"
+            },
+            {
+              "level": 2,
+              "title": "PointField",
+              "id": "pointfield"
+            },
+            {
+              "level": 2,
+              "title": "PointCloud",
+              "id": "pointcloud"
+            },
+            {
+              "level": 2,
+              "title": "TactileBinary",
+              "id": "tactilebinary"
+            },
+            {
+              "level": 2,
+              "title": "TactileResidual",
+              "id": "tactileresidual"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "EMF 与手部追踪",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/hand-tracking/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "EMF 与手部追踪"
+            },
+            {
+              "level": 2,
+              "title": "EMF 位姿",
+              "id": "emf-位姿"
+            },
+            {
+              "level": 3,
+              "title": "EmfPose",
+              "id": "emfpose"
+            },
+            {
+              "level": 3,
+              "title": "EmfPoseArray",
+              "id": "emfposearray"
+            },
+            {
+              "level": 2,
+              "title": "手部追踪产物",
+              "id": "手部追踪产物"
+            },
+            {
+              "level": 3,
+              "title": "FingertipPose",
+              "id": "fingertippose"
+            },
+            {
+              "level": 3,
+              "title": "FingertipPoses",
+              "id": "fingertipposes"
+            },
+            {
+              "level": 3,
+              "title": "FingerJointAngles",
+              "id": "fingerjointangles"
+            },
+            {
+              "level": 3,
+              "title": "HandJointAngles",
+              "id": "handjointangles"
+            },
+            {
+              "level": 3,
+              "title": "SkeletonJoint",
+              "id": "skeletonjoint"
+            },
+            {
+              "level": 3,
+              "title": "HandSkeleton",
+              "id": "handskeleton"
+            },
+            {
+              "level": 2,
+              "title": "输出率调节",
+              "id": "输出率调节"
+            },
+            {
+              "level": 3,
+              "title": "调用方式",
+              "id": "调用方式"
+            },
+            {
+              "level": 3,
+              "title": "取值与默认",
+              "id": "取值与默认"
+            },
+            {
+              "level": 3,
+              "title": "影响范围",
+              "id": "影响范围"
+            },
+            {
+              "level": 3,
+              "title": "与标定的关系",
+              "id": "与标定的关系"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "IMU 数据",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/imu/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "IMU 数据"
+            },
+            {
+              "level": 2,
+              "title": "ImuData",
+              "id": "imudata"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "坐标变换",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/coordinate-transforms/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "坐标变换"
+            },
+            {
+              "level": 2,
+              "title": "tf_static — 静态坐标变换",
+              "id": "tf_static--静态坐标变换"
+            },
+            {
+              "level": 2,
+              "title": "tf — 动态坐标变换",
+              "id": "tf--动态坐标变换"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "设备运维",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/device-operations/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备运维"
+            },
+            {
+              "level": 2,
+              "title": "参数持久化",
+              "id": "参数持久化"
+            },
+            {
+              "level": 2,
+              "title": "重启",
+              "id": "重启"
+            },
+            {
+              "level": 2,
+              "title": "标定",
+              "id": "标定"
+            },
+            {
+              "level": 2,
+              "title": "设备日志",
+              "id": "设备日志"
+            },
+            {
+              "level": 2,
+              "title": "可用参数",
+              "id": "可用参数"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "标定",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-glove/latest/sdk-data-reference/calibration/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "标定"
+            },
+            {
+              "level": 2,
+              "title": "何时需要标定",
+              "id": "何时需要标定"
+            },
+            {
+              "level": 2,
+              "title": "标定流程",
+              "id": "标定流程"
+            },
+            {
+              "level": 3,
+              "title": "同步阻塞调用",
+              "id": "同步阻塞调用"
+            },
+            {
+              "level": 3,
+              "title": "异步调用",
+              "id": "异步调用"
+            },
+            {
+              "level": 3,
+              "title": "参数",
+              "id": "参数"
+            },
+            {
+              "level": 3,
+              "title": "实时反馈",
+              "id": "实时反馈"
+            },
+            {
+              "level": 2,
+              "title": "手型选择",
+              "id": "手型选择"
+            },
+            {
+              "level": 3,
+              "title": "标定时指定手型",
+              "id": "标定时指定手型"
+            },
+            {
+              "level": 3,
+              "title": "运行时切换手型",
+              "id": "运行时切换手型"
+            },
+            {
+              "level": 2,
+              "title": "自定义 URDF 覆盖",
+              "id": "自定义-urdf-覆盖"
+            },
+            {
+              "level": 2,
+              "title": "URDF 查找顺序",
+              "id": "urdf-查找顺序"
+            },
+            {
+              "level": 2,
+              "title": "返回字段",
+              "id": "返回字段"
+            },
+            {
+              "level": 2,
+              "title": "标定结果路径",
+              "id": "标定结果路径"
+            },
+            {
+              "level": 2,
+              "title": "错误处理",
+              "id": "错误处理"
+            },
+            {
+              "level": 2,
+              "title": "资源路径速查",
+              "id": "资源路径速查"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji Studio",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.18",
+              "id": "20260618"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-1"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-2"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.02",
+              "id": "20260602"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-3"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-4"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-4"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.27",
+              "id": "20260427"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-5"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-5"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.07",
+              "id": "20260407"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-6"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-6"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.23",
+              "id": "20260323"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-7"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-7"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.09",
+              "id": "20260309"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-8"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-8"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.14",
+              "id": "20260214"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-9"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-9"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.09",
+              "id": "20260209"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-10"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-10"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "概述",
+              "id": "概述"
+            },
+            {
+              "level": 3,
+              "title": "使用前准备",
+              "id": "使用前准备"
+            },
+            {
+              "level": 3,
+              "title": "设备管理",
+              "id": "设备管理"
+            },
+            {
+              "level": 3,
+              "title": "数据可视化",
+              "id": "数据可视化"
+            },
+            {
+              "level": 3,
+              "title": "固件升级",
+              "id": "固件升级"
+            },
+            {
+              "level": 3,
+              "title": "设备标定",
+              "id": "设备标定"
+            },
+            {
+              "level": 3,
+              "title": "触觉接触标定",
+              "id": "触觉接触标定"
+            },
+            {
+              "level": 3,
+              "title": "故障排查",
+              "id": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "概述",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/introduction/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "概述"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "使用前准备",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/getting-started/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "使用前准备"
+            },
+            {
+              "level": 2,
+              "title": "系统要求",
+              "id": "系统要求"
+            },
+            {
+              "level": 2,
+              "title": "下载与安装",
+              "id": "下载与安装"
+            },
+            {
+              "level": 2,
+              "title": "界面总览",
+              "id": "界面总览"
+            },
+            {
+              "level": 2,
+              "title": "用户档案",
+              "id": "用户档案"
+            },
+            {
+              "level": 2,
+              "title": "个性化设置",
+              "id": "个性化设置"
+            }
+          ]
+        },
+        {
+          "group": "使用指南",
+          "title": "设备管理",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/device-connection/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备管理"
+            },
+            {
+              "level": 2,
+              "title": "连接视图概览",
+              "id": "连接视图概览"
+            },
+            {
+              "level": 2,
+              "title": "发现与连接设备",
+              "id": "发现与连接设备"
+            },
+            {
+              "level": 2,
+              "title": "断开设备",
+              "id": "断开设备"
+            },
+            {
+              "level": 2,
+              "title": "使用设备命令面板",
+              "id": "使用设备命令面板"
+            },
+            {
+              "level": 2,
+              "title": "查看连接历史",
+              "id": "查看连接历史"
+            },
+            {
+              "level": 2,
+              "title": "设备命名",
+              "id": "设备命名"
+            },
+            {
+              "level": 3,
+              "title": "自动命名",
+              "id": "自动命名"
+            },
+            {
+              "level": 3,
+              "title": "重命名设备",
+              "id": "重命名设备"
+            },
+            {
+              "level": 3,
+              "title": "命名规则",
+              "id": "命名规则"
+            }
+          ]
+        },
+        {
+          "group": "使用指南",
+          "title": "固件升级",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/firmware-upgrade/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "固件升级"
+            },
+            {
+              "level": 2,
+              "title": "升级流程",
+              "id": "升级流程"
+            },
+            {
+              "level": 3,
+              "title": "第 1 步：选择设备",
+              "id": "第-1-步选择设备"
+            },
+            {
+              "level": 3,
+              "title": "第 2 步：选择固件",
+              "id": "第-2-步选择固件"
+            },
+            {
+              "level": 3,
+              "title": "第 3 步：升级中",
+              "id": "第-3-步升级中"
+            },
+            {
+              "level": 3,
+              "title": "第 4 步：升级结果",
+              "id": "第-4-步升级结果"
+            }
+          ]
+        },
+        {
+          "group": "使用指南",
+          "title": "设备标定",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/calibration/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备标定"
+            },
+            {
+              "level": 2,
+              "title": "标定主页",
+              "id": "标定主页"
+            },
+            {
+              "level": 3,
+              "title": "数据面板",
+              "id": "数据面板"
+            },
+            {
+              "level": 2,
+              "title": "开始标定",
+              "id": "开始标定"
+            },
+            {
+              "level": 3,
+              "title": "完成一个姿态",
+              "id": "完成一个姿态"
+            },
+            {
+              "level": 3,
+              "title": "姿态总览",
+              "id": "姿态总览"
+            },
+            {
+              "level": 2,
+              "title": "标定完成",
+              "id": "标定完成"
+            },
+            {
+              "level": 3,
+              "title": "URDF 输出位置",
+              "id": "urdf-输出位置"
+            },
+            {
+              "level": 3,
+              "title": "调试录制",
+              "id": "调试录制"
+            },
+            {
+              "level": 2,
+              "title": "异常处理",
+              "id": "异常处理"
+            }
+          ]
+        },
+        {
+          "group": "使用指南",
+          "title": "触觉接触标定",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/tactile-calibration/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "触觉接触标定"
+            },
+            {
+              "level": 2,
+              "title": "标定主页",
+              "id": "标定主页"
+            },
+            {
+              "level": 2,
+              "title": "开始标定",
+              "id": "开始标定"
+            },
+            {
+              "level": 3,
+              "title": "完成一个动作",
+              "id": "完成一个动作"
+            },
+            {
+              "level": 3,
+              "title": "动作总览",
+              "id": "动作总览"
+            },
+            {
+              "level": 2,
+              "title": "标定完成",
+              "id": "标定完成"
+            },
+            {
+              "level": 3,
+              "title": "模型保存位置",
+              "id": "模型保存位置"
+            },
+            {
+              "level": 2,
+              "title": "调整接触灵敏度",
+              "id": "调整接触灵敏度"
+            },
+            {
+              "level": 2,
+              "title": "异常处理",
+              "id": "异常处理"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "故障排查",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "无法启动 / 白屏或崩溃",
+              "id": "无法启动--白屏或崩溃"
+            },
+            {
+              "level": 2,
+              "title": "面板显示空白",
+              "id": "面板显示空白"
+            },
+            {
+              "level": 2,
+              "title": "触觉数据全为 0 或 -1",
+              "id": "触觉数据全为-0-或--1"
+            },
+            {
+              "level": 2,
+              "title": "触觉数据不准确或数值异常",
+              "id": "触觉数据不准确或数值异常"
+            },
+            {
+              "level": 2,
+              "title": "触觉数据闪烁或跳变",
+              "id": "触觉数据闪烁或跳变"
+            },
+            {
+              "level": 2,
+              "title": "触觉矩阵热力图显示全黑",
+              "id": "触觉矩阵热力图显示全黑"
+            },
+            {
+              "level": 2,
+              "title": "EMF 定位不准或漂移",
+              "id": "emf-定位不准或漂移"
+            },
+            {
+              "level": 2,
+              "title": "EMF 置信度始终很低",
+              "id": "emf-置信度始终很低"
+            },
+            {
+              "level": 2,
+              "title": "IMU 朝向数据漂移",
+              "id": "imu-朝向数据漂移"
+            },
+            {
+              "level": 2,
+              "title": "固件升级失败",
+              "id": "固件升级失败"
+            },
+            {
+              "level": 2,
+              "title": "升级过程中遇到错误提示",
+              "id": "升级过程中遇到错误提示"
+            },
+            {
+              "level": 2,
+              "title": "使用本地固件升级",
+              "id": "使用本地固件升级"
+            },
+            {
+              "level": 2,
+              "title": "获取技术支持",
+              "id": "获取技术支持"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "面板类型",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/visualization/panel-types/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "面板类型"
+            },
+            {
+              "level": 2,
+              "title": "Plot 图表",
+              "id": "plot-图表"
+            },
+            {
+              "level": 2,
+              "title": "触觉矩阵 (Tactile matrix)",
+              "id": "触觉矩阵-tactile-matrix"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "3D 手部可视化",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/visualization/hand-3d/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "3D 手部可视化"
+            },
+            {
+              "level": 2,
+              "title": "手骨架 (hand skeleton)",
+              "id": "手骨架-hand-skeleton"
+            },
+            {
+              "level": 2,
+              "title": "指尖姿态 (fingertip poses)",
+              "id": "指尖姿态-fingertip-poses"
+            },
+            {
+              "level": 2,
+              "title": "EMF 姿态 (EMF poses)",
+              "id": "emf-姿态-emf-poses"
+            },
+            {
+              "level": 2,
+              "title": "触觉点云 (point cloud)",
+              "id": "触觉点云-point-cloud"
+            },
+            {
+              "level": 2,
+              "title": "TF 坐标变换 (TF coordinate transforms)",
+              "id": "tf-坐标变换-tf-coordinate-transforms"
+            },
+            {
+              "level": 3,
+              "title": "全局 Topic",
+              "id": "全局-topic"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "数据录制",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/visualization/recording/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "数据录制"
+            },
+            {
+              "level": 2,
+              "title": "启动与停止录制",
+              "id": "启动与停止录制"
+            },
+            {
+              "level": 2,
+              "title": "质量监控",
+              "id": "质量监控"
+            },
+            {
+              "level": 2,
+              "title": "文件存储",
+              "id": "文件存储"
+            },
+            {
+              "level": 2,
+              "title": "数据回放",
+              "id": "数据回放"
+            },
+            {
+              "level": 3,
+              "title": "打开录制文件",
+              "id": "打开录制文件"
+            },
+            {
+              "level": 3,
+              "title": "播放控制",
+              "id": "播放控制"
+            }
+          ]
+        },
+        {
+          "group": "guide-linked",
+          "title": "设备日志",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-studio/latest/visualization/device-logs/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备日志"
+            },
+            {
+              "level": 2,
+              "title": "工具栏",
+              "id": "工具栏"
+            },
+            {
+              "level": 2,
+              "title": "本地日志文件",
+              "id": "本地日志文件"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji SDK",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.02",
+              "id": "20260702"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 4,
+              "title": "设备",
+              "id": "设备"
+            },
+            {
+              "level": 4,
+              "title": "子模块",
+              "id": "子模块"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-1"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 4,
+              "title": "设备",
+              "id": "设备-1"
+            },
+            {
+              "level": 4,
+              "title": "子模块",
+              "id": "子模块-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.18",
+              "id": "20260618"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-2"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-3"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.02",
+              "id": "20260602"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-4"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-4"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-5"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-5"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.07",
+              "id": "20260407"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-6"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-6"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.23",
+              "id": "20260323"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-7"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-7"
+            },
+            {
+              "level": 2,
+              "title": "2026.03.09",
+              "id": "20260309"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-8"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-8"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.14",
+              "id": "20260214"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-9"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-9"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.09",
+              "id": "20260209"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本-10"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-10"
+            },
+            {
+              "level": 3,
+              "title": "支持设备",
+              "id": "支持设备"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "产品介绍",
+              "id": "产品介绍"
+            },
+            {
+              "level": 3,
+              "title": "快速开始",
+              "id": "快速开始"
+            },
+            {
+              "level": 3,
+              "title": "设备发现与连接",
+              "id": "设备发现与连接"
+            },
+            {
+              "level": 3,
+              "title": "数据订阅",
+              "id": "数据订阅"
+            },
+            {
+              "level": 3,
+              "title": "数据录制",
+              "id": "数据录制"
+            },
+            {
+              "level": 3,
+              "title": "数据结构参考",
+              "id": "数据结构参考"
+            },
+            {
+              "level": 3,
+              "title": "设备参数与标定",
+              "id": "设备参数与标定"
+            },
+            {
+              "level": 3,
+              "title": "时间同步与时间戳",
+              "id": "时间同步与时间戳"
+            },
+            {
+              "level": 3,
+              "title": "手部重定向（Retargeting）",
+              "id": "手部重定向retargeting"
+            },
+            {
+              "level": 3,
+              "title": "最佳实践",
+              "id": "最佳实践"
+            },
+            {
+              "level": 3,
+              "title": "故障排查",
+              "id": "故障排查"
+            },
+            {
+              "level": 3,
+              "title": "C 接口参考",
+              "id": "c-接口参考"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "产品介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/introduction/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "产品介绍"
+            },
+            {
+              "level": 2,
+              "title": "概述",
+              "id": "概述"
+            },
+            {
+              "level": 2,
+              "title": "使用前准备",
+              "id": "使用前准备"
+            },
+            {
+              "level": 3,
+              "title": "系统要求",
+              "id": "系统要求"
+            },
+            {
+              "level": 3,
+              "title": "安装",
+              "id": "安装"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "快速开始",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/quick-start/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "快速开始"
+            },
+            {
+              "level": 2,
+              "title": "回调订阅（0.subscribe_callback.py）",
+              "id": "回调订阅0subscribe_callbackpy"
+            },
+            {
+              "level": 2,
+              "title": "异步订阅（1.subscribe_async.py）",
+              "id": "异步订阅1subscribe_asyncpy"
+            },
+            {
+              "level": 2,
+              "title": "数据录制（2.recording.py）",
+              "id": "数据录制2recordingpy"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Hand 上手",
+              "id": "wuji-hand-上手"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "设备发现与连接",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/device-connection/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备发现与连接"
+            },
+            {
+              "level": 2,
+              "title": "设备发现",
+              "id": "设备发现"
+            },
+            {
+              "level": 2,
+              "title": "连接设备",
+              "id": "连接设备"
+            },
+            {
+              "level": 3,
+              "title": "自动连接",
+              "id": "自动连接"
+            },
+            {
+              "level": 3,
+              "title": "指定 SN 连接",
+              "id": "指定-sn-连接"
+            },
+            {
+              "level": 3,
+              "title": "指定地址连接",
+              "id": "指定地址连接"
+            },
+            {
+              "level": 3,
+              "title": "按 USB 连接",
+              "id": "按-usb-连接"
+            },
+            {
+              "level": 3,
+              "title": "按手性连接",
+              "id": "按手性连接"
+            },
+            {
+              "level": 3,
+              "title": "连接选项",
+              "id": "连接选项"
+            },
+            {
+              "level": 2,
+              "title": "多设备管理",
+              "id": "多设备管理"
+            },
+            {
+              "level": 2,
+              "title": "断开连接",
+              "id": "断开连接"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "数据订阅",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/data-subscription/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "数据订阅"
+            },
+            {
+              "level": 2,
+              "title": "订阅模式",
+              "id": "订阅模式"
+            },
+            {
+              "level": 3,
+              "title": "异步接收",
+              "id": "异步接收"
+            },
+            {
+              "level": 3,
+              "title": "同步非阻塞接收",
+              "id": "同步非阻塞接收"
+            },
+            {
+              "level": 3,
+              "title": "回调接收",
+              "id": "回调接收"
+            },
+            {
+              "level": 2,
+              "title": "关闭订阅",
+              "id": "关闭订阅"
+            },
+            {
+              "level": 2,
+              "title": "跨设备合并订阅",
+              "id": "跨设备合并订阅"
+            },
+            {
+              "level": 2,
+              "title": "可用数据流",
+              "id": "可用数据流"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Hand 数据订阅",
+              "id": "wuji-hand-数据订阅"
+            },
+            {
+              "level": 3,
+              "title": "Wuji Hand 2 资源式接口",
+              "id": "wuji-hand-2-资源式接口"
+            },
+            {
+              "level": 4,
+              "title": "订阅关节状态",
+              "id": "订阅关节状态"
+            },
+            {
+              "level": 4,
+              "title": "订阅关节诊断",
+              "id": "订阅关节诊断"
+            },
+            {
+              "level": 4,
+              "title": "发布关节指令",
+              "id": "发布关节指令"
+            },
+            {
+              "level": 4,
+              "title": "动作方法：使能 / 失能 / 清错 / 用户零点 / 紧急停止",
+              "id": "动作方法使能--失能--清错--用户零点--紧急停止"
+            },
+            {
+              "level": 4,
+              "title": "MIT 参数与力矩上限",
+              "id": "mit-参数与力矩上限"
+            },
+            {
+              "level": 4,
+              "title": "单关节与单手指访问",
+              "id": "单关节与单手指访问"
+            },
+            {
+              "level": 4,
+              "title": "错误码描述",
+              "id": "错误码描述"
+            },
+            {
+              "level": 3,
+              "title": "Wuji Hand",
+              "id": "wuji-hand"
+            },
+            {
+              "level": 4,
+              "title": "订阅关节状态",
+              "id": "订阅关节状态-1"
+            },
+            {
+              "level": 4,
+              "title": "发布关节指令（实时控制）",
+              "id": "发布关节指令实时控制"
+            },
+            {
+              "level": 4,
+              "title": "电机力矩上限",
+              "id": "电机力矩上限"
+            },
+            {
+              "level": 4,
+              "title": "触觉手套同步数据",
+              "id": "触觉手套同步数据"
+            },
+            {
+              "level": 3,
+              "title": "订阅 IMU 数据",
+              "id": "订阅-imu-数据"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "数据录制",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/data-recording/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "数据录制"
+            },
+            {
+              "level": 2,
+              "title": "压缩选项",
+              "id": "压缩选项"
+            },
+            {
+              "level": 2,
+              "title": "录制全局资源",
+              "id": "录制全局资源"
+            },
+            {
+              "level": 2,
+              "title": "暂停与恢复",
+              "id": "暂停与恢复"
+            },
+            {
+              "level": 2,
+              "title": "分集切换",
+              "id": "分集切换"
+            },
+            {
+              "level": 2,
+              "title": "质量监控",
+              "id": "质量监控"
+            },
+            {
+              "level": 3,
+              "title": "质量告警",
+              "id": "质量告警"
+            },
+            {
+              "level": 3,
+              "title": "录制状态",
+              "id": "录制状态"
+            },
+            {
+              "level": 2,
+              "title": "录制摘要",
+              "id": "录制摘要"
+            },
+            {
+              "level": 2,
+              "title": "示例",
+              "id": "示例"
+            },
+            {
+              "level": 3,
+              "title": "基本示例",
+              "id": "基本示例"
+            },
+            {
+              "level": 3,
+              "title": "完整示例",
+              "id": "完整示例"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "数据结构参考",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/data-reference/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "数据结构参考"
+            },
+            {
+              "level": 2,
+              "title": "通用类型",
+              "id": "通用类型"
+            },
+            {
+              "level": 3,
+              "title": "FrameHeader",
+              "id": "frameheader"
+            },
+            {
+              "level": 3,
+              "title": "Vector3 / Vector3F64",
+              "id": "vector3--vector3f64"
+            },
+            {
+              "level": 3,
+              "title": "Quaternion",
+              "id": "quaternion"
+            },
+            {
+              "level": 3,
+              "title": "Pose",
+              "id": "pose"
+            },
+            {
+              "level": 3,
+              "title": "Handedness",
+              "id": "handedness"
+            },
+            {
+              "level": 3,
+              "title": "ImuData",
+              "id": "imudata"
+            },
+            {
+              "level": 2,
+              "title": "坐标变换",
+              "id": "坐标变换"
+            },
+            {
+              "level": 3,
+              "title": "FrameTransform",
+              "id": "frametransform"
+            },
+            {
+              "level": 3,
+              "title": "FrameTransforms",
+              "id": "frametransforms"
+            },
+            {
+              "level": 2,
+              "title": "录制类型",
+              "id": "录制类型"
+            },
+            {
+              "level": 3,
+              "title": "TopicRecorder",
+              "id": "topicrecorder"
+            },
+            {
+              "level": 3,
+              "title": "RecordingHandle",
+              "id": "recordinghandle"
+            },
+            {
+              "level": 3,
+              "title": "RecordingSummary",
+              "id": "recordingsummary"
+            },
+            {
+              "level": 3,
+              "title": "QualityMetrics",
+              "id": "qualitymetrics"
+            },
+            {
+              "level": 3,
+              "title": "QualitySummary",
+              "id": "qualitysummary"
+            },
+            {
+              "level": 3,
+              "title": "RecordingAlert",
+              "id": "recordingalert"
+            },
+            {
+              "level": 3,
+              "title": "RecordingStatus",
+              "id": "recordingstatus"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Hand 2 类型",
+              "id": "wuji-hand-2-类型"
+            },
+            {
+              "level": 3,
+              "title": "JointStateFrame",
+              "id": "jointstateframe"
+            },
+            {
+              "level": 3,
+              "title": "JointStateEntry",
+              "id": "jointstateentry"
+            },
+            {
+              "level": 3,
+              "title": "JointDiagnosticsFrame",
+              "id": "jointdiagnosticsframe"
+            },
+            {
+              "level": 3,
+              "title": "JointDiagnosticsEntry",
+              "id": "jointdiagnosticsentry"
+            },
+            {
+              "level": 3,
+              "title": "StatusWord",
+              "id": "statusword"
+            },
+            {
+              "level": 3,
+              "title": "JointCommand",
+              "id": "jointcommand"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Hand 类型",
+              "id": "wuji-hand-类型"
+            },
+            {
+              "level": 3,
+              "title": "HandJointState",
+              "id": "handjointstate"
+            },
+            {
+              "level": 3,
+              "title": "HandJointCommand",
+              "id": "handjointcommand"
+            },
+            {
+              "level": 3,
+              "title": "TactileGloveFrame",
+              "id": "tactilegloveframe"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "设备参数与标定",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/device-params/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "设备参数与标定"
+            },
+            {
+              "level": 2,
+              "title": "参数读取",
+              "id": "参数读取"
+            },
+            {
+              "level": 2,
+              "title": "参数写入",
+              "id": "参数写入"
+            },
+            {
+              "level": 2,
+              "title": "设备操作",
+              "id": "设备操作"
+            },
+            {
+              "level": 2,
+              "title": "SDK 用户管理",
+              "id": "sdk-用户管理"
+            },
+            {
+              "level": 2,
+              "title": "标定",
+              "id": "标定"
+            },
+            {
+              "level": 2,
+              "title": "可用参数",
+              "id": "可用参数"
+            },
+            {
+              "level": 2,
+              "title": "查看所有资源",
+              "id": "查看所有资源"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "时间同步与时间戳",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/time-sync/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "时间同步与时间戳"
+            },
+            {
+              "level": 2,
+              "title": "数据帧时间戳",
+              "id": "数据帧时间戳"
+            },
+            {
+              "level": 2,
+              "title": "同步机制",
+              "id": "同步机制"
+            },
+            {
+              "level": 2,
+              "title": "自动同步",
+              "id": "自动同步"
+            },
+            {
+              "level": 2,
+              "title": "手动同步",
+              "id": "手动同步"
+            },
+            {
+              "level": 2,
+              "title": "时间戳单调性",
+              "id": "时间戳单调性"
+            },
+            {
+              "level": 2,
+              "title": "同步精度",
+              "id": "同步精度"
+            }
+          ]
+        },
+        {
+          "group": "开发指南",
+          "title": "手部重定向（Retargeting）",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/retargeting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "手部重定向（Retargeting）"
+            },
+            {
+              "level": 2,
+              "title": "安装",
+              "id": "安装"
+            },
+            {
+              "level": 2,
+              "title": "快速开始",
+              "id": "快速开始"
+            },
+            {
+              "level": 2,
+              "title": "API 参考",
+              "id": "api-参考"
+            },
+            {
+              "level": 3,
+              "title": "创建 session",
+              "id": "创建-session"
+            },
+            {
+              "level": 3,
+              "title": "单帧重定向",
+              "id": "单帧重定向"
+            },
+            {
+              "level": 3,
+              "title": "重置状态",
+              "id": "重置状态"
+            },
+            {
+              "level": 2,
+              "title": "输入格式",
+              "id": "输入格式"
+            },
+            {
+              "level": 2,
+              "title": "实时遥操作示例",
+              "id": "实时遥操作示例"
+            },
+            {
+              "level": 3,
+              "title": "Teleop 推荐用默认 SDK 用户",
+              "id": "teleop-推荐用默认-sdk-用户"
+            },
+            {
+              "level": 2,
+              "title": "平台与限制",
+              "id": "平台与限制"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "最佳实践",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/advanced/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "最佳实践"
+            },
+            {
+              "level": 2,
+              "title": "错误处理",
+              "id": "错误处理"
+            },
+            {
+              "level": 2,
+              "title": "重连策略",
+              "id": "重连策略"
+            },
+            {
+              "level": 2,
+              "title": "多设备协调",
+              "id": "多设备协调"
+            },
+            {
+              "level": 3,
+              "title": "跨设备合并数据",
+              "id": "跨设备合并数据"
+            },
+            {
+              "level": 2,
+              "title": "日志控制",
+              "id": "日志控制"
+            },
+            {
+              "level": 2,
+              "title": "设备日志",
+              "id": "设备日志"
+            },
+            {
+              "level": 2,
+              "title": "录制最佳实践",
+              "id": "录制最佳实践"
+            },
+            {
+              "level": 3,
+              "title": "选择合适的压缩算法",
+              "id": "选择合适的压缩算法"
+            },
+            {
+              "level": 3,
+              "title": "分集管理",
+              "id": "分集管理"
+            },
+            {
+              "level": 3,
+              "title": "监控数据质量",
+              "id": "监控数据质量"
+            },
+            {
+              "level": 2,
+              "title": "性能优化",
+              "id": "性能优化"
+            },
+            {
+              "level": 3,
+              "title": "减少不必要的订阅",
+              "id": "减少不必要的订阅"
+            },
+            {
+              "level": 3,
+              "title": "及时关闭订阅",
+              "id": "及时关闭订阅"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "故障排查",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "安装",
+              "id": "安装"
+            },
+            {
+              "level": 2,
+              "title": "运行异常",
+              "id": "运行异常"
+            },
+            {
+              "level": 2,
+              "title": "兼容性",
+              "id": "兼容性"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "C 接口参考",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-sdk/latest/c-sdk-reference/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "C 接口参考"
+            },
+            {
+              "level": 2,
+              "title": "初始化与约定",
+              "id": "初始化与约定"
+            },
+            {
+              "level": 2,
+              "title": "设备发现与连接",
+              "id": "设备发现与连接"
+            },
+            {
+              "level": 2,
+              "title": "订阅设备数据流",
+              "id": "订阅设备数据流"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Hand 2 C 接口",
+              "id": "wuji-hand-2-c-接口"
+            },
+            {
+              "level": 3,
+              "title": "控制动作（含 20 关节掩码）",
+              "id": "控制动作含-20-关节掩码"
+            },
+            {
+              "level": 3,
+              "title": "MIT 参数与力矩上限（含在线 bitmap）",
+              "id": "mit-参数与力矩上限含在线-bitmap"
+            },
+            {
+              "level": 3,
+              "title": "订阅整手反馈流",
+              "id": "订阅整手反馈流"
+            },
+            {
+              "level": 3,
+              "title": "实时指令 publisher",
+              "id": "实时指令-publisher"
+            },
+            {
+              "level": 3,
+              "title": "错误码描述",
+              "id": "错误码描述"
+            },
+            {
+              "level": 3,
+              "title": "身份与诊断",
+              "id": "身份与诊断"
+            },
+            {
+              "level": 2,
+              "title": "Wuji Glove 资源接口",
+              "id": "wuji-glove-资源接口"
+            },
+            {
+              "level": 3,
+              "title": "设备参数读写",
+              "id": "设备参数读写"
+            },
+            {
+              "level": 3,
+              "title": "设备控制",
+              "id": "设备控制"
+            },
+            {
+              "level": 3,
+              "title": "EMF 输出率调节",
+              "id": "emf-输出率调节"
+            },
+            {
+              "level": 3,
+              "title": "时间同步",
+              "id": "时间同步"
+            },
+            {
+              "level": 3,
+              "title": "在线 IK 自定义手部模型",
+              "id": "在线-ik-自定义手部模型"
+            },
+            {
+              "level": 2,
+              "title": "订阅全局资源",
+              "id": "订阅全局资源"
+            },
+            {
+              "level": 2,
+              "title": "使用约束",
+              "id": "使用约束"
+            },
+            {
+              "level": 2,
+              "title": "Python 接口对照",
+              "id": "python-接口对照"
+            },
+            {
+              "level": 2,
+              "title": "CMake 工程示例",
+              "id": "cmake-工程示例"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji Hand ROS2",
+      "base_url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "安装指南",
+              "id": "安装指南"
+            },
+            {
+              "level": 3,
+              "title": "快速开始",
+              "id": "快速开始"
+            },
+            {
+              "level": 3,
+              "title": "启动与配置",
+              "id": "启动与配置"
+            },
+            {
+              "level": 3,
+              "title": "ROS2 接口",
+              "id": "ros2-接口"
+            },
+            {
+              "level": 3,
+              "title": "附录",
+              "id": "附录"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "安装指南",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/installation/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "安装指南"
+            },
+            {
+              "level": 2,
+              "title": "系统要求",
+              "id": "系统要求"
+            },
+            {
+              "level": 3,
+              "title": "软件版本",
+              "id": "软件版本"
+            },
+            {
+              "level": 3,
+              "title": "支持平台",
+              "id": "支持平台"
+            },
+            {
+              "level": 2,
+              "title": "安装指南",
+              "id": "安装指南"
+            },
+            {
+              "level": 3,
+              "title": "安装 Wuji Hand SDK",
+              "id": "安装-wuji-hand-sdk"
+            },
+            {
+              "level": 3,
+              "title": "安装 ROS2 驱动",
+              "id": "安装-ros2-驱动"
+            },
+            {
+              "level": 4,
+              "title": "方式一：源码编译（推荐）",
+              "id": "方式一源码编译推荐"
+            },
+            {
+              "level": 4,
+              "title": "方式二：Deb 包安装",
+              "id": "方式二deb-包安装"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "快速开始",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/quick-start/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "快速开始"
+            },
+            {
+              "level": 2,
+              "title": "启动驱动",
+              "id": "启动驱动"
+            },
+            {
+              "level": 2,
+              "title": "验证运行状态",
+              "id": "验证运行状态"
+            },
+            {
+              "level": 2,
+              "title": "运行演示",
+              "id": "运行演示"
+            },
+            {
+              "level": 2,
+              "title": "启动 RViz 可视化",
+              "id": "启动-rviz-可视化"
+            }
+          ]
+        },
+        {
+          "group": "配置",
+          "title": "启动与配置",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/configuration/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "启动与配置"
+            },
+            {
+              "level": 2,
+              "title": "启动命令",
+              "id": "启动命令"
+            },
+            {
+              "level": 2,
+              "title": "可配置参数",
+              "id": "可配置参数"
+            },
+            {
+              "level": 2,
+              "title": "多手配置",
+              "id": "多手配置"
+            },
+            {
+              "level": 3,
+              "title": "查询已连接设备的序列号",
+              "id": "查询已连接设备的序列号"
+            },
+            {
+              "level": 3,
+              "title": "一键启动双手",
+              "id": "一键启动双手"
+            },
+            {
+              "level": 3,
+              "title": "运行多手演示",
+              "id": "运行多手演示"
+            },
+            {
+              "level": 3,
+              "title": "话题命名空间",
+              "id": "话题命名空间"
+            },
+            {
+              "level": 2,
+              "title": "关节标识",
+              "id": "关节标识"
+            },
+            {
+              "level": 3,
+              "title": "手指与关节编号",
+              "id": "手指与关节编号"
+            },
+            {
+              "level": 3,
+              "title": "关节名格式",
+              "id": "关节名格式"
+            },
+            {
+              "level": 3,
+              "title": "索引计算",
+              "id": "索引计算"
+            }
+          ]
+        },
+        {
+          "group": "配置",
+          "title": "ROS2 接口",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/ros2-interface/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "ROS2 接口"
+            },
+            {
+              "level": 2,
+              "title": "接口清单",
+              "id": "接口清单"
+            },
+            {
+              "level": 3,
+              "title": "HandDiagnostics 消息",
+              "id": "handdiagnostics-消息"
+            },
+            {
+              "level": 3,
+              "title": "JointState 消息",
+              "id": "jointstate-消息"
+            },
+            {
+              "level": 3,
+              "title": "SetEnabled 服务",
+              "id": "setenabled-服务"
+            },
+            {
+              "level": 3,
+              "title": "ResetError 服务",
+              "id": "reseterror-服务"
+            },
+            {
+              "level": 2,
+              "title": "服务调用",
+              "id": "服务调用"
+            },
+            {
+              "level": 3,
+              "title": "启用/禁用关节",
+              "id": "启用禁用关节"
+            },
+            {
+              "level": 3,
+              "title": "重置错误",
+              "id": "重置错误"
+            },
+            {
+              "level": 2,
+              "title": "话题控制",
+              "id": "话题控制"
+            },
+            {
+              "level": 3,
+              "title": "发送关节位置命令",
+              "id": "发送关节位置命令"
+            },
+            {
+              "level": 3,
+              "title": "平滑回零",
+              "id": "平滑回零"
+            },
+            {
+              "level": 3,
+              "title": "读取关节状态",
+              "id": "读取关节状态"
+            },
+            {
+              "level": 2,
+              "title": "代码示例",
+              "id": "代码示例"
+            },
+            {
+              "level": 3,
+              "title": "Python",
+              "id": "python"
+            },
+            {
+              "level": 3,
+              "title": "C++",
+              "id": "c"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "附录",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandros2/latest/appendix/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "附录"
+            },
+            {
+              "level": 2,
+              "title": "故障排查",
+              "id": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "错误码参考",
+              "id": "错误码参考"
+            },
+            {
+              "level": 2,
+              "title": "相关资源",
+              "id": "相关资源"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji Hand HMI",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.02.02",
+              "id": "20260202"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.01.04",
+              "id": "20260104"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2025.11.07",
+              "id": "20251107"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "启动 HMI",
+              "id": "启动-hmi"
+            },
+            {
+              "level": 3,
+              "title": "面板介绍",
+              "id": "面板介绍"
+            },
+            {
+              "level": 3,
+              "title": "连接与使能",
+              "id": "连接与使能"
+            },
+            {
+              "level": 3,
+              "title": "故障排除",
+              "id": "故障排除"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "启动 HMI",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/getting-started/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "启动 HMI"
+            }
+          ]
+        },
+        {
+          "group": "使用",
+          "title": "面板介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/panels/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "面板介绍"
+            },
+            {
+              "level": 3,
+              "title": "2.1 全局面板",
+              "id": "21-全局面板"
+            },
+            {
+              "level": 3,
+              "title": "2.2 单轴面板",
+              "id": "22-单轴面板"
+            },
+            {
+              "level": 3,
+              "title": "2.3 日志面板",
+              "id": "23-日志面板"
+            }
+          ]
+        },
+        {
+          "group": "使用",
+          "title": "连接与使能",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/connection/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "连接与使能"
+            },
+            {
+              "level": 3,
+              "title": "3.1 设备连接",
+              "id": "31-设备连接"
+            },
+            {
+              "level": 3,
+              "title": "3.2 快速验证动作",
+              "id": "32-快速验证动作"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "故障排除",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排除"
+            },
+            {
+              "level": 3,
+              "title": "4.1 端口访问权限",
+              "id": "41-端口访问权限"
+            },
+            {
+              "level": 3,
+              "title": "4.2 显示缩放警告",
+              "id": "42-显示缩放警告"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji Hand Upgrader",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.01.19",
+              "id": "20260119"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.01.04",
+              "id": "20260104"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2025.12.05",
+              "id": "20251205"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "软件安装",
+              "id": "软件安装"
+            },
+            {
+              "level": 3,
+              "title": "连接设备",
+              "id": "连接设备"
+            },
+            {
+              "level": 3,
+              "title": "固件升级",
+              "id": "固件升级"
+            },
+            {
+              "level": 3,
+              "title": "故障排除",
+              "id": "故障排除"
+            },
+            {
+              "level": 3,
+              "title": "卸载软件",
+              "id": "卸载软件"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "软件安装",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/installation/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "软件安装"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "连接设备",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/connection/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "连接设备"
+            },
+            {
+              "level": 3,
+              "title": "2.1 启动软件",
+              "id": "21-启动软件"
+            },
+            {
+              "level": 3,
+              "title": "2.2 硬件连接",
+              "id": "22-硬件连接"
+            },
+            {
+              "level": 3,
+              "title": "2.3 自动连接",
+              "id": "23-自动连接"
+            },
+            {
+              "level": 3,
+              "title": "2.4 设备信息显示",
+              "id": "24-设备信息显示"
+            }
+          ]
+        },
+        {
+          "group": "操作",
+          "title": "固件升级",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/upgrade/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "固件升级"
+            },
+            {
+              "level": 3,
+              "title": "3.1 一键升级（推荐）",
+              "id": "31-一键升级推荐"
+            },
+            {
+              "level": 3,
+              "title": "3.2 手动选择固件",
+              "id": "32-手动选择固件"
+            },
+            {
+              "level": 4,
+              "title": "3.2.1 选择在线固件",
+              "id": "321-选择在线固件"
+            },
+            {
+              "level": 4,
+              "title": "3.2.2 选择本地固件",
+              "id": "322-选择本地固件"
+            },
+            {
+              "level": 3,
+              "title": "3.3 升级完成",
+              "id": "33-升级完成"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "故障排除",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排除"
+            },
+            {
+              "level": 3,
+              "title": "4.1 安装依赖问题",
+              "id": "41-安装依赖问题"
+            },
+            {
+              "level": 3,
+              "title": "4.2 串口权限问题",
+              "id": "42-串口权限问题"
+            },
+            {
+              "level": 3,
+              "title": "4.3 升级工具窗口不显示",
+              "id": "43-升级工具窗口不显示"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "卸载软件",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/uninstallation/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "卸载软件"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "software",
+      "name": "Wuji Hand SDK (wujihandpy)",
+      "base_url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.27",
+              "id": "20260427"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "入门",
+              "id": "入门"
+            },
+            {
+              "level": 3,
+              "title": "教程",
+              "id": "教程"
+            },
+            {
+              "level": 3,
+              "title": "API 参考",
+              "id": "api-参考"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "入门",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/introduction/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "入门"
+            },
+            {
+              "level": 2,
+              "title": "1. 兼容性与要求",
+              "id": "1-兼容性与要求"
+            },
+            {
+              "level": 2,
+              "title": "2. 安装指南",
+              "id": "2-安装指南"
+            },
+            {
+              "level": 3,
+              "title": "2.1 安装",
+              "id": "21-安装"
+            },
+            {
+              "level": 2,
+              "title": "3. 快速上手",
+              "id": "3-快速上手"
+            },
+            {
+              "level": 2,
+              "title": "4. 核心概念",
+              "id": "4-核心概念"
+            },
+            {
+              "level": 3,
+              "title": "4.1 设备模型",
+              "id": "41-设备模型"
+            },
+            {
+              "level": 3,
+              "title": "4.2 数据模型",
+              "id": "42-数据模型"
+            },
+            {
+              "level": 2,
+              "title": "5. 故障排除",
+              "id": "5-故障排除"
+            },
+            {
+              "level": 3,
+              "title": "5.1 安装",
+              "id": "51-安装"
+            },
+            {
+              "level": 4,
+              "title": "5.1.1 升级 pip",
+              "id": "511-升级-pip"
+            },
+            {
+              "level": 4,
+              "title": "5.1.2 使用虚拟环境",
+              "id": "512-使用虚拟环境"
+            },
+            {
+              "level": 3,
+              "title": "5.2 快速上手",
+              "id": "52-快速上手"
+            },
+            {
+              "level": 4,
+              "title": "5.2.1 灵巧手未连接",
+              "id": "521-灵巧手未连接"
+            },
+            {
+              "level": 4,
+              "title": "5.2.2 权限不足",
+              "id": "522-权限不足"
+            },
+            {
+              "level": 3,
+              "title": "5.3 获取日志",
+              "id": "53-获取日志"
+            },
+            {
+              "level": 4,
+              "title": "5.3.1 自定义路径与级别",
+              "id": "531-自定义路径与级别"
+            },
+            {
+              "level": 4,
+              "title": "5.3.2 采集详细日志",
+              "id": "532-采集详细日志"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "教程",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/tutorial/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "教程"
+            },
+            {
+              "level": 2,
+              "title": "1. 设备连接与筛选",
+              "id": "1-设备连接与筛选"
+            },
+            {
+              "level": 3,
+              "title": "1.1 接口概述",
+              "id": "11-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "1.2 连接设备",
+              "id": "12-连接设备"
+            },
+            {
+              "level": 3,
+              "title": "1.3 筛选设备",
+              "id": "13-筛选设备"
+            },
+            {
+              "level": 4,
+              "title": "按序列号指定",
+              "id": "按序列号指定"
+            },
+            {
+              "level": 4,
+              "title": "按左右手指定",
+              "id": "按左右手指定"
+            },
+            {
+              "level": 3,
+              "title": "1.4 查询序列号",
+              "id": "14-查询序列号"
+            },
+            {
+              "level": 4,
+              "title": "查询 USB 序列号",
+              "id": "查询-usb-序列号"
+            },
+            {
+              "level": 4,
+              "title": "查询产品序列号",
+              "id": "查询产品序列号"
+            },
+            {
+              "level": 2,
+              "title": "2. 读取数据",
+              "id": "2-读取数据"
+            },
+            {
+              "level": 3,
+              "title": "2.1 接口概述",
+              "id": "21-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "2.2 单值读取",
+              "id": "22-单值读取"
+            },
+            {
+              "level": 3,
+              "title": "2.3 批量读取",
+              "id": "23-批量读取"
+            },
+            {
+              "level": 3,
+              "title": "2.4 更多示例",
+              "id": "24-更多示例"
+            },
+            {
+              "level": 2,
+              "title": "3. 写入数据",
+              "id": "3-写入数据"
+            },
+            {
+              "level": 3,
+              "title": "3.1 接口概述",
+              "id": "31-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "3.2 单值写入",
+              "id": "32-单值写入"
+            },
+            {
+              "level": 3,
+              "title": "3.3 批量写入",
+              "id": "33-批量写入"
+            },
+            {
+              "level": 3,
+              "title": "3.4 非法数值写入",
+              "id": "34-非法数值写入"
+            },
+            {
+              "level": 3,
+              "title": "3.5 更多示例",
+              "id": "35-更多示例"
+            },
+            {
+              "level": 2,
+              "title": "4. 实时控制",
+              "id": "4-实时控制"
+            },
+            {
+              "level": 3,
+              "title": "4.1 接口概述",
+              "id": "41-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "4.2 滤波器",
+              "id": "42-滤波器"
+            },
+            {
+              "level": 3,
+              "title": "4.3 上下文管理器",
+              "id": "43-上下文管理器"
+            },
+            {
+              "level": 4,
+              "title": "自动析构",
+              "id": "自动析构"
+            },
+            {
+              "level": 3,
+              "title": "4.4 实时写入",
+              "id": "44-实时写入"
+            },
+            {
+              "level": 3,
+              "title": "4.5 实时读取",
+              "id": "45-实时读取"
+            },
+            {
+              "level": 3,
+              "title": "4.6 进阶示例",
+              "id": "46-进阶示例"
+            },
+            {
+              "level": 2,
+              "title": "5. 异步读/写",
+              "id": "5-异步读写"
+            },
+            {
+              "level": 3,
+              "title": "5.1 接口概述",
+              "id": "51-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "5.2 进阶示例",
+              "id": "52-进阶示例"
+            },
+            {
+              "level": 2,
+              "title": "6. 多线程操作",
+              "id": "6-多线程操作"
+            },
+            {
+              "level": 3,
+              "title": "6.1 接口概述",
+              "id": "61-接口概述"
+            },
+            {
+              "level": 3,
+              "title": "6.2 多线程安全注意事项",
+              "id": "62-多线程安全注意事项"
+            },
+            {
+              "level": 3,
+              "title": "6.3 预期效果",
+              "id": "63-预期效果"
+            },
+            {
+              "level": 3,
+              "title": "6.4 进阶示例",
+              "id": "64-进阶示例"
+            },
+            {
+              "level": 2,
+              "title": "7. USB 断连处理",
+              "id": "7-usb-断连处理"
+            },
+            {
+              "level": 3,
+              "title": "7.1 断连时的行为",
+              "id": "71-断连时的行为"
+            },
+            {
+              "level": 3,
+              "title": "7.2 捕获断连异常",
+              "id": "72-捕获断连异常"
+            },
+            {
+              "level": 3,
+              "title": "7.3 实时控制模式下的断连检测",
+              "id": "73-实时控制模式下的断连检测"
+            },
+            {
+              "level": 3,
+              "title": "7.4 更多示例",
+              "id": "74-更多示例"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "API 参考",
+          "url": "https://docs.wuji.tech/docs/zh/wujihandpy/latest/api-reference/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "API 参考"
+            },
+            {
+              "level": 2,
+              "title": "1. 字段列表",
+              "id": "1-字段列表"
+            },
+            {
+              "level": 3,
+              "title": "1.1 Hand 层",
+              "id": "11-hand-层"
+            },
+            {
+              "level": 4,
+              "title": "handedness",
+              "id": "handedness"
+            },
+            {
+              "level": 4,
+              "title": "firmware_version",
+              "id": "firmware_version"
+            },
+            {
+              "level": 4,
+              "title": "firmware_date",
+              "id": "firmware_date"
+            },
+            {
+              "level": 4,
+              "title": "system_time",
+              "id": "system_time"
+            },
+            {
+              "level": 4,
+              "title": "temperature",
+              "id": "temperature"
+            },
+            {
+              "level": 4,
+              "title": "input_voltage",
+              "id": "input_voltage"
+            },
+            {
+              "level": 3,
+              "title": "1.2 Joint 层",
+              "id": "12-joint-层"
+            },
+            {
+              "level": 4,
+              "title": "joint_firmware_version",
+              "id": "joint_firmware_version"
+            },
+            {
+              "level": 4,
+              "title": "joint_firmware_date",
+              "id": "joint_firmware_date"
+            },
+            {
+              "level": 4,
+              "title": "joint_control_mode",
+              "id": "joint_control_mode"
+            },
+            {
+              "level": 4,
+              "title": "joint_sin_level",
+              "id": "joint_sin_level"
+            },
+            {
+              "level": 4,
+              "title": "joint_effort_limit",
+              "id": "joint_effort_limit"
+            },
+            {
+              "level": 4,
+              "title": "joint_bus_voltage",
+              "id": "joint_bus_voltage"
+            },
+            {
+              "level": 4,
+              "title": "joint_temperature",
+              "id": "joint_temperature"
+            },
+            {
+              "level": 4,
+              "title": "joint_reset_error",
+              "id": "joint_reset_error"
+            },
+            {
+              "level": 4,
+              "title": "joint_error_code",
+              "id": "joint_error_code"
+            },
+            {
+              "level": 4,
+              "title": "joint_effort",
+              "id": "joint_effort"
+            },
+            {
+              "level": 4,
+              "title": "joint_enabled",
+              "id": "joint_enabled"
+            },
+            {
+              "level": 4,
+              "title": "joint_actual_position",
+              "id": "joint_actual_position"
+            },
+            {
+              "level": 4,
+              "title": "joint_target_position",
+              "id": "joint_target_position"
+            },
+            {
+              "level": 4,
+              "title": "joint_upper_limit",
+              "id": "joint_upper_limit"
+            },
+            {
+              "level": 4,
+              "title": "joint_lower_limit",
+              "id": "joint_lower_limit"
+            },
+            {
+              "level": 2,
+              "title": "2. API 列表",
+              "id": "2-api-列表"
+            },
+            {
+              "level": 3,
+              "title": "2.1 Hand 类",
+              "id": "21-hand-类"
+            },
+            {
+              "level": 4,
+              "title": "2.1.1 构造函数",
+              "id": "211-构造函数"
+            },
+            {
+              "level": 4,
+              "title": "2.1.2 手指访问",
+              "id": "212-手指访问"
+            },
+            {
+              "level": 4,
+              "title": "2.1.3 线程安全控制",
+              "id": "213-线程安全控制"
+            },
+            {
+              "level": 4,
+              "title": "2.1.4 系统信息",
+              "id": "214-系统信息"
+            },
+            {
+              "level": 4,
+              "title": "2.1.5 关节数据（批量读取，返回 4 数组）",
+              "id": "215-关节数据批量读取返回-54-数组"
+            },
+            {
+              "level": 4,
+              "title": "2.1.6 关节控制（支持单个值或 4 数组）",
+              "id": "216-关节控制支持单个值或-54-数组"
+            },
+            {
+              "level": 4,
+              "title": "2.1.7 实时控制器",
+              "id": "217-实时控制器"
+            },
+            {
+              "level": 3,
+              "title": "2.2 Finger 类",
+              "id": "22-finger-类"
+            },
+            {
+              "level": 4,
+              "title": "2.2.1 关节访问",
+              "id": "221-关节访问"
+            },
+            {
+              "level": 4,
+              "title": "2.2.2 关节数据（返回 4 元素数组）",
+              "id": "222-关节数据返回-4-元素数组"
+            },
+            {
+              "level": 4,
+              "title": "2.2.3 关节控制（支持单个值或 4 元素数组）",
+              "id": "223-关节控制支持单个值或-4-元素数组"
+            },
+            {
+              "level": 3,
+              "title": "2.3 Joint 类",
+              "id": "23-joint-类"
+            },
+            {
+              "level": 4,
+              "title": "2.3.1 关节数据（返回单个值）",
+              "id": "231-关节数据返回单个值"
+            },
+            {
+              "level": 4,
+              "title": "2.3.2 关节控制（单个值）",
+              "id": "232-关节控制单个值"
+            },
+            {
+              "level": 3,
+              "title": "2.4 IController 接口",
+              "id": "24-icontroller-接口"
+            },
+            {
+              "level": 4,
+              "title": "2.4.1 上下文管理",
+              "id": "241-上下文管理"
+            },
+            {
+              "level": 4,
+              "title": "2.4.2 实时数据获取",
+              "id": "242-实时数据获取"
+            },
+            {
+              "level": 4,
+              "title": "2.4.3 实时数据设置",
+              "id": "243-实时数据设置"
+            },
+            {
+              "level": 3,
+              "title": "2.5 数组形状说明",
+              "id": "25-数组形状说明"
+            },
+            {
+              "level": 3,
+              "title": "2.6 操作模式说明",
+              "id": "26-操作模式说明"
+            },
+            {
+              "level": 2,
+              "title": "3. 触觉感知手套",
+              "id": "3-触觉感知手套"
+            },
+            {
+              "level": 3,
+              "title": "3.1 核心类",
+              "id": "31-核心类"
+            },
+            {
+              "level": 4,
+              "title": "TactileHandedness",
+              "id": "tactilehandedness"
+            },
+            {
+              "level": 4,
+              "title": "TactileFrame",
+              "id": "tactileframe"
+            },
+            {
+              "level": 4,
+              "title": "TactileGlove",
+              "id": "tactileglove"
+            },
+            {
+              "level": 3,
+              "title": "3.2 设备连接",
+              "id": "32-设备连接"
+            },
+            {
+              "level": 4,
+              "title": "自动发现",
+              "id": "自动发现"
+            },
+            {
+              "level": 4,
+              "title": "指定设备",
+              "id": "指定设备"
+            },
+            {
+              "level": 4,
+              "title": "Context Manager",
+              "id": "context-manager"
+            },
+            {
+              "level": 4,
+              "title": "连接管理方法",
+              "id": "连接管理方法"
+            },
+            {
+              "level": 3,
+              "title": "3.3 数据读取",
+              "id": "33-数据读取"
+            },
+            {
+              "level": 4,
+              "title": "阻塞读取",
+              "id": "阻塞读取"
+            },
+            {
+              "level": 4,
+              "title": "流式回调",
+              "id": "流式回调"
+            },
+            {
+              "level": 3,
+              "title": "3.4 配置与诊断",
+              "id": "34-配置与诊断"
+            },
+            {
+              "level": 3,
+              "title": "3.5 异常处理",
+              "id": "35-异常处理"
+            },
+            {
+              "level": 3,
+              "title": "3.6 完整示例",
+              "id": "36-完整示例"
+            },
+            {
+              "level": 4,
+              "title": "预期输出示例",
+              "id": "预期输出示例"
+            },
+            {
+              "level": 3,
+              "title": "3.7 与 Wuji Hand 联合使用",
+              "id": "37-与-wuji-hand-联合使用"
+            },
+            {
+              "level": 3,
+              "title": "3.8 协议参考",
+              "id": "38-协议参考"
+            },
+            {
+              "level": 4,
+              "title": "数据帧格式",
+              "id": "数据帧格式"
+            },
+            {
+              "level": 4,
+              "title": "CRC16-CCITT",
+              "id": "crc16-ccitt"
+            },
+            {
+              "level": 4,
+              "title": "帧同步算法",
+              "id": "帧同步算法"
+            },
+            {
+              "level": 4,
+              "title": "参考实现",
+              "id": "参考实现"
+            },
+            {
+              "level": 2,
+              "title": "4. logging 模块",
+              "id": "4-logging-模块"
+            },
+            {
+              "level": 3,
+              "title": "4.1 Level 枚举",
+              "id": "41-level-枚举"
+            },
+            {
+              "level": 3,
+              "title": "4.2 函数",
+              "id": "42-函数"
+            },
+            {
+              "level": 4,
+              "title": "set_log_path",
+              "id": "set_log_path"
+            },
+            {
+              "level": 4,
+              "title": "set_log_level",
+              "id": "set_log_level"
+            },
+            {
+              "level": 4,
+              "title": "set_log_to_file",
+              "id": "set_log_to_file"
+            },
+            {
+              "level": 4,
+              "title": "set_log_to_console",
+              "id": "set_log_to_console"
+            },
+            {
+              "level": 4,
+              "title": "flush",
+              "id": "flush"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "algorithm-simulation",
+      "name": "Wuji Description",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.27",
+              "id": "20260427"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "概述",
+              "id": "概述"
+            },
+            {
+              "level": 3,
+              "title": "集成指南",
+              "id": "集成指南"
+            },
+            {
+              "level": 3,
+              "title": "相关仓库",
+              "id": "相关仓库"
+            },
+            {
+              "level": 3,
+              "title": "故障排查",
+              "id": "故障排查"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "概述",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/overview/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "概述"
+            }
+          ]
+        },
+        {
+          "group": "使用",
+          "title": "集成指南",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/integration/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "集成指南"
+            },
+            {
+              "level": 2,
+              "title": "系统要求",
+              "id": "系统要求"
+            },
+            {
+              "level": 2,
+              "title": "安装",
+              "id": "安装"
+            },
+            {
+              "level": 2,
+              "title": "仿真与可视化",
+              "id": "仿真与可视化"
+            },
+            {
+              "level": 3,
+              "title": "3.2.1 MuJoCo",
+              "id": "321-mujoco"
+            },
+            {
+              "level": 3,
+              "title": "3.2.2 ROS2 / RViz",
+              "id": "322-ros2--rviz"
+            },
+            {
+              "level": 3,
+              "title": "3.2.3 Isaac Sim USD",
+              "id": "323-isaac-sim-usd"
+            },
+            {
+              "level": 3,
+              "title": "3.2.4 URDF 预览（非 ROS）",
+              "id": "324-urdf-预览非-ros"
+            },
+            {
+              "level": 2,
+              "title": "机械集成",
+              "id": "机械集成"
+            },
+            {
+              "level": 3,
+              "title": "3.3.1 机械臂适配",
+              "id": "331-机械臂适配"
+            },
+            {
+              "level": 3,
+              "title": "3.3.2 Wuji Hand 2（Beta 1）结构件与适配挂载件",
+              "id": "332-wuji-hand-2beta-1结构件与适配挂载件"
+            },
+            {
+              "level": 3,
+              "title": "3.3.3 Unitree G1 适配",
+              "id": "333-unitree-g1-适配"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "相关仓库",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/related-repos/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "相关仓库"
+            },
+            {
+              "level": 3,
+              "title": "4.1 MuJoCo 仿真示例",
+              "id": "41-mujoco-仿真示例"
+            },
+            {
+              "level": 3,
+              "title": "4.2 Isaac Lab 仿真示例",
+              "id": "42-isaac-lab-仿真示例"
+            },
+            {
+              "level": 3,
+              "title": "4.3 手势 Retargeting",
+              "id": "43-手势-retargeting"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "故障排查",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-description/latest/troubleshooting/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "故障排查"
+            },
+            {
+              "level": 3,
+              "title": "RViz 不显示模型",
+              "id": "rviz-不显示模型"
+            },
+            {
+              "level": 3,
+              "title": "rosdep 未初始化",
+              "id": "rosdep-未初始化"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "algorithm-simulation",
+      "name": "Wuji Retargeting",
+      "base_url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/",
+      "pages": [
+        {
+          "group": "metadata",
+          "title": "版本发布记录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/release-notes/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "版本发布记录"
+            },
+            {
+              "level": 2,
+              "title": "2026.07.01",
+              "id": "20260701"
+            },
+            {
+              "level": 3,
+              "title": "组件版本",
+              "id": "组件版本"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新"
+            },
+            {
+              "level": 2,
+              "title": "2026.06.15",
+              "id": "20260615"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-1"
+            },
+            {
+              "level": 2,
+              "title": "2026.05.18",
+              "id": "20260518"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-2"
+            },
+            {
+              "level": 2,
+              "title": "2026.04.27",
+              "id": "20260427"
+            },
+            {
+              "level": 3,
+              "title": "主要更新",
+              "id": "主要更新-3"
+            }
+          ]
+        },
+        {
+          "group": "metadata",
+          "title": "文档阅读指引",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "文档阅读指引"
+            },
+            {
+              "level": 2,
+              "title": "GitHub 仓库与文档入口",
+              "id": "github-仓库与文档入口"
+            },
+            {
+              "level": 2,
+              "title": "可用文档",
+              "id": "可用文档"
+            },
+            {
+              "level": 3,
+              "title": "版本发布记录",
+              "id": "版本发布记录"
+            },
+            {
+              "level": 3,
+              "title": "安装与配置",
+              "id": "安装与配置"
+            },
+            {
+              "level": 3,
+              "title": "快速开始",
+              "id": "快速开始"
+            },
+            {
+              "level": 3,
+              "title": "调参指南",
+              "id": "调参指南"
+            },
+            {
+              "level": 3,
+              "title": "API 介绍",
+              "id": "api-介绍"
+            },
+            {
+              "level": 3,
+              "title": "附录",
+              "id": "附录"
+            },
+            {
+              "level": 2,
+              "title": "技术支持",
+              "id": "技术支持"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "安装与配置",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/installation/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "安装与配置"
+            },
+            {
+              "level": 2,
+              "title": "系统要求",
+              "id": "系统要求"
+            },
+            {
+              "level": 3,
+              "title": "软件版本",
+              "id": "软件版本"
+            },
+            {
+              "level": 3,
+              "title": "输入设备",
+              "id": "输入设备"
+            },
+            {
+              "level": 2,
+              "title": "安装指南",
+              "id": "安装指南"
+            },
+            {
+              "level": 3,
+              "title": "克隆仓库",
+              "id": "克隆仓库"
+            },
+            {
+              "level": 3,
+              "title": "安装依赖",
+              "id": "安装依赖"
+            },
+            {
+              "level": 3,
+              "title": "可选输入模式依赖",
+              "id": "可选输入模式依赖"
+            },
+            {
+              "level": 3,
+              "title": "在 Docker 中运行",
+              "id": "在-docker-中运行"
+            },
+            {
+              "level": 3,
+              "title": "配置 Apple Vision Pro",
+              "id": "配置-apple-vision-pro"
+            },
+            {
+              "level": 4,
+              "title": "安装 VisionOS 应用",
+              "id": "安装-visionos-应用"
+            },
+            {
+              "level": 4,
+              "title": "安装 Python 库",
+              "id": "安装-python-库"
+            },
+            {
+              "level": 4,
+              "title": "可选：iOS 伴侣应用",
+              "id": "可选ios-伴侣应用"
+            }
+          ]
+        },
+        {
+          "group": "入门",
+          "title": "快速开始",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/quick-start/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "快速开始"
+            },
+            {
+              "level": 2,
+              "title": "仿真演示",
+              "id": "simulation"
+            },
+            {
+              "level": 2,
+              "title": "真机控制",
+              "id": "真机控制"
+            },
+            {
+              "level": 3,
+              "title": "运行示例",
+              "id": "运行示例"
+            },
+            {
+              "level": 3,
+              "title": "录制输入数据",
+              "id": "录制输入数据"
+            },
+            {
+              "level": 3,
+              "title": "选择灵巧手型号：Wuji Hand（默认）和 Wuji Hand 2",
+              "id": "选择灵巧手型号wuji-hand默认和-wuji-hand-2"
+            },
+            {
+              "level": 2,
+              "title": "命令参考",
+              "id": "命令参考"
+            },
+            {
+              "level": 3,
+              "title": "teleop_sim.py（仿真）",
+              "id": "teleop_simpy仿真"
+            },
+            {
+              "level": 3,
+              "title": "teleop_real.py（真机）",
+              "id": "teleop_realpy真机"
+            }
+          ]
+        },
+        {
+          "group": "进阶",
+          "title": "调参指南",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/tuning/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "调参指南"
+            },
+            {
+              "level": 2,
+              "title": "tuning_tool 启动和使用方法",
+              "id": "tuning_tool-启动和使用方法"
+            },
+            {
+              "level": 2,
+              "title": "最常用：segment_scaling",
+              "id": "最常用segment_scaling"
+            },
+            {
+              "level": 2,
+              "title": "参数分类",
+              "id": "参数分类"
+            },
+            {
+              "level": 2,
+              "title": "参数速查表",
+              "id": "参数速查表"
+            },
+            {
+              "level": 2,
+              "title": "实际调参顺序",
+              "id": "实际调参顺序"
+            }
+          ]
+        },
+        {
+          "group": "进阶",
+          "title": "API 介绍",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/api/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "API 介绍"
+            },
+            {
+              "level": 2,
+              "title": "基础用法",
+              "id": "基础用法"
+            },
+            {
+              "level": 2,
+              "title": "输入格式",
+              "id": "输入格式"
+            },
+            {
+              "level": 2,
+              "title": "输出格式",
+              "id": "输出格式"
+            },
+            {
+              "level": 2,
+              "title": "配置文件",
+              "id": "配置文件"
+            },
+            {
+              "level": 2,
+              "title": "不同输入模式的配置",
+              "id": "不同输入模式的配置"
+            },
+            {
+              "level": 2,
+              "title": "驱动自定义灵巧手",
+              "id": "驱动自定义灵巧手"
+            },
+            {
+              "level": 2,
+              "title": "video_input 参数",
+              "id": "video_input-参数"
+            },
+            {
+              "level": 2,
+              "title": "参数说明",
+              "id": "参数说明"
+            },
+            {
+              "level": 2,
+              "title": "手型适配",
+              "id": "手型适配"
+            }
+          ]
+        },
+        {
+          "group": "参考",
+          "title": "附录",
+          "url": "https://docs.wuji.tech/docs/zh/wuji-retargeting/latest/appendix/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "附录"
+            },
+            {
+              "level": 2,
+              "title": "算法原理",
+              "id": "算法原理"
+            },
+            {
+              "level": 2,
+              "title": "故障排除",
+              "id": "故障排除"
+            },
+            {
+              "level": 2,
+              "title": "相关资源",
+              "id": "相关资源"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "algorithm-simulation",
+      "name": "MuJoCo Sim",
+      "base_url": "https://docs.wuji.tech/docs/zh/mujoco-sim/latest/",
+      "pages": [
+        {
+          "group": "single-page",
+          "title": "MuJoCo Sim",
+          "url": "https://docs.wuji.tech/docs/zh/mujoco-sim/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "MuJoCo 仿真示例"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category": "algorithm-simulation",
+      "name": "Isaac Lab Sim",
+      "base_url": "https://docs.wuji.tech/docs/zh/isaaclab-sim/latest/",
+      "pages": [
+        {
+          "group": "single-page",
+          "title": "Isaac Lab Sim",
+          "url": "https://docs.wuji.tech/docs/zh/isaaclab-sim/latest/",
+          "headings": [
+            {
+              "level": 1,
+              "title": "Isaac Lab 仿真示例"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "external_official_sources": [
+    {
+      "category": "global",
+      "name": "Wuji 文档中心首页",
+      "url": "https://docs.wuji.tech/zh/",
+      "kind": "official-document-index"
+    },
+    {
+      "category": "global",
+      "name": "Wuji 全站发布记录",
+      "url": "https://docs.wuji.tech/docs/zh/release-notes/",
+      "kind": "official-global-release-feed"
+    },
+    {
+      "category": "algorithm-simulation",
+      "name": "Wuji Hand Teleop",
+      "url": "https://github.com/wuji-technology/wuji-hand-teleop",
+      "kind": "official-github-repository"
+    }
+  ]
+}
