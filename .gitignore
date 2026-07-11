@@ -1,0 +1,23 @@
+# Local execution planning: deliberately not synchronized.
+/plans/
+
+# Runtime outputs and generated datasets stay out of source control.
+/artifacts/
+
+# Machine/user-specific configuration overrides.
+/configs/local/
+
+# Python environments and caches.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment and editor state.
+.env
+.env.*
+.idea/
+.vscode/
+
