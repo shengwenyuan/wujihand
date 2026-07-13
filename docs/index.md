@@ -6,7 +6,10 @@
 
 - [000：项目章程、执行预演与全局架构](000-project-charter-and-architecture.md)
 - [MediaPipe—Wuji Hand 2—Isaac 控制链路](components/mediapipe-isaac-control.md)
+- [ADR-0001：Hand 2 固定法兰采用 D6 三轴转向](decisions/0001-hand2-fixed-flange-d6-rotation.md)
+- [MediaPipe 控制 Hand 2 转向抓球指南](guides/mediapipe-hand2-rotation-ball.md)
 - [2026-07-13 垂直切片验证报告](validation/2026-07-13-mediapipe-isaac-vertical-slice.md)
+- [2026-07-13 Hand 2 固定法兰转向抓球最终验证](validation/2026-07-13-hand2-rotation-ball.md)
 
 ## 后续维护位置
 

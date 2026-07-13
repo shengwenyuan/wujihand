@@ -1,111 +1,85 @@
 # MediaPipe—Wuji Hand 2—Isaac 控制链路
 
-状态：2026-07-13 已完成真人右手端到端验收，并在清理后重新通过脚本运动、loopback UDP 断流恢复和 Isaac Lab smoke。当前能力是固定手掌、20 个手指关节的实时镜像控制，不包含腕部、机械臂或物体抓取任务。
+状态：2026-07-13，需求开发结束。
 
-## 正式入口
+固定手掌 q20 基线、固定 XYZ 三轴转向、动态球抓取及人工 MediaPipe 操作均已验证。人工操作能够抓起球，但流畅度和稳定性受 MediaPipe 手部姿态估计限制；本需求以功能可用收口，不继续扩展 wrist XYZ 或视觉滤波。
 
-| 职责 | 入口 |
+## 范围与边界
+
+- 产品：**Wuji Hand 2 Beta 1 right**，20 个主动手指关节。
+- 资产：固定 [`wuji-description v2026.6.27`](https://github.com/wuji-technology/wuji-description/releases/tag/v2026.6.27)；运行时校验 commit、USD 路径和 SHA-256。
+- 输入：MediaPipe 右手 21×3 landmarks，经 Wuji SDK 2026.7.2 重定向为 q20，同时估计掌面姿态。
+- 仿真：法兰 XYZ 固定，增加 D6 `rotX/rotY/rotZ` 安装机构。该 3R 是项目的 Isaac overlay，不是 Hand 2 产品自带腕部关节。
+- 任务：物理 task home 为 pitch `+60°`；球半径 `30 mm`，球心 `[0.130, 0.025, 0.410] m`。
+
+## 核心入口
+
+| 职责 | 文件 |
 |---|---|
-| D435、MediaPipe、Wuji retarget 与 UDP 发布 | `tools/run_mediapipe_hand2_teleop.py` |
-| 原生 Isaac Sim 5.1 场景、监督与 UDP 接收 | `tools/run_isaac_hand2_teleop.py` |
-| Hand 2 派生 profile | `configs/profiles/hand2_right_v2026_6_27.yaml` |
-| profile 加载和 firmware/backend 重排 | `src/wujihand/adapters/simulation/hand2_model.py` |
-| loopback q20 协议 | `src/wujihand/adapters/transport/udp_joint_command.py` |
-| 安全监督 | `src/wujihand/application/supervision/joint_supervisor.py` |
-| 关节布局与静息姿态 | `src/wujihand/domain/hand2.py` |
-| 上游版本、commit 与资产 hash | `third_party/sources.lock.yaml` |
+| MediaPipe、Wuji retarget、v1/v2 发布 | `tools/run_mediapipe_hand2_teleop.py` |
+| rotation-ball Isaac composition root | `tools/run_isaac_hand2_rotation_ball.py` |
+| 隔离重复资格验证 | `tools/run_isaac_hand2_rotation_ball_trials.py` |
+| 场景和验收参数 | `configs/base/hand2_rotation_ball_v1.yaml` |
+| 掌面估计与 neutral 标定 | `src/wujihand/adapters/input/mediapipe_palm_orientation.py`、`application/calibration/palm_orientation.py` |
+| 姿态 contract 与安全监督 | `src/wujihand/domain/pose.py`、`application/supervision/pose_supervisor.py` |
+| 原子 v2 命令与 UDP | `src/wujihand/ports/hand_command.py`、`adapters/transport/udp_hand_command.py` |
+| D6、动态球与抓取判据 | `src/wujihand/adapters/simulation/hand2_rotation_mount.py`、`hand2_ball_scene.py`、`hand2_grasp.py` |
+| 确定性抓取脚本 | `src/wujihand/runtime/rotation_ball_script.py` |
 
-`tools/` 只保留两个真实运行入口。无摄像头 q20 发送器和 Isaac Lab smoke 属于集成验证，分别位于 `tests/integration/send_test_q20_udp.py`、`tests/integration/isaaclab_smoke.py`。
+离线可达性网格、未被运行时读取的 session YAML 和逐帧命令副本已从最终实现移除。
 
-## MediaPipe 到 Isaac 的运行链
-
-```text
-D435 RGB8 640x480 @ 30 Hz
-  -> MediaPipe HandLandmarker VIDEO
-  -> Right hand_world_landmarks, float32 (21, 3), metres
-  -> Wuji RetargetSession(WujiHand2, Right).step()
-  -> firmware-order q20, radians
-  -> UdpJointCommandSender
-  -> 127.0.0.1 JSON datagram: wujihand.q20.v1
-  -> UdpJointCommandReceiver.receive_latest()
-  -> JointCommandSupervisor @ 60 Hz
-  -> Hand2ModelProfile.firmware_to_backend()
-  -> Articulation.set_joint_position_targets()
-  -> Isaac physics @ 120 Hz
-```
-
-具体调用顺序：
-
-1. `run_mediapipe_hand2_teleop.py:main()` 从 D435 读取原始 RGB8；normalized landmarks 只用于预览，控制使用 `hand_world_landmarks[0]`。
-2. 只接受 MediaPipe 分类为 `Right` 的单手。`RetargetSession.for_hand(HandModel.WujiHand2, Handedness.Right)` 将 `(21, 3)` 世界关键点映射为 20 维关节角；shape 或有限性异常会立即终止，不发送坏数据。
-3. `UdpJointCommandSender.send()` 再按 `HAND2_RIGHT_LAYOUT` 校验 q20，并发送固定 schema/layout、session UUID、递增 sequence、`monotonic_ns` 和 q20。协议只允许 `127.0.0.1`，最大 4096 bytes，不使用 pickle。
-4. Isaac 每个 60 Hz command tick 调用 `receive_latest()`，排空当前数据报并按 `host_time_ns` 只保留最新包；空轮询期间暂存最后一个已验证目标。
-5. `JointCommandSupervisor.step()` 是唯一控制出口：拒绝错误 shape、NaN/Inf、未来时间戳和陈旧输入；先 clamp 到 profile limits，再按官方速度上限的 20% 限制单 tick 变化。
-6. `Hand2ModelProfile.firmware_to_backend()` 按 Isaac 运行时的 `hand.dof_names` 显式重排。当前实测 firmware indices 为 `[4, 8, 16, 12, 0, 5, 9, 17, 13, 1, 6, 10, 18, 14, 2, 7, 11, 19, 15, 3]`，随后才写入 articulation。
-7. 反馈通过 `backend_to_firmware()` 逆映射，以 canonical q20 顺序做限位、误差和验证记录。
-
-MediaPipe 连续约半秒无右手时会清空 retargeter 的 warm-start/filter state；它不会伪造 stop 包。最后一条输入年龄超过 250 ms 时，Isaac supervisor 进入 `DEGRADED`，按同一速度限制逐步回到全零静息姿态。`age == 250 ms` 仍有效，`age > 250 ms` 才触发陈旧策略。
-
-## Isaac 初始化与资源挂载链
+## 数据流
 
 ```text
-third_party/sources.lock.yaml
-  -> restored wuji-description v2026.6.27 checkout
-  -> hand2_beta/body/usd/right/wujihand.usd
-  -> add_reference_to_stage(..., "/World/Hand2")
-  -> discover /World/Hand2/root_joint ArticulationRootAPI
-  -> Articulation("hand2_right")
-
-configs/profiles/hand2_right_v2026_6_27.yaml
-  -> load_hand2_model_profile()
-  -> verify product/right/20 DOF/domain layout/rest
-  -> verify runtime USD DOF names and limits
-  -> build explicit firmware <-> backend mapping
+D435 RGB -> MediaPipe right landmarks
+  ├─> Wuji RetargetSession -> q20
+  └─> palm frame -> neutral calibration -> relative wxyz quaternion
+      -> HandCommand v2(q20 + quaternion + quality + calibration_id)
+      -> loopback UDP -> JointCommandSupervisor + PoseSupervisor
+      -> finger20 targets + D6 wrist3 targets
+      -> PhysX contacts/ball pose -> BallLiftEvaluator
 ```
 
-初始化顺序：
+domain/application 层不依赖 MediaPipe、Wuji SDK 或 Isaac 对象，只处理 NumPy 数值、显式 frame、单调时间戳、质量和 calibration token。
 
-1. CLI 在启动 Isaac 前确认 USD 和 profile 文件存在；`SimulationApp` 必须先创建，随后才导入 `pxr` 与 `isaacsim` API。
-2. `World` 使用 metre 单位、120 Hz physics、30 Hz rendering 和 NumPy backend；代码挂载默认 ground、`/World/Table` 固定方块及 `/World/DomeLight`。
-3. `add_reference_to_stage()` 将官方 right-hand 顶层 USD 挂到 `/World/Hand2`。该 USD 的 Physics/Sensor/Robot variants 继续组合 `configuration/wujihand_physics.usd`、`wujihand_base.usd`、`wujihand_sensor.usd` 和 `wujihand_robot.usd` 等同目录资源。
-4. 代码扫描且只接受一个位于 `/World/Hand2` 下的 `ArticulationRootAPI`；当前根为 `/World/Hand2/root_joint`。`world.reset()` 后将固定手掌置于桌面上方、掌心朝世界 `+Z`，再设置观察相机。
-5. 运行时读取派生 profile，要求它与代码中固定的 firmware layout/rest 完全一致；随后读取实际 `hand.dof_names` 和 USD limits。任一关节缺失、重复、顺序集合不同或 limits 不匹配都会 fail closed，不进入控制循环。
-6. 最后创建 supervisor，并在 UDP 模式绑定 loopback receiver。原生控制场景不依赖 Isaac Lab；Isaac Lab 2.3.2 只作为未来任务系统的独立安装基线。
+## 姿态与 clutch
 
-上游 checkout、MediaPipe 模型与运行产物均被 Git 忽略。新环境必须先按 `third_party/sources.lock.yaml` 恢复固定 tag/commit/hash；本机 Isaac 安装路径属于本地环境，不写入来源锁。
+掌面 frame 使用 wrist、index MCP、middle MCP、pinky MCP 四点构造正交坐标系。稳定 neutral 保存 `R0`，后续输出 `R0.T @ R`。因此操作者以舒适姿态完成 neutral 时，Isaac 已处于物理 `+60°` task home；到脚本验证的物理 `76°` 预抓取只需约 `+16°` 相对 pitch。
 
-## 运行命令
+按 `c` 会请求 clutch/recenter：当前稳定手姿成为新的 identity，生成新的 `calibration_id`，并连续发送 3 个 identity 帧。Isaac 只在“新 calibration epoch + identity”时重新 arm，从而保持当前仿真腕姿并以真人当前姿态继续相对控制。
 
-先启动 Isaac 接收端：
+PoseSupervisor 在输入老化到 `250 ms` 时进入 `DEGRADED` 并保持最后安全姿态，`500 ms` 时进入 `DISARMED`。恢复必须重新稳定标定或 clutch，不能用旧 calibration epoch 自动恢复。
 
-```bash
-export ISAAC_SIM_ROOT=/path/to/isaac-sim-standalone-5.1.0-linux-x86_64
-"$ISAAC_SIM_ROOT/python.sh" \
-  tools/run_isaac_hand2_teleop.py \
-  --gui --command-source udp --udp-port 49152 --frames 36000
+## 固定法兰 D6
+
+```text
+world fixed joint
+  -> flange_anchor
+     -> D6 wrist_rotation_joint (transXYZ locked, rotXY limited, rotZ periodic)
+        -> Hand 2 r_base_link
+           -> finger20
 ```
 
-再启动 D435 右手 worker：
+roll/pitch 相对 task home 限制为 `±89°`，yaw 目标做周期 unwrap。运行时按 DOF name + USD path 验证 wrist3/finger20，不依赖 23 维数组顺序。Hand 2 `r_base_link` 的 principal-axes quaternion 通过单位四元数平方根对称分配到 D6 两侧 joint frame，使驱动轴与可见手掌轴一致。
 
-```bash
-.venv/bin/python tools/run_mediapipe_hand2_teleop.py \
-  --publish-udp-port 49152
-```
+## 抓取事实与安全门
 
-正常 live 模式只在退出时打印短摘要，不保存逐帧日志或导出 USD。若要执行可复现的脚本资格验证，显式指定输出目录：
+球体始终为 `DynamicSphere`；实现不使用 attachment、teleport、kinematic target 或逐帧 world-pose 搬运。一次通过要求：
 
-```bash
-"$ISAAC_SIM_ROOT/python.sh" \
-  tools/run_isaac_hand2_teleop.py \
-  --command-source scripted --frames 600 \
-  --validation-output-dir artifacts/runs/isaac_hand2_scripted
-```
+- 球底离桌 `≥20 mm`；
+- ball/table 接触消失；
+- thumb 与至少两个对侧手指组接触；
+- ball-in-palm 相对滑移 `≤5 mm`；
+- 条件连续保持 `≥1 s`；
+- 独立整手/table contact view 全程无接触。
 
-验证模式只写 `validation.json`、`commands.json` 和 `hand2_table.png`。无摄像头 UDP 轨迹和 Isaac Lab smoke 的命令见验证报告。
+`wujihand.q20.v1` 继续服务固定手掌兼容链路。rotation-ball 使用严格的 `wujihand.hand_command.v2` 原子携带 q20 和姿态；v1/v2 相互拒绝，v2 仅绑定 loopback，拒绝非法 schema、非有限数、错误 shape、非单位四元数、陈旧/未来时间戳和非单调 sequence。
 
-## 已知边界
+## 已知限制
 
-- 当前 composition root 仍是两个 CLI；尚未拆出通用 runtime orchestration、MediaPipe input adapter 或 Wuji retarget adapter。
-- 当前只控制固定基座 Hand 2 右手的 20 个手指关节；几何物抓取、reward/task state、HDF5、LeRobot、腕部/机械臂均未实现。
-- receiver 以单调 `host_time_ns` 选择最新包；sequence 用于观测和记录，当前不承担跨 session 排序。
-- 官方 Hand 2 USD 在 Sim 5.1 仍报告 5 个 fingertip `visuals` unresolved-reference 警告及 wrist collision fabric 警告；加载、20 DOF 驱动和当前视觉验证可用，但接触任务前必须重新资格验证。
+- 人工抓取已成功，但 MediaPipe 遮挡、landmark 抖动和大角度姿态跳变使操作不够顺畅。
+- 固定 XYZ 只覆盖球位于手指闭合与法兰旋转共同可达区域的任务，不是通用桌面 pick。
+- Hand 2 Beta 1 官方当前只有刚性骨骼仿真模型；本结果不代表软体指腹、触觉或真机抓力。
+- pinned USD 或 Isaac 版本变化后，必须重新执行结构、严格物理和人工方向检查。
+
+执行步骤见 `docs/guides/mediapipe-hand2-rotation-ball.md`，最终证据见 `docs/validation/2026-07-13-hand2-rotation-ball.md`。
