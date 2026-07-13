@@ -25,6 +25,24 @@ class Hand2ModelProfile:
         indices = self.layout.indices_for(backend_names)
         return values[np.asarray(indices, dtype=np.int64)]
 
+    def _finger_indices_in_backend(self, backend_names: Sequence[str]) -> tuple[int, ...]:
+        """Return backend indices for q20 in canonical firmware order.
+
+        The fixed-base asset exposes exactly 20 DOFs, while the rotation-mount
+        derivative exposes three additional wrist DOFs.  This method deliberately
+        permits those extra DOFs but still fails closed if any canonical finger
+        joint is missing or duplicated.
+        """
+
+        target = tuple(backend_names)
+        if len(set(target)) != len(target):
+            raise ValueError("backend DOF names must be unique")
+        backend_index = {name: index for index, name in enumerate(target)}
+        missing = [name for name in self.layout.names if name not in backend_index]
+        if missing:
+            raise ValueError(f"backend is missing Hand 2 finger DOFs: {missing}")
+        return tuple(backend_index[name] for name in self.layout.names)
+
     def backend_to_firmware(
         self, backend_values: Sequence[float], backend_names: Sequence[str]
     ) -> FloatArray:
@@ -35,6 +53,21 @@ class Hand2ModelProfile:
         firmware = np.empty(self.layout.size, dtype=np.float64)
         firmware[indices] = values
         return firmware
+
+    def backend_full_to_firmware(
+        self, backend_values: Sequence[float], backend_names: Sequence[str]
+    ) -> FloatArray:
+        """Select canonical q20 feedback from a backend that may have wrist DOFs."""
+
+        values = np.asarray(backend_values, dtype=np.float64)
+        if values.shape != (len(backend_names),):
+            raise ValueError(
+                f"expected backend vector shape {(len(backend_names),)}, got {values.shape}"
+            )
+        if not np.isfinite(values).all():
+            raise ValueError("backend vector contains NaN or infinity")
+        indices = np.asarray(self._finger_indices_in_backend(backend_names), dtype=np.int64)
+        return self.layout.validate_vector(values[indices]).copy()
 
 
 def load_hand2_model_profile(path: str | Path) -> Hand2ModelProfile:

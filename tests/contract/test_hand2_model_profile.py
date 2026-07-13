@@ -69,3 +69,29 @@ def test_backend_mapping_matches_observed_isaac_dof_order() -> None:
 
     np.testing.assert_array_equal(backend, q20[expected_indices])
     np.testing.assert_array_equal(profile.backend_to_firmware(backend, backend_names), q20)
+
+
+def test_backend_mapping_can_select_fingers_from_rotation_mount() -> None:
+    profile = load_hand2_model_profile(PROFILE)
+    wrist_names = ["wrist_yaw", "wrist_pitch", "wrist_roll"]
+    backend_names = [wrist_names[0], *profile.layout.names[:7], wrist_names[1]]
+    backend_names.extend(profile.layout.names[7:])
+    backend_names.append(wrist_names[2])
+    q20 = np.arange(20, dtype=np.float64)
+
+    indices = tuple(backend_names.index(name) for name in profile.layout.names)
+    full_feedback = np.full(23, -99.0, dtype=np.float64)
+    full_feedback[np.asarray(indices)] = q20
+
+    np.testing.assert_array_equal(profile.backend_full_to_firmware(full_feedback, backend_names), q20)
+    assert [backend_names[index] for index in indices] == list(profile.layout.names)
+
+
+def test_rotation_mount_mapping_rejects_missing_or_duplicate_finger_dof() -> None:
+    profile = load_hand2_model_profile(PROFILE)
+    with pytest.raises(ValueError, match="missing"):
+        profile.backend_full_to_firmware(np.zeros(19), profile.layout.names[:-1])
+    with pytest.raises(ValueError, match="unique"):
+        profile.backend_full_to_firmware(
+            np.zeros(21), [*profile.layout.names, profile.layout.names[0]]
+        )
