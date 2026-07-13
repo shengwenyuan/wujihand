@@ -5,6 +5,8 @@
 ## 当前文档
 
 - [000：项目章程、执行预演与全局架构](000-project-charter-and-architecture.md)
+- [MediaPipe—Wuji Hand 2—Isaac 控制链路](components/mediapipe-isaac-control.md)
+- [2026-07-13 垂直切片验证报告](validation/2026-07-13-mediapipe-isaac-vertical-slice.md)
 
 ## 后续维护位置
 
@@ -16,4 +18,3 @@
 - `decisions/`：影响边界、依赖、数据事实源或安全策略的 ADR。
 
 每个功能合入时，至少同步更新对应 component 文档中的代码入口和验证入口。
-
