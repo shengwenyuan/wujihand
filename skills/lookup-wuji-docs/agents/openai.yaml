@@ -1,4 +1,4 @@
 interface:
   display_name: "Wuji Docs Lookup"
-  short_description: "准确定位舞肌硬件、软件开发、SDK、仿真与遥操作官方文档"
-  default_prompt: "Use $lookup-wuji-docs to locate and verify the authoritative Wuji sources for this topic, then map the result into the repository architecture."
+  short_description: "准确核验舞肌硬件、软件、SDK 与仿真资料，并守护仓库架构和重大迭代交付"
+  default_prompt: "Use $lookup-wuji-docs to verify authoritative Wuji sources, map them into the repository architecture, and close any substantial delivery with the required local handoff."

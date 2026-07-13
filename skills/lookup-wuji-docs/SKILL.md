@@ -1,6 +1,6 @@
 ---
 name: lookup-wuji-docs
-description: Locate, verify, and explain authoritative Wuji Technology documentation with product-generation and version awareness. Use for Chinese or English questions about 舞肌灵巧手、仿真、遥操作、重定向, Wuji Hand 2 Beta 1, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, or when designing or modifying this repository's software, simulation, data-recording, testing, and adapter architecture from Wuji docs.
+description: Locate, verify, and explain authoritative Wuji Technology documentation with product-generation and version awareness. Use for Chinese or English questions about 舞肌灵巧手、仿真、遥操作、重定向, Wuji Hand 2 Beta 1, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, when designing or modifying this repository's software, simulation, data-recording, testing, and adapter architecture from Wuji docs, or when closing a long-running, major-feature, cross-module, or architecture-level repository delivery that requires the local plans/last_edits.md handoff.
 ---
 
 # Lookup Wuji Docs
@@ -201,6 +201,14 @@ Do not let MediaPipe, Isaac, ROS2, or Wuji SDK objects cross an adapter boundary
 Treat future Glove, exoskeleton, MuJoCo, ROS2, and PI folders as reserved extension points until code, contract tests, and component docs exist. Keep local dynamic work in ignored `plans/`; put stable behavior and real code entry points in versioned `docs/`.
 
 For the complete placement and validation rules, read `references/project-architecture.md`; for the formal project baseline, consult `docs/000-project-charter-and-architecture.md` from the repository root.
+
+## Close substantial repository deliveries
+
+After implementation, relevant formal documentation, and the main validation are complete, but before the final handoff, overwrite `plans/last_edits.md` when the work reaches a meaningful long-running checkpoint or delivers a major feature, cross-module refactor, architecture/contract/schema change, runtime baseline change, or safety/compatibility behavior change. Rewrite the whole file for the just-finished delivery; never append history or create dated copies.
+
+Do not overwrite the last valid snapshot for read-only investigation, planning-only work, minor localized edits, formatting or mechanical updates, or a blocked attempt that produced no usable delivery. A valuable but incomplete checkpoint may update it only when clearly labeled `阶段性交付` with the unfinished scope stated.
+
+Keep the snapshot readable in 3–5 minutes. Summarize the delivery result, principal changes, real code/config/test/doc entry points, expected observable effect, checks actually run and their results, and known limits or next step. Do not paste a full diff, long logs, secrets, or the only copy of an authoritative fact. Follow the exact trigger, template, overwrite, and ignore checks in [references/project-architecture.md](references/project-architecture.md#最近一次交付快照). This local ignored snapshot never replaces required component documentation, validation evidence, or ADRs in `docs/`.
 
 ## Refresh the catalog when needed
 
