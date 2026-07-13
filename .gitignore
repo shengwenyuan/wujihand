@@ -4,6 +4,9 @@
 # Runtime outputs and generated datasets stay out of source control.
 /artifacts/
 
+# Reproducible upstream checkouts are restored from third_party/sources.lock.yaml.
+/third_party/src/
+
 # Machine/user-specific configuration overrides.
 /configs/local/
 
@@ -20,4 +23,3 @@ __pycache__/
 .env.*
 .idea/
 .vscode/
-

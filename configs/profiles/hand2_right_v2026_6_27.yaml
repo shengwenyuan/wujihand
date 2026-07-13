@@ -1,0 +1,38 @@
+schema_version: 1
+product: wuji_hand_2_beta_1
+side: right
+units:
+  position: rad
+  velocity: rad_s
+derived_from:
+  repository: https://github.com/wuji-technology/wuji-description.git
+  tag: v2026.6.27
+  commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
+  urdf: hand2_beta/body/urdf/right.urdf
+  urdf_sha256: f3bb5d0031a1972e06faafa8a6ab191dcf5ab5abfebbf5d27cb510ee8d004a06
+  usd: hand2_beta/body/usd/right/wujihand.usd
+  usd_sha256: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
+joint_order_semantics: wuji_sdk_2026_7_2_retarget_firmware_order
+rest_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+joints:
+  - {name: r_thumb_cmc_flex, lower: -1.187, upper: 1.291, velocity: 8.587}
+  - {name: r_thumb_cmc_abd, lower: -1.484, upper: 0.698, velocity: 11.1}
+  - {name: r_thumb_mcp, lower: -1.047, upper: 1.570, velocity: 12.86}
+  - {name: r_thumb_ip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: r_index_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: r_index_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: r_index_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: r_index_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: r_middle_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: r_middle_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: r_middle_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: r_middle_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: r_ring_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: r_ring_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: r_ring_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: r_ring_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: r_pinky_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: r_pinky_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: r_pinky_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: r_pinky_dip, lower: -1.047, upper: 1.570, velocity: 13.5}

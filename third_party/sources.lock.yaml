@@ -1,0 +1,32 @@
+schema_version: 1
+sources:
+  - name: mediapipe-hand-landmarker-float16
+    kind: model
+    url: https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
+    retrieved_at: 2026-07-11
+    local_runtime_path: artifacts/models/mediapipe/hand_landmarker.task
+    sha256: fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1
+  - name: wuji-description
+    kind: git
+    url: https://github.com/wuji-technology/wuji-description.git
+    tag: v2026.6.27
+    commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
+    retrieved_at: 2026-07-11
+    local_runtime_path: third_party/src/wuji-description
+    sparse_paths:
+      - hand2_beta/body/urdf
+      - hand2_beta/body/meshes/right
+      - hand2_beta/body/usd/right
+    artifacts:
+      hand2_beta/body/urdf/right.urdf: f3bb5d0031a1972e06faafa8a6ab191dcf5ab5abfebbf5d27cb510ee8d004a06
+      hand2_beta/body/usd/right/wujihand.usd: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
+  - name: isaaclab
+    kind: git
+    url: https://github.com/isaac-sim/IsaacLab.git
+    tag: v2.3.2
+    commit: 37ddf626871758333d6ed89cf64ad702aef127d0
+    retrieved_at: 2026-07-11
+    local_runtime_path: third_party/src/IsaacLab
+    linked_isaac_sim:
+      version: 5.1.0
+      link: third_party/src/IsaacLab/_isaac_sim
