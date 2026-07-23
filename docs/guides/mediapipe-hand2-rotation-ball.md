@@ -11,6 +11,11 @@
 .venv/bin/pytest -m requires_socket
 ```
 
+其中 fast suite 会在不启动 Isaac 或相机的情况下解析全部 7 个正式 Session，并校验
+五层引用、固定 `wuji-description v2026.6.27` Binding、v1/v2 transport 配对、
+compatibility leaf 对照和架构依赖方向。它不能替代下面的 authored-stage、PhysX 或
+真人设备回归。
+
 Isaac USD overlay 快速检查：
 
 ```bash
@@ -27,6 +32,7 @@ env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV \
 ```bash
 "$ISAAC_SIM_ROOT/python.sh" \
   tools/run_isaac_hand2_rotation_ball.py \
+  --session configs/sessions/isaac_hand2_right_rotation_ball_qualification_v1.yaml \
   --command-source scripted \
   --frames 1200 \
   --require-grasp-success \
@@ -51,6 +57,7 @@ env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV \
 ```bash
 "$ISAAC_SIM_ROOT/python.sh" \
   tools/run_isaac_hand2_rotation_ball.py \
+  --session configs/sessions/isaac_hand2_right_rotation_ball_teleop_v1.yaml \
   --command-source udp --udp-port 49152 --gui --frames 36000 \
   --validation-output-dir artifacts/runs/isaac_hand2_rotation_ball_live
 ```
@@ -59,10 +66,24 @@ env -u CONDA_PREFIX -u CONDA_DEFAULT_ENV \
 
 ```bash
 .venv/bin/python tools/run_mediapipe_hand2_teleop.py \
+  --session configs/sessions/mediapipe_hand2_hand_command_udp_v1.yaml \
   --publish-hand-command-port 49152
 ```
 
 `--publish-hand-command-port` 发送 q20+rotation v2；legacy `--publish-udp-port` 仅发送 q20 v1，两者互斥。
+
+`--session` 都是可选的：Isaac rotation-ball 按 `--command-source` 自动选择
+qualification 或 teleop-consumer Session；MediaPipe 按 publish 参数自动选择 q20 v1
+或 q20+pose v2 producer Session。因此旧命令继续可用。显式 Session 的 runtime role
+或 transport contract 与命令模式不一致时会在设备/backend 启动前拒绝。
+
+Isaac 的旧 `--asset`、`--profile`、`--scene-profile` 仍可作为有意 override 使用，并
+会连同文件内容 hash 进入 `session_hash`；各 runner 仍执行对应的实际 USD SHA-256、
+layout 和场景检查。fixed-hand 同时提供 `--asset` 与 `--profile` 时，二者可有意脱离
+Session Binding/source lock，只保留内容一致性和模型 gate，不能据此声称 pinned
+provenance；正式运行优先通过默认或显式 `--session` 选择锁定组合。每份 Isaac
+`validation.json` 记录
+`session`/`session_hash`，MediaPipe 启动日志也打印这两个字段，现场验收应一并留存。
 
 ## 4. Neutral 与 clutch
 
@@ -97,3 +118,10 @@ clutch 不会把 Isaac 腕部弹回 60° home。它把“当前真人手姿”�
 - 检查 `validation.json` 的 UDP accepted/rejected、监督状态、固定法兰误差和抓取判据。
 
 当前人工测试已成功抓起球；操作不够顺畅属于 MediaPipe landmark/姿态稳定性限制，不影响本需求的功能验收结论。
+
+以上真人抓球结论来自原 2026-07-13 验证。2026-07-23 五层改造后已重新执行 Isaac
+fixed/rotation 物理回归、合成 q20 UDP 接收回归，以及 D435I + MediaPipe 的 30 帧
+启动/采集/推理 smoke；相机画面中没有真人手，因此本轮没有重新验收真人 landmark、
+live retarget 或真人闭环控制。精确结果见
+[2026-07-23 五层架构与既有仿真链路验证](../validation/2026-07-23-five-layer-architecture.md)。
+今后的 fast suite 通过仍只证明配置兼容，不能替代 GPU、设备或真人操作验收。

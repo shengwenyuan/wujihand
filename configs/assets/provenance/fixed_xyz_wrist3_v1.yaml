@@ -1,0 +1,6 @@
+schema: wujihand.asset_identity_provenance.v1
+asset_id: fixed_xyz_wrist3
+product: fixed_xyz_wrist
+revision: v1
+manufacturer: project_authored
+identity_basis: adr_0001_fixed_xyz_three_axis_rotation_mechanism

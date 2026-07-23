@@ -39,11 +39,12 @@ MediaPipe、Glove、外骨骼、Isaac、MuJoCo、Wuji SDK、ROS2 和网络服务
 ### 3.2 依赖方向固定
 
 ```text
-runtime/composition -> application + adapters
-application         -> domain + ports
-adapters            -> domain + ports + external SDK
-ports               -> domain
-domain              -> no simulator/device/middleware dependency
+specs / compat / integrity -> Python 标准库
+runtime/composition        -> specs + compat + integrity + application + adapters
+application                -> domain + ports
+adapters                   -> specs + compat + integrity + domain + ports + external SDK
+ports                      -> domain
+domain                     -> no simulator/device/middleware dependency
 ```
 
 核心逻辑不得 import Isaac、MediaPipe、ROS2 或 Wuji SDK。外部 SDK 对象不能越过 adapter 边界进入 application。
@@ -71,6 +72,48 @@ domain              -> no simulator/device/middleware dependency
 ### 3.6 来源和可复现性是功能的一部分
 
 模型、算法、官方配置、SDK、标定和数据 schema 都要有版本、hash 或 commit。滚动 `latest` URL 只能用于查阅，不能充当实验锁定版本。
+
+### 3.7 五层运行配置
+
+仿真资产和运行环境采用
+`Asset Manifest → Backend Binding → Assembly Spec → Workcell → Session`
+五层组合，详细取舍见
+[ADR-0003](decisions/0003-five-layer-session-composition.md)。
+
+| 层 | 责任 |
+|---|---|
+| Asset Manifest | 后端无关的产品身份、代际、侧别、语义 frame、control group 与 layout |
+| Backend Binding | 一个 Asset 在指定 backend 的固定 artifact、loader、frame/joint/actuator 映射 |
+| Assembly Spec | 带 namespace 的资产实例、语义 attachment 与一个或多个 root |
+| Workcell | world/语义 frame、mount，以及 plane/box/sphere/frustum 物理 primitive |
+| Session | backend、assembly/workcell、逐实例 binding、逐 root placement 和运行合同的唯一组合入口 |
+
+Asset 身份不得包含 MJCF/USD 路径或 simulator 原生名称；这些版本化表示只属于
+Backend Binding，并引用 `third_party/sources.lock.yaml`。Assembly 是无环 forest：
+每个非 root 实例恰好一个 parent，每个 root 由 Session 独立放置到 Workcell mount。
+因此，同一结构既能表达当前单 root 场景，也为未来多臂、多手和多 root workcell
+保留扩展面，但不表示这些新资产已经实现。
+
+Session resolver 必须在 backend 初始化前完成引用闭合、asset/binding/backend
+匹配、frame 与 control layout 校验、root placement、source lock 和配置指纹计算。
+runner 不得绕开 Session 再维护第二套隐式组合默认值。现有 typed scene/runtime
+profile 可暂作 compatibility leaf，以 strangler 方式迁移；兼容期只引用而不复制
+既有几何、physics、控制和报告事实。
+
+五层数据模型只表达不可变 spec 和局部不变量；YAML、安全路径、跨层解析和依赖装配
+属于 runtime。`compat/` 暂存现有 MuJoCo compatibility leaf 的纯数据合同，
+`integrity.py` 提供 simulator-neutral 的文件/目录 hash；二者都只依赖标准库。
+adapter 可消费解析后的 spec/compat 合同，但不得反向 import runtime。此扩展不改变
+3.2 节的核心方向：
+
+```text
+runtime -> specs + compat + integrity + application + adapters
+adapters -> specs + compat + integrity + domain + ports + external SDK
+application -> domain + ports
+ports -> domain
+specs / compat / integrity -> Python standard library
+domain -> no simulator/device/middleware dependency
+```
 
 ## 4. 全局数据流
 
@@ -142,6 +185,9 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
 ├── src/wujihand/
 │   ├── domain/                    canonical types、单位、frame、layout、不变量
 │   ├── ports/                     Input/Retarget/Execution/State/Recorder 等协议
+│   ├── specs/                     五层 immutable schema 与局部不变量
+│   ├── compat/                    临时、纯数据的 typed compatibility-leaf 合同
+│   ├── integrity.py               simulator-neutral 文件与目录内容 hash
 │   ├── application/
 │   │   ├── calibration/           坐标与个体标定用例
 │   │   ├── retargeting/           与外部 SDK 无关的映射用例
@@ -155,12 +201,16 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
 │   │   ├── robot/                 未来 wuji_sdk 真机输出
 │   │   ├── transport/             未来 ros2/pi server-client
 │   │   └── storage/               MCAP/Parquet/文件系统等实现
-│   └── runtime/                   composition root、CLI、config loading
+│   └── runtime/                   strict YAML、五层 resolver、compatibility bridge
 ├── configs/
 │   ├── schema/                    配置 schema
+│   ├── assets/                    后端无关 Asset Manifest
+│   ├── bindings/                  按 backend 组织的锁定资产表示与映射
+│   ├── assemblies/                资产实例、namespace 与 attachment forest
+│   ├── workcells/                 world/语义 frame、mount 与物理 primitive
 │   ├── base/                      稳定默认值
-│   ├── profiles/                  input/retargeting/simulation/robot/supervision/recording/transport
-│   ├── sessions/                  只组合 profile 与运行级 override
+│   ├── profiles/                  typed compatibility leaf 与组件 profile
+│   ├── sessions/                  五层 composition root 与运行级 override
 │   ├── upstream/                  带 provenance 的上游配置快照
 │   └── local/                     IP/SN/个人路径；Git 忽略
 ├── datasets/
@@ -212,7 +262,13 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
 ### 7.3 官方配置
 
 - 原样上游配置放 `configs/upstream/<source>/<version>/`，附 provenance。
-- 项目可维护配置放 `configs/base/` 或 `configs/profiles/`。
+- 后端无关身份放 `configs/assets/`；MJCF/USD/procedural 表示和映射放
+  `configs/bindings/<backend>/`。外部 MJCF/USD artifact 必须引用 source lock；
+  项目自有 procedural builder 可令 artifact 为空，但必须进入封闭 registry。
+- 装配拓扑放 `configs/assemblies/`，世界与 mount 放 `configs/workcells/`，一次
+  运行只由 `configs/sessions/` 组合。
+- 迁移中的项目 typed 配置放 `configs/base/` 或 `configs/profiles/`，只能作为被
+  五层引用的 compatibility leaf，不能与五层重复维护同一事实。
 - 派生配置声明 `derived_from`、上游 commit、单位、修改原因和验证用例。
 - IP、SN、个人路径、凭据只放 `configs/local/` 或环境变量。
 
@@ -358,6 +414,8 @@ MCAP 是规范日志候选，Parquet/Arrow/NumPy 是训练导出候选；通过 
 - 不因未来需求提前引入微服务、消息总线或插件系统。
 - 不让 Hydra、ROS 参数、自定义 YAML 同时成为配置真值。
 - 不建立抽象到抹掉产品代际、关节布局和安全语义的通用 N-DoF 框架。
+- 不把五层配置误解为跨 backend 的万能 scene compiler，也不在架构调整中提前实现
+  UR5、双臂 Franka、ROS 或 Tracker/Glove 映射。
 - 不把 GPU/Isaac/真机测试塞进默认单元测试。
 - 不允许实验目录被生产 package import。
 - 不复制官方资料或算法后丢失版本、license、commit 和行为来源。

@@ -1,0 +1,29 @@
+schema: wujihand.assembly_spec.v1
+assembly_id: hand2_right_rotation_mount_v1
+instances:
+  - instance_id: wrist
+    asset:
+      path: configs/assets/fixed_xyz_wrist3_v1.yaml
+      expected_id: fixed_xyz_wrist3
+    role: wrist
+    namespace: hand2_mount
+  - instance_id: hand
+    asset:
+      path: configs/assets/wuji_hand2_beta1_right_v1.yaml
+      expected_id: wuji_hand2_beta1_right
+    role: end_effector
+    namespace: hand2_right
+roots:
+  - wrist
+attachments:
+  - attachment_id: wrist_to_hand_base
+    parent:
+      instance: wrist
+      frame: hand_mount
+    child:
+      instance: hand
+      frame: hand_base
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    assumption: project_authored_d6_child_frame_is_identity

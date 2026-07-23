@@ -1,0 +1,18 @@
+schema: wujihand.asset_manifest.v1
+asset_id: fixed_xyz_wrist3
+revision: v1
+kind: virtual_mechanism
+product: fixed_xyz_wrist
+side: none
+canonical_profile: null
+frames:
+  mount: world_mount
+  flange: hand_mount
+control_groups:
+  - group_id: wrist_rotation
+    semantic: wrist_orientation
+    layout_id: wrist_rotation_xyz_rpy_v1
+    dof_count: 3
+    command_interface: position
+    joint_profile: null
+provenance_source: configs/assets/provenance/fixed_xyz_wrist3_v1.yaml

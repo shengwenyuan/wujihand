@@ -1,0 +1,12 @@
+{
+  "schema": "wujihand.session_hash_golden.v1",
+  "sessions": {
+    "isaac_hand2_fixed_preview_v1.yaml": "246899c5dce7b8c7c1de75e963e6c7b4aede0e780c755b1929c33d17d48c6472",
+    "isaac_hand2_right_rotation_ball_qualification_v1.yaml": "24f6edeb140870a7e91bd3f4fa7967ffb8f3ecea1f79ba5a6fa8c5601b3ec063",
+    "isaac_hand2_right_rotation_ball_teleop_v1.yaml": "774e9ab5645dfda23606640bff09be95a2aae6c62caf899c271fb2a320847811",
+    "isaac_hand2_teleop_v1.yaml": "50dec3f6f3bf6a5f4c47057e2580b276c5c61d76349ab5fd998680a001e3f8aa",
+    "mediapipe_hand2_hand_command_udp_v1.yaml": "b676576a34bff6f1e535f525ea99b4fddfdf771ae42f42a8ffd5526487ada050",
+    "mediapipe_hand2_q20_udp_v1.yaml": "006e3e42dd602511abd7f80af9269de72d4d2859c20883a2f92f7cc751c584ba",
+    "mujoco_fr3v2_hand2_right_table_v1.yaml": "003e2f564c6203ab6f67149ef3ef00ff2bf4b6449cd18660fb10d362cdd54972"
+  }
+}

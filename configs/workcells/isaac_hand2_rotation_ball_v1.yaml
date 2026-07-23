@@ -1,0 +1,19 @@
+schema: wujihand.workcell.v1
+workcell_id: isaac_hand2_rotation_ball_v1
+world_frame: world
+# Table, ball, camera, light and the physical flange pose stay in the existing
+# typed scene profile until the Isaac scene compiler consumes generic entities.
+frames:
+  - frame_id: rotation_flange_profile_mount
+    parent: world
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+mounts:
+  - mount_id: rotation_flange_mount
+    frame: rotation_flange_profile_mount
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+entities: []
+compatibility_profile: configs/base/hand2_rotation_ball_v1.yaml

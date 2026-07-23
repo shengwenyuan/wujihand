@@ -1,0 +1,19 @@
+schema: wujihand.workcell.v1
+workcell_id: mujoco_long_edge_table_pedestal_v1
+world_frame: world
+# Geometry and the measured mount pose remain single-sourced in the typed
+# compatibility profile during the strangler migration.
+frames:
+  - frame_id: arm_pedestal_profile_mount
+    parent: world
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+mounts:
+  - mount_id: arm_pedestal_mount
+    frame: arm_pedestal_profile_mount
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+entities: []
+compatibility_profile: configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml

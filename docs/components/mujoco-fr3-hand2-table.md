@@ -1,6 +1,6 @@
 # MuJoCo FR3 v2—Wuji Hand 2 桌面环境
 
-状态：2026-07-14，长边侧置四棱台版本可运行。
+状态：长边侧置四棱台版本于 2026-07-14 完成验证；2026-07-23 接入五层 Session 组合。
 
 本组件在 MuJoCo 中组合一台固定于桌面长边外侧四棱台、面向桌面中央的 Franka Research 3 v2，以及刚接在末端法兰上的 Wuji Hand 2 Beta 1 right。它提供确定性 reset、分离的 `arm_q7` / `hand_q20` 位置目标、状态观测、headless runner、GUI viewer 和离屏渲染入口。
 
@@ -44,6 +44,17 @@ world
 
 ## 组合与控制
 
+运行配置从
+`configs/sessions/mujoco_fr3v2_hand2_right_table_v1.yaml` 开始：Asset Manifest
+声明 FR3 v2 与 Hand 2 Beta 1 right 的稳定身份，两个 MuJoCo Binding 选择固定 MJCF
+及 frame/joint/actuator 映射，Assembly 用语义 `tool_flange -> hand_base` 表达 identity
+attachment，Session 再把 Assembly root 放到 Workcell mount。
+
+完整桌面、四棱台、灯光、相机和 physics 数值仍由
+`configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml` 单点持有。当前 Workcell 只声明
+语义 mount 并引用这份 typed compatibility profile；兼容桥在构建 adapter 前对照
+Binding artifact/hash 和 Assembly attachment，不在五层文件中复制既有物理数值。
+
 运行时分别解析两份只读 MJCF，通过 `mujoco.MjSpec` 在内存中把 `r_base_link` 附着到 `fr3v2_link8` 下的新 frame。当前不加名称前缀，因为两份固定资产不存在重名，且必须保留 Hand 2 的 canonical q20 名称；组合模型不会导出为 XML，因为不同 asset root 的 attached spec 不能可靠 round-trip。
 
 场景在 attach 前把父、子 spec 的全局 option 统一覆盖为：
@@ -73,16 +84,26 @@ canonical joint name
 
 | 职责 | 入口 |
 |---|---|
-| 场景配置 | `configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml` |
+| 五层 composition root | `configs/sessions/mujoco_fr3v2_hand2_right_table_v1.yaml` |
+| Asset Manifest | `configs/assets/franka_fr3_v2_v1.yaml`、`configs/assets/wuji_hand2_beta1_right_v1.yaml` |
+| MuJoCo Binding | `configs/bindings/mujoco/franka_fr3_v2_menagerie_71f066a_v1.yaml`、`configs/bindings/mujoco/wuji_hand2_beta1_right_v2026_6_27_v1.yaml` |
+| Assembly / Workcell | `configs/assemblies/fr3v2_hand2_right_identity_v1.yaml`、`configs/workcells/mujoco_long_edge_table_pedestal_v1.yaml` |
+| typed 场景兼容叶 | `configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml` |
 | FR3 模型契约 | `configs/profiles/fr3_v2_menagerie_71f066a.yaml` |
 | Hand 2 模型契约 | `configs/profiles/hand2_right_v2026_6_27.yaml` |
-| 严格配置加载 | `src/wujihand/runtime/mujoco_table_config.py` |
+| 五层解析与兼容桥 | `src/wujihand/runtime/session_resolver.py`、`src/wujihand/runtime/session_compat.py` |
+| typed 场景严格加载 | `src/wujihand/runtime/mujoco_table_config.py` |
 | FR3 profile 加载 | `src/wujihand/adapters/simulation/fr3_model.py` |
 | MjSpec 组合、控制和观测 | `src/wujihand/adapters/simulation/mujoco_fr3_hand2.py` |
 | headless / GUI runner | `tools/run_mujoco_fr3_hand2_table.py` |
 | 上游恢复和 hash | `third_party/sources.lock.yaml` |
 
 `MujocoFr3Hand2.observe()` 返回 arm/hand 的 q、dq，法兰和掌根的世界位姿、五个指尖 site 的世界坐标、接触数和仿真时间。指尖 site 只是运动学标记，不是触觉传感器。
+
+runner 的 `--session` 是首选入口；省略时仍选择上述默认 Session，因此既有命令不增加
+必填参数。保留的 `--scene-profile` 是显式 compatibility override，会进入
+`session_hash`，并且必须继续通过五层 Binding/Assembly 一致性检查。JSON 报告新增
+`session` 和 `session_hash`，其余既有字段与退出语义保持不变。
 
 ## 能力边界
 
@@ -92,4 +113,12 @@ canonical joint name
 - 没有 IK、OSC、末端位姿命令、任务对象、奖励、遥操作、采集、ROS2、FCI/libfranka 或真机安全链路。
 - MuJoCo position actuator 是仿真控制契约，不是 FR3 实机的速度、力矩、急停或认证安全契约。
 
-运行方法见 [MuJoCo FR3—Hand 2 桌面指南](../guides/mujoco-fr3-hand2-table.md)，设计取舍见 [ADR-0002](../decisions/0002-mujoco-fr3v2-hand2-composition.md)，初版模型证据见 [2026-07-13 验证报告](../validation/2026-07-13-mujoco-fr3-hand2-table.md)，最新布局证据见 [2026-07-14 验证报告](../validation/2026-07-14-mujoco-fr3-hand2-table-layout.md)。
+运行方法见 [MuJoCo FR3—Hand 2 桌面指南](../guides/mujoco-fr3-hand2-table.md)，
+五层职责见 [五层 Session 组合](five-layer-session-composition.md)，组合设计取舍见
+[ADR-0002](../decisions/0002-mujoco-fr3v2-hand2-composition.md) 与
+[ADR-0003](../decisions/0003-five-layer-session-composition.md)，初版模型证据见
+[2026-07-13 验证报告](../validation/2026-07-13-mujoco-fr3-hand2-table.md)，最新布局
+证据见
+[2026-07-14 验证报告](../validation/2026-07-14-mujoco-fr3-hand2-table-layout.md)，
+五层接线后的实际资产与 runner 回归见
+[2026-07-23 验证报告](../validation/2026-07-23-five-layer-architecture.md)。
