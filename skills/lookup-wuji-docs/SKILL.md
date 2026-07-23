@@ -1,11 +1,11 @@
 ---
 name: lookup-wuji-docs
-description: Locate, verify, and explain authoritative Wuji Technology documentation with product-generation and version awareness. Use for Chinese or English questions about 舞肌灵巧手、仿真、遥操作、重定向, Wuji Hand 2 Beta 1, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, when designing or modifying this repository's software, simulation, data-recording, testing, and adapter architecture from Wuji docs, or when closing a long-running, major-feature, cross-module, or architecture-level repository delivery that requires the local plans/last_edits.md handoff.
+description: Locate, verify, and explain authoritative Wuji Technology documentation through the wuji-docs MCP with product-generation and version awareness, using the local catalog as routing and fallback. Use for Chinese or English questions about 舞肌灵巧手、仿真、遥操作、重定向, Wuji Hand 2 Beta 1, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, when designing or modifying this repository's software, simulation, data-recording, testing, and adapter architecture from Wuji docs, or when closing a long-running, major-feature, cross-module, or architecture-level repository delivery that requires the local plans/last_edits.md handoff.
 ---
 
 # Lookup Wuji Docs
 
-Use the local catalog to locate sources quickly, then verify unstable facts against the live official page or the intended official repository tag before analyzing or designing.
+Use the `wuji-docs` MCP as the primary live documentation source. Use the local catalog and references to choose the correct product/version, recover when MCP is unavailable, and detect compatibility conflicts. Verify unstable facts against the live official page or the intended official repository tag before analyzing or designing.
 
 ## Follow the lookup workflow
 
@@ -32,7 +32,32 @@ Hand latest              -> inspect URL; /wuji-hand/latest is currently Hand 2
 Wuji Hand SDK            -> disambiguate wuji-sdk from wujihandpy
 ```
 
-### 2. Search the local catalog
+### 2. Query the wuji-docs MCP first
+
+For current documentation facts, call the configured `wuji-docs` MCP in this order:
+
+1. Call `mcp__wuji_docs__list_products` only when the product slug is uncertain.
+2. Call `mcp__wuji_docs__search_docs` with a compact 2–6 word query plus the known `product` and `lang` filters.
+3. If no page matches, shorten or broaden the query instead of sending the full user question as keywords.
+4. Call `mcp__wuji_docs__fetch_page` with the exact URL returned by search before answering or implementing.
+
+Example routing:
+
+```text
+Hand 2 SDK control
+  -> search_docs(query="SDK", product="wuji-hand", lang="zh")
+  -> fetch_page(returned sdk-reference URL)
+```
+
+Treat a successful search plus page fetch as the functional MCP check. The MCP provides documentation retrieval only; querying it does not require a physical hand, a local device-control server, or an active SDK connection. Real hardware execution still requires the correct device, transport, firmware, and SDK environment.
+
+If the MCP tools are absent or fail:
+
+1. Inspect `codex mcp list` and confirm `wuji-docs` is enabled at `https://docs.wuji.tech/mcp`.
+2. If it was added after the current task started, tell the user to restart Codex or begin a new task so the tool surface reloads.
+3. Continue with the local catalog and exact official pages; state that the MCP fallback path was used.
+
+### 3. Search the local catalog for routing or fallback
 
 Run from this skill directory:
 
@@ -46,7 +71,7 @@ Use results to select exact pages and heading anchors. Treat `references/officia
 
 If a term has no match, search the official docs site and official `wuji-technology` GitHub organization directly. Search engines may retain removed routes; confirm that a result remains in the current site navigation or target release.
 
-### 3. Read only the relevant routing references
+### 4. Read only the relevant routing references
 
 - Read [references/navigation.md](references/navigation.md) for the complete three-branch documentation tree and task-to-entry mapping.
 - Read [references/hardware-versions.md](references/hardware-versions.md) for Hand 2 versus Hand v1 versus Glove, hardware constraints, data shapes, and generation-specific cross-links.
@@ -56,9 +81,9 @@ If a term has no match, search the official docs site and official `wuji-technol
 
 For simulation or teleop questions, read both `hardware-versions.md` and `simulation-teleop.md`. Also read `software.md` when the target is real hardware, ROS2, or an SDK integration.
 
-### 4. Verify live sources at the right granularity
+### 5. Verify live sources at the right granularity
 
-Open the exact official page returned by the catalog. For claims that can change, also open its product release notes and the [global release feed](https://docs.wuji.tech/docs/zh/release-notes/) when multiple components interact. Use official GitHub only under `github.com/wuji-technology` and inspect the intended tag/commit when commands or code behavior matter.
+Fetch the exact official page returned by the MCP search. When the MCP is unavailable, open the exact official page returned by the local catalog. For claims that can change, also fetch/open its product release notes and the [global release feed](https://docs.wuji.tech/docs/zh/release-notes/) when multiple components interact. Use official GitHub only under `github.com/wuji-technology` and inspect the intended tag/commit when commands or code behavior matter.
 
 Match source type to claim:
 
@@ -73,7 +98,7 @@ Match source type to claim:
 
 Treat `latest/` as a moving pointer. Record the page URL and lookup date. Prefer a fixed tag or commit for reproducible designs.
 
-### 5. Preserve official disagreements
+### 6. Preserve official disagreements
 
 Do not merge contradictory official sources into a synthetic answer. Report:
 
@@ -94,7 +119,7 @@ Known conflict classes to check explicitly:
 - Current 24×31 Glove tactile data versus historical 24×32 recordings.
 - Current common-SDK `TactileGloveFrame` documentation versus the first-generation Hand accessory's legacy 24×32/768 contract.
 
-### 6. Answer with traceable scope
+### 7. Answer with traceable scope
 
 Lead with the result. Include, as applicable:
 

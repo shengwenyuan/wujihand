@@ -1,4 +1,12 @@
 interface:
   display_name: "Wuji Docs Lookup"
-  short_description: "准确核验舞肌硬件、软件、SDK 与仿真资料，并守护仓库架构和重大迭代交付"
-  default_prompt: "Use $lookup-wuji-docs to verify authoritative Wuji sources, map them into the repository architecture, and close any substantial delivery with the required local handoff."
+  short_description: "通过官方 MCP 核验舞肌硬件、SDK、仿真与版本资料"
+  default_prompt: "Use $lookup-wuji-docs and the wuji-docs MCP to verify current authoritative Wuji documentation before answering or implementing."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "wuji-docs"
+      description: "Official Wuji documentation search and page retrieval"
+      transport: "streamable_http"
+      url: "https://docs.wuji.tech/mcp"
