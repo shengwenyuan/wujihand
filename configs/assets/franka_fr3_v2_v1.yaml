@@ -1,0 +1,18 @@
+schema: wujihand.asset_manifest.v1
+asset_id: franka_fr3_v2
+revision: v2
+kind: robot_arm
+product: franka_research_3
+side: none
+canonical_profile: null
+frames:
+  base: base
+  flange: tool_flange
+control_groups:
+  - group_id: arm_joints
+    semantic: arm_joint_position
+    layout_id: franka_fr3_v2_q7
+    dof_count: 7
+    command_interface: position
+    joint_profile: null
+provenance_source: configs/assets/provenance/franka_fr3_v2_v1.yaml

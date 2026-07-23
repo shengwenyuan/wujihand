@@ -1,0 +1,29 @@
+schema: wujihand.session.v1
+session_id: isaac_hand2_right_rotation_ball_teleop_v1
+backend: isaac
+runtime_role: teleop_consumer
+assembly:
+  path: configs/assemblies/hand2_right_rotation_mount_v1.yaml
+  expected_id: hand2_right_rotation_mount_v1
+workcell:
+  path: configs/workcells/isaac_hand2_rotation_ball_v1.yaml
+  expected_id: isaac_hand2_rotation_ball_v1
+bindings:
+  wrist:
+    path: configs/bindings/isaac/fixed_xyz_wrist3_d6_v1.yaml
+    expected_id: fixed_xyz_wrist3_isaac_d6_v1
+  hand:
+    path: configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_v1.yaml
+    expected_id: wuji_hand2_beta1_right_isaac_v2026_6_27
+placements:
+  wrist: rotation_flange_mount
+runtime:
+  compatibility_profile: configs/base/hand2_rotation_ball_v1.yaml
+  transport_contract: wujihand.hand_command.v2
+  control_layouts:
+    - instance_id: wrist
+      group_id: wrist_rotation
+      layout_id: wrist_rotation_xyz_rpy_v1
+    - instance_id: hand
+      group_id: finger_joints
+      layout_id: wuji_hand2_right_firmware_v1

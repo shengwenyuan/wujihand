@@ -20,6 +20,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from wujihand.runtime.session_compat import (
+    ISAAC_FIXED_PREVIEW_SESSION,
+    ISAAC_FIXED_TELEOP_SESSION,
+    fixed_hand_workcell_runtime,
+    resolve_isaac_hand_runtime,
+)
+from wujihand.integrity import sha256_file
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -28,6 +36,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--command-source", choices=("scripted", "udp"), default="scripted")
     parser.add_argument("--udp-port", type=int, default=49152)
     parser.add_argument(
+        "--session",
+        type=Path,
+        help="Five-layer Session; defaults by scripted/UDP command source.",
+    )
+    parser.add_argument(
         "--require-udp-loss-recovery",
         action="store_true",
         help="Require tracking, then packet loss, then a supervised return to rest.",
@@ -35,12 +48,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--asset",
         type=Path,
-        default=ROOT / "third_party/src/wuji-description/hand2_beta/body/usd/right/wujihand.usd",
+        default=None,
+        help="Explicit Hand 2 USD override.",
     )
     parser.add_argument(
         "--profile",
         type=Path,
-        default=ROOT / "configs/profiles/hand2_right_v2026_6_27.yaml",
+        default=None,
+        help="Explicit Hand 2 profile override.",
     )
     parser.add_argument(
         "--validation-output-dir",
@@ -53,6 +68,23 @@ def parse_args() -> argparse.Namespace:
 ARGS = parse_args()
 if ARGS.frames < 1:
     raise SystemExit("--frames must be positive")
+default_session = (
+    ISAAC_FIXED_TELEOP_SESSION
+    if ARGS.command_source == "udp"
+    else ISAAC_FIXED_PREVIEW_SESSION
+)
+SESSION_RUNTIME = resolve_isaac_hand_runtime(
+    ROOT,
+    session_path=ARGS.session or ROOT / default_session,
+    runtime_roles=(
+        {"teleop_consumer"} if ARGS.command_source == "udp" else {"simulation"}
+    ),
+    asset_override=ARGS.asset,
+    profile_override=ARGS.profile,
+)
+ARGS.asset = SESSION_RUNTIME.asset_path
+ARGS.profile = SESSION_RUNTIME.profile_path
+WORKCELL_RUNTIME = fixed_hand_workcell_runtime(SESSION_RUNTIME.resolved)
 if not ARGS.asset.is_file():
     raise SystemExit(f"Hand 2 USD not found: {ARGS.asset}")
 if not ARGS.profile.is_file():
@@ -147,6 +179,9 @@ def main() -> int:
         (validation_output / "error.txt").unlink(missing_ok=True)
 
     profile = load_hand2_model_profile(ARGS.profile)
+    asset_sha256 = sha256_file(ARGS.asset)
+    if asset_sha256 != profile.provenance.get("usd_sha256"):
+        raise RuntimeError("Hand 2 USD SHA-256 differs from the pinned profile")
     if profile.layout != HAND2_RIGHT_LAYOUT:
         raise RuntimeError("Hand 2 profile differs from the pinned firmware layout")
     if not np.array_equal(profile.rest_position, HAND2_RIGHT_REST):
@@ -163,8 +198,8 @@ def main() -> int:
         FixedCuboid(
             prim_path="/World/Table",
             name="table",
-            position=np.array([0.02, 0.0, 0.35]),
-            scale=np.array([0.80, 0.60, 0.06]),
+            position=np.asarray(WORKCELL_RUNTIME.table.transform.position_m),
+            scale=np.asarray(WORKCELL_RUNTIME.table.primitive.size_m),
             size=1.0,
             color=np.array([0.34, 0.20, 0.10]),
         )
@@ -179,11 +214,15 @@ def main() -> int:
     world.reset()
     # Lay the hand above the table: local +X (palm normal) points toward world +Z.
     hand.set_world_poses(
-        positions=np.array([[-0.10, 0.0, 0.43]], dtype=np.float32),
-        orientations=np.array([[0.70710678, 0.0, -0.70710678, 0.0]], dtype=np.float32),
+        positions=np.asarray(
+            [WORKCELL_RUNTIME.hand_mount.position_m], dtype=np.float32
+        ),
+        orientations=np.asarray(
+            [WORKCELL_RUNTIME.hand_mount.quat_wxyz], dtype=np.float32
+        ),
     )
-    camera_eye = np.array([0.42, -0.48, 0.88])
-    camera_target = np.array([-0.04, 0.0, 0.43])
+    camera_eye = np.asarray(WORKCELL_RUNTIME.camera_eye_m)
+    camera_target = np.asarray(WORKCELL_RUNTIME.camera_target_m)
     set_camera_view(
         eye=camera_eye,
         target=camera_target,
@@ -279,6 +318,8 @@ def main() -> int:
 
     if validation_output is None:
         summary = {
+            "session": SESSION_RUNTIME.resolved.session.session_id,
+            "session_hash": SESSION_RUNTIME.resolved.session_hash,
             "frames": ARGS.frames,
             "command_source": ARGS.command_source,
             "last_state": None if last_decision is None else last_decision.state.value,
@@ -309,7 +350,10 @@ def main() -> int:
         raise RuntimeError("Isaac viewport capture did not complete")
     report = {
         "isaac_sim": "5.1.0",
+        "session": SESSION_RUNTIME.resolved.session.session_id,
+        "session_hash": SESSION_RUNTIME.resolved.session_hash,
         "asset": str(ARGS.asset.resolve()),
+        "asset_sha256": asset_sha256,
         "profile": str(ARGS.profile.resolve()),
         "profile_provenance": profile.provenance,
         "articulation_root": articulation_root,

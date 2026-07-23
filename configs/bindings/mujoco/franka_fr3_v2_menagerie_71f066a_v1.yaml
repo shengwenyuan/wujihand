@@ -1,0 +1,40 @@
+schema: wujihand.backend_binding.v1
+binding_id: franka_fr3_v2_mujoco_71f066a
+asset_id: franka_fr3_v2
+asset_revision: v2
+asset_side: none
+backend: mujoco
+loader: mjcf
+artifact:
+  source: mujoco-menagerie-fr3-v2
+  source_revision: commit:71f066ad0be9cd271f7ed58c030243ef157af9f4
+  path: franka_fr3_v2/fr3v2.xml
+resource_trees:
+  - source: mujoco-menagerie-fr3-v2
+    source_revision: commit:71f066ad0be9cd271f7ed58c030243ef157af9f4
+    path: franka_fr3_v2/assets
+root: base
+namespace_policy: preserve
+frame_map:
+  base: base
+  tool_flange: fr3v2_link8
+group_bindings:
+  - group_id: arm_joints
+    joints:
+      - fr3v2_joint1
+      - fr3v2_joint2
+      - fr3v2_joint3
+      - fr3v2_joint4
+      - fr3v2_joint5
+      - fr3v2_joint6
+      - fr3v2_joint7
+    actuators:
+      - fr3v2_joint1
+      - fr3v2_joint2
+      - fr3v2_joint3
+      - fr3v2_joint4
+      - fr3v2_joint5
+      - fr3v2_joint6
+      - fr3v2_joint7
+builder: null
+compatibility_profile: configs/profiles/fr3_v2_menagerie_71f066a.yaml

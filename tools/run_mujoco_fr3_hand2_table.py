@@ -22,15 +22,25 @@ from wujihand.adapters.simulation.mujoco_fr3_hand2 import (  # noqa: E402
     sha256_file,
     sha256_tree,
 )
-from wujihand.runtime import load_mujoco_table_scene_config  # noqa: E402
+from wujihand.runtime.session_compat import (  # noqa: E402
+    MUJOCO_TABLE_SESSION,
+    resolve_mujoco_table_runtime,
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--session",
+        type=Path,
+        default=ROOT / MUJOCO_TABLE_SESSION,
+        help="Five-layer Session composition root.",
+    )
+    parser.add_argument(
         "--scene-profile",
         type=Path,
-        default=ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml",
+        default=None,
+        help="Explicit compatibility-profile override for legacy commands.",
     )
     parser.add_argument(
         "--duration-s", type=float, default=5.0, help="Positive simulated duration."
@@ -138,8 +148,21 @@ def main() -> int:
     args = parse_args()
     if not np.isfinite(args.duration_s) or args.duration_s <= 0.0:
         raise SystemExit("--duration-s must be finite and positive")
-    config = load_mujoco_table_scene_config(args.scene_profile)
-    environment = MujocoFr3Hand2.from_config(config, project_root=ROOT)
+    resolved_session, config, _ = resolve_mujoco_table_runtime(
+        ROOT,
+        session_path=args.session,
+        scene_profile_override=args.scene_profile,
+    )
+    environment = MujocoFr3Hand2.from_config(
+        config,
+        project_root=ROOT,
+        arm_contract=resolved_session.instance("arm").binding.group_binding(
+            "arm_joints"
+        ),
+        hand_contract=resolved_session.instance("hand").binding.group_binding(
+            "finger_joints"
+        ),
+    )
     arm_target = (
         environment.arm_profile.home_position if args.arm_target is None else args.arm_target
     )
@@ -182,6 +205,8 @@ def main() -> int:
     report = {
         "schema_version": 1,
         "scene": config.name,
+        "session": resolved_session.session.session_id,
+        "session_hash": resolved_session.session_hash,
         "mujoco_version": mujoco.__version__,
         "finite": bool(
             np.isfinite(

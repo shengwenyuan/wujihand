@@ -21,6 +21,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from wujihand.runtime.session_compat import (
+    ISAAC_ROTATION_QUALIFICATION_SESSION,
+    ISAAC_ROTATION_TELEOP_SESSION,
+    resolve_rotation_ball_runtime,
+)
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -29,19 +35,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--command-source", choices=("scripted", "udp"), default="scripted")
     parser.add_argument("--udp-port", type=int, default=49152)
     parser.add_argument(
+        "--session",
+        type=Path,
+        help="Five-layer Session; defaults by scripted/UDP command source.",
+    )
+    parser.add_argument(
         "--asset",
         type=Path,
-        default=ROOT / "third_party/src/wuji-description/hand2_beta/body/usd/right/wujihand.usd",
+        default=None,
+        help="Explicit Hand 2 USD override.",
     )
     parser.add_argument(
         "--profile",
         type=Path,
-        default=ROOT / "configs/profiles/hand2_right_v2026_6_27.yaml",
+        default=None,
+        help="Explicit Hand 2 profile override.",
     )
     parser.add_argument(
         "--scene-profile",
         type=Path,
-        default=ROOT / "configs/base/hand2_rotation_ball_v1.yaml",
+        default=None,
+        help="Explicit rotation-ball compatibility-profile override.",
     )
     parser.add_argument(
         "--validation-output-dir",
@@ -69,6 +83,26 @@ if not 1 <= ARGS.udp_port <= 65535:
     raise SystemExit("--udp-port must be in [1, 65535]")
 if ARGS.contact_threshold_n < 0.0:
     raise SystemExit("--contact-threshold-n must be non-negative")
+default_session = (
+    ISAAC_ROTATION_TELEOP_SESSION
+    if ARGS.command_source == "udp"
+    else ISAAC_ROTATION_QUALIFICATION_SESSION
+)
+SESSION_RUNTIME, SCENE_CONFIG, SCENE_PROFILE_PATH = resolve_rotation_ball_runtime(
+    ROOT,
+    session_path=ARGS.session or ROOT / default_session,
+    runtime_roles=(
+        {"teleop_consumer"}
+        if ARGS.command_source == "udp"
+        else {"qualification"}
+    ),
+    asset_override=ARGS.asset,
+    profile_override=ARGS.profile,
+    scene_profile_override=ARGS.scene_profile,
+)
+ARGS.asset = SESSION_RUNTIME.asset_path
+ARGS.profile = SESSION_RUNTIME.profile_path
+ARGS.scene_profile = SCENE_PROFILE_PATH
 for required_path, label in (
     (ARGS.asset, "Hand 2 USD"),
     (ARGS.profile, "Hand 2 profile"),
@@ -118,7 +152,6 @@ from wujihand.domain.pose import (
     quaternion_geodesic_distance_rad,
     quaternion_wxyz_to_rotation_matrix,
 )
-from wujihand.runtime import load_rotation_ball_config
 from wujihand.runtime.rotation_ball_script import scripted_rotation_ball_target
 
 
@@ -173,7 +206,7 @@ def main() -> int:
             (validation_output / stale_name).unlink(missing_ok=True)
 
     profile = load_hand2_model_profile(ARGS.profile)
-    scene_config = load_rotation_ball_config(ARGS.scene_profile)
+    scene_config = SCENE_CONFIG
     if profile.layout != HAND2_RIGHT_LAYOUT:
         raise RuntimeError("Hand 2 profile differs from the pinned firmware layout")
     if not np.array_equal(profile.rest_position, HAND2_RIGHT_REST):
@@ -608,6 +641,8 @@ def main() -> int:
     grasp_passed = ever_grasp_passed and hand_table_contact_free
     report = {
         "isaac_sim": "5.1.0",
+        "session": SESSION_RUNTIME.resolved.session.session_id,
+        "session_hash": SESSION_RUNTIME.resolved.session_hash,
         "asset": str(ARGS.asset.resolve()),
         "asset_sha256": asset_sha256,
         "profile": str(ARGS.profile.resolve()),

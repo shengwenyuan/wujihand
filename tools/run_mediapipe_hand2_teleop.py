@@ -34,6 +34,11 @@ from wujihand.application.calibration import (  # noqa: E402
     StablePalmOrientationWindow,
 )
 from wujihand.domain import IDENTITY_QUATERNION_WXYZ, PoseIntent  # noqa: E402
+from wujihand.runtime.session_compat import (  # noqa: E402
+    MEDIAPIPE_HAND_COMMAND_SESSION,
+    MEDIAPIPE_Q20_SESSION,
+    resolve_mediapipe_session,
+)
 
 
 DEFAULT_MODEL = ROOT / "artifacts/models/mediapipe/hand_landmarker.task"
@@ -48,6 +53,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--width", type=int, default=640)
     parser.add_argument("--height", type=int, default=480)
     parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument(
+        "--session",
+        type=Path,
+        help="Five-layer producer Session; defaults by selected UDP wire format.",
+    )
     parser.add_argument(
         "--frames", type=int, default=0, help="Stop after N frames; 0 runs forever."
     )
@@ -134,6 +144,17 @@ def main() -> int:
         raise SystemExit("pose timing thresholds must be positive")
     if args.clutch_repeat_frames < 1:
         raise SystemExit("--clutch-repeat-frames must be positive")
+    if args.publish_hand_command_port:
+        default_session = MEDIAPIPE_HAND_COMMAND_SESSION
+        expected_transport = "wujihand.hand_command.v2"
+    else:
+        default_session = MEDIAPIPE_Q20_SESSION
+        expected_transport = "wujihand.q20.v1" if args.publish_udp_port else None
+    resolved_session = resolve_mediapipe_session(
+        ROOT,
+        session_path=args.session or ROOT / default_session,
+        expected_transport_contract=expected_transport,
+    )
     if not args.model.is_file():
         print(f"model not found: {args.model}", file=sys.stderr)
         return 2
@@ -180,6 +201,10 @@ def main() -> int:
 
     profile = pipeline.start(config)
     device_name = profile.get_device().get_info(rs.camera_info.name)
+    print(
+        f"session={resolved_session.session.session_id} "
+        f"session_hash={resolved_session.session_hash}"
+    )
     print(f"camera={device_name} color={args.width}x{args.height}@{args.fps}")
     print(
         "expected_hand=Right keys: q/esc quit, r reset all, "

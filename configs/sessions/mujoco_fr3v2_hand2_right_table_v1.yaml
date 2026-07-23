@@ -1,0 +1,29 @@
+schema: wujihand.session.v1
+session_id: mujoco_fr3v2_hand2_right_table_v1
+backend: mujoco
+runtime_role: simulation
+assembly:
+  path: configs/assemblies/fr3v2_hand2_right_identity_v1.yaml
+  expected_id: fr3v2_hand2_right_identity_v1
+workcell:
+  path: configs/workcells/mujoco_long_edge_table_pedestal_v1.yaml
+  expected_id: mujoco_long_edge_table_pedestal_v1
+bindings:
+  arm:
+    path: configs/bindings/mujoco/franka_fr3_v2_menagerie_71f066a_v1.yaml
+    expected_id: franka_fr3_v2_mujoco_71f066a
+  hand:
+    path: configs/bindings/mujoco/wuji_hand2_beta1_right_v2026_6_27_v1.yaml
+    expected_id: wuji_hand2_beta1_right_mujoco_v2026_6_27
+placements:
+  arm: arm_pedestal_mount
+runtime:
+  compatibility_profile: configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml
+  transport_contract: null
+  control_layouts:
+    - instance_id: arm
+      group_id: arm_joints
+      layout_id: franka_fr3_v2_q7
+    - instance_id: hand
+      group_id: finger_joints
+      layout_id: wuji_hand2_right_firmware_v1

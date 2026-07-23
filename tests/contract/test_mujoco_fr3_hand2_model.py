@@ -152,6 +152,8 @@ def test_observation_light_is_single_directional_and_shadow_free(
 
 
 def test_compiled_contract_rejects_pedestal_top_smaller_than_fr3_base() -> None:
+    if not ARM_MJCF.is_file() or not HAND_MJCF.is_file():
+        pytest.skip("restore pinned MJCF assets from third_party/sources.lock.yaml")
     config = load_mujoco_table_scene_config(SCENE)
     undersized = replace(
         config,

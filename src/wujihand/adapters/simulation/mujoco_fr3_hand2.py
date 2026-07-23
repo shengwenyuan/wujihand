@@ -8,7 +8,6 @@ is assembled in memory with ``MjSpec`` and is not serialized to a lossy XML.
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
 import importlib
 from pathlib import Path
 from types import ModuleType
@@ -22,8 +21,10 @@ from wujihand.adapters.simulation.hand2_model import (
     Hand2ModelProfile,
     load_hand2_model_profile,
 )
+from wujihand.compat.mujoco_table import MujocoTableSceneConfig
 from wujihand.domain.joints import FloatArray
-from wujihand.runtime.mujoco_table_config import MujocoTableSceneConfig
+from wujihand.integrity import sha256_file, sha256_tree
+from wujihand.specs import GroupBindingSpec
 
 
 FINGERTIP_SITE_NAMES = (
@@ -42,34 +43,6 @@ def _require_mujoco() -> ModuleType:
         raise RuntimeError(
             "MuJoCo is not installed; install the project with the 'mujoco' extra"
         ) from exc
-
-
-def sha256_file(path: str | Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def sha256_tree(path: str | Path) -> str:
-    """Hash a directory as sorted ``sha256  relative/path`` manifest lines."""
-
-    root = Path(path)
-    if not root.is_dir():
-        raise FileNotFoundError(f"asset directory not found: {root}")
-    files = sorted(
-        (item for item in root.rglob("*") if item.is_file()),
-        key=lambda item: item.relative_to(root).as_posix(),
-    )
-    if not files:
-        raise RuntimeError(f"asset directory is empty: {root}")
-    digest = hashlib.sha256()
-    for item in files:
-        relative = item.relative_to(root).as_posix()
-        digest.update(f"{sha256_file(item)}  {relative}\n".encode("utf-8"))
-    return digest.hexdigest()
-
 
 def _mesh_geom_world_vertices(
     mujoco: ModuleType, model: Any, data: Any, geom_name: str
@@ -480,6 +453,9 @@ class MujocoFr3Hand2:
         config: MujocoTableSceneConfig,
         arm_profile: Fr3ModelProfile,
         hand_profile: Hand2ModelProfile,
+        *,
+        arm_contract: GroupBindingSpec | None = None,
+        hand_contract: GroupBindingSpec | None = None,
     ) -> None:
         self._mujoco = _require_mujoco()
         self.model = model
@@ -487,6 +463,8 @@ class MujocoFr3Hand2:
         self.config = config
         self.arm_profile = arm_profile
         self.hand_profile = hand_profile
+        self.arm_contract = arm_contract
+        self.hand_contract = hand_contract
         self.arm = _binding_for_names(self._mujoco, model, arm_profile.names)
         self.hand = _binding_for_names(self._mujoco, model, hand_profile.layout.names)
         self._validate_contract()
@@ -501,6 +479,8 @@ class MujocoFr3Hand2:
         config: MujocoTableSceneConfig,
         *,
         project_root: str | Path,
+        arm_contract: GroupBindingSpec | None = None,
+        hand_contract: GroupBindingSpec | None = None,
     ) -> MujocoFr3Hand2:
         root = Path(project_root).resolve()
         arm_profile_path = _resolve_asset(root, config.assets.arm_profile, "FR3 profile")
@@ -510,7 +490,14 @@ class MujocoFr3Hand2:
         model = build_mujoco_fr3_hand2_model(
             config, arm_profile, hand_profile, project_root=root
         )
-        return cls(model, config, arm_profile, hand_profile)
+        return cls(
+            model,
+            config,
+            arm_profile,
+            hand_profile,
+            arm_contract=arm_contract,
+            hand_contract=hand_contract,
+        )
 
     def _body_id(self, name: str) -> int:
         body_id = int(
@@ -534,12 +521,30 @@ class MujocoFr3Hand2:
             self._mujoco.mj_id2name(self.model, self._mujoco.mjtObj.mjOBJ_JOINT, index)
             for index in range(self.model.njnt)
         )
-        if (self.model.nq, self.model.nv, self.model.nu) != (27, 27, 27):
+        expected_dofs = len(expected_names)
+        if (self.model.nq, self.model.nv, self.model.nu) != (
+            expected_dofs,
+            expected_dofs,
+            expected_dofs,
+        ):
             raise RuntimeError(
-                "combined model must expose exactly 27 qpos, velocities, and actuators"
+                "combined model qpos, velocity, and actuator counts must match "
+                "the resolved arm + hand profiles"
             )
         if actual_names != expected_names:
             raise RuntimeError("compiled joint order differs from arm_q7 + canonical hand_q20")
+        self._validate_binding_contract(
+            self.arm,
+            self.arm_contract,
+            self.arm_profile.names,
+            "FR3 v2",
+        )
+        self._validate_binding_contract(
+            self.hand,
+            self.hand_contract,
+            self.hand_profile.layout.names,
+            "Hand 2",
+        )
         _validate_partition_ranges(
             self.model,
             self.arm,
@@ -579,7 +584,9 @@ class MujocoFr3Hand2:
         if self.model.nkey != 1 or not np.allclose(
             self.model.key_qpos[0], expected_home, rtol=0.0, atol=1e-9
         ):
-            raise RuntimeError("upstream home keyframe did not extend to the explicit 27-DoF home")
+            raise RuntimeError(
+                "upstream home keyframe did not extend to the resolved combined home"
+            )
         self._mujoco.mj_resetDataKeyframe(self.model, self.data, 0)
         self._mujoco.mj_forward(self.model, self.data)
         base_vertices = _mesh_geom_world_vertices(
@@ -605,6 +612,32 @@ class MujocoFr3Hand2:
         ):
             raise RuntimeError(
                 "compiled FR3 joint2 height differs from the configured tabletop clearance"
+            )
+
+    def _validate_binding_contract(
+        self,
+        binding: MujocoJointBinding,
+        contract: GroupBindingSpec | None,
+        profile_names: Sequence[str],
+        label: str,
+    ) -> None:
+        if contract is None:
+            return
+        if contract.joints != tuple(profile_names):
+            raise RuntimeError(
+                f"{label} Backend Binding joint order differs from its model profile"
+            )
+        actuator_names = tuple(
+            self._mujoco.mj_id2name(
+                self.model,
+                self._mujoco.mjtObj.mjOBJ_ACTUATOR,
+                actuator_id,
+            )
+            for actuator_id in binding.actuator_ids
+        )
+        if actuator_names != contract.actuators:
+            raise RuntimeError(
+                f"{label} compiled actuator names differ from its Backend Binding"
             )
 
     @staticmethod
