@@ -1,0 +1,4 @@
+interface:
+  display_name: "DexJoCo Teleop Patterns"
+  short_description: "迁移 DexJoCo 的 arm + hand 遥操作搭建经验"
+  default_prompt: "Use $apply-dexjoco-teleop-patterns to design a backend-neutral arm-and-hand teleoperation pipeline for a real robot, Isaac asset, or MuJoCo asset."
