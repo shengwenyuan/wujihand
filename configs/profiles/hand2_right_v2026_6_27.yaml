@@ -12,6 +12,10 @@ derived_from:
   urdf_sha256: f3bb5d0031a1972e06faafa8a6ab191dcf5ab5abfebbf5d27cb510ee8d004a06
   usd: hand2_beta/body/usd/right/wujihand.usd
   usd_sha256: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
+  mjcf: hand2_beta/body/mjcf/right.xml
+  mjcf_sha256: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
+  mjcf_asset_dir: hand2_beta/body/meshes/right
+  mjcf_asset_tree_sha256: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
 joint_order_semantics: wuji_sdk_2026_7_2_retarget_firmware_order
 rest_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

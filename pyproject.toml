@@ -38,6 +38,10 @@ cli = [
     "rich>=14,<15",
     "typer>=0.16,<1",
 ]
+mujoco = [
+    # Validated with the pinned FR3 v2 and Wuji Hand 2 MJCF assets.
+    "mujoco==3.10.0",
+]
 
 [dependency-groups]
 dev = [
@@ -55,6 +59,7 @@ addopts = "-ra --strict-config --strict-markers -m 'not requires_socket'"
 testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
+    "requires_mujoco: uses the optional MuJoCo runtime and pinned upstream MJCF assets",
     "requires_socket: uses a real local network socket and is excluded from sandboxed fast tests",
     "requires_upstream_asset: checks a restored third-party asset when available",
 ]

@@ -6,10 +6,15 @@
 
 - [000：项目章程、执行预演与全局架构](000-project-charter-and-architecture.md)
 - [MediaPipe—Wuji Hand 2—Isaac 控制链路](components/mediapipe-isaac-control.md)
+- [MuJoCo FR3 v2—Wuji Hand 2 桌面环境](components/mujoco-fr3-hand2-table.md)
 - [ADR-0001：Hand 2 固定法兰采用 D6 三轴转向](decisions/0001-hand2-fixed-flange-d6-rotation.md)
+- [ADR-0002：MuJoCo 采用 FR3 v2 + Hand 2 的运行时组合](decisions/0002-mujoco-fr3v2-hand2-composition.md)
 - [MediaPipe 控制 Hand 2 转向抓球指南](guides/mediapipe-hand2-rotation-ball.md)
+- [MuJoCo FR3—Wuji Hand 2 桌面运行指南](guides/mujoco-fr3-hand2-table.md)
 - [2026-07-13 垂直切片验证报告](validation/2026-07-13-mediapipe-isaac-vertical-slice.md)
 - [2026-07-13 Hand 2 固定法兰转向抓球最终验证](validation/2026-07-13-hand2-rotation-ball.md)
+- [2026-07-13 MuJoCo FR3 v2—Hand 2 桌面初版验证（历史）](validation/2026-07-13-mujoco-fr3-hand2-table.md)
+- [2026-07-14 MuJoCo FR3 v2—Hand 2 长边侧置四棱台验证](validation/2026-07-14-mujoco-fr3-hand2-table-layout.md)
 
 ## 后续维护位置
 

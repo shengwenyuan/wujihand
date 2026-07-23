@@ -1,0 +1,27 @@
+schema_version: 1
+robot: franka_fr3_v2
+backend: mujoco_menagerie
+units:
+  position: rad
+derived_from:
+  repository: https://github.com/google-deepmind/mujoco_menagerie.git
+  commit: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+  mjcf: franka_fr3_v2/fr3v2.xml
+  mjcf_sha256: 75e0f526e503614680cad07a6f4b48de00e7783db7440d55e22d6686d96f9877
+  asset_dir: franka_fr3_v2/assets
+  asset_tree_sha256: 0ee1f659bb749fb88c1c2cca93215ec42460de9626eab31018bbc7bf1c88d7bf
+  license_file: franka_fr3_v2/LICENSE
+  license_note: Apache-2.0_with_appended_Willow_Garage_BSD_terms
+  docs_lookup_date: 2026-07-13
+base_body: base
+flange_body: fr3v2_link8
+home_keyframe: home
+home_position: [0.0, 0.0, 0.0, -1.57079, 0.0, 1.57079, -0.7853]
+joints:
+  - {name: fr3v2_joint1, lower: -2.7437, upper: 2.7437}
+  - {name: fr3v2_joint2, lower: -1.7837, upper: 1.7837}
+  - {name: fr3v2_joint3, lower: -2.9007, upper: 2.9007}
+  - {name: fr3v2_joint4, lower: -3.0421, upper: -0.1518}
+  - {name: fr3v2_joint5, lower: -2.8065, upper: 2.8065}
+  - {name: fr3v2_joint6, lower: 0.5445, upper: 4.5169}
+  - {name: fr3v2_joint7, lower: -3.0159, upper: 3.0159}

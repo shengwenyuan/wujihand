@@ -13,13 +13,34 @@ sources:
     commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
     retrieved_at: 2026-07-11
     local_runtime_path: third_party/src/wuji-description
+    license_path: LICENSE
+    license_sha256: 38b27e3155e0c1c8d6f3e909e7a00359a302085dfd9ae963b52a91cbbe25afa3
     sparse_paths:
       - hand2_beta/body/urdf
       - hand2_beta/body/meshes/right
+      - hand2_beta/body/mjcf
       - hand2_beta/body/usd/right
     artifacts:
       hand2_beta/body/urdf/right.urdf: f3bb5d0031a1972e06faafa8a6ab191dcf5ab5abfebbf5d27cb510ee8d004a06
+      hand2_beta/body/mjcf/right.xml: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
       hand2_beta/body/usd/right/wujihand.usd: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
+    asset_trees:
+      hand2_beta/body/meshes/right: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
+  - name: mujoco-menagerie-fr3-v2
+    kind: git
+    url: https://github.com/google-deepmind/mujoco_menagerie.git
+    commit: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+    retrieved_at: 2026-07-13
+    local_runtime_path: third_party/src/mujoco_menagerie
+    sparse_paths:
+      - franka_fr3_v2
+    license_path: franka_fr3_v2/LICENSE
+    license_sha256: dfd859612d5c4456a69764007139b84e314bb86322aa0d3c430631f48c00a06a
+    artifacts:
+      franka_fr3_v2/fr3v2.xml: 75e0f526e503614680cad07a6f4b48de00e7783db7440d55e22d6686d96f9877
+      franka_fr3_v2/scene.xml: 55dbf0364c1b8887c455ac10103b3d4f498971358d65b0b5c4113b055c4c6530
+    asset_trees:
+      franka_fr3_v2/assets: 0ee1f659bb749fb88c1c2cca93215ec42460de9626eab31018bbc7bf1c88d7bf
   - name: isaaclab
     kind: git
     url: https://github.com/isaac-sim/IsaacLab.git

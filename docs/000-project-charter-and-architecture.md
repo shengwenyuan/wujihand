@@ -3,23 +3,23 @@
 | 字段 | 值 |
 |---|---|
 | 文档编号 | 000 |
-| 状态 | 实现前架构基线 |
+| 状态 | 已进入多仿真后端实现阶段 |
 | 建立日期 | 2026-07-11 |
 | 首个垂直切片 | Google MediaPipe → Retargeting → Supervision → Isaac → Dataset |
 | 文档性质 | 正式、版本化；动态任务清单另见本地 `plans/` |
 
 ## 1. 目标与范围
 
-本项目围绕 Wuji Hand 建立一条可观察、可回放、可验证的手部控制与数据生产链路。第一阶段以 Isaac 为仿真后端，以 Google MediaPipe 为手部观测输入，将人手关节点映射到目标机器人手关节，监督送入后端的实际控制信号，并导出具备完整来源、时序和质量信息的轨迹数据集。
+本项目围绕 Wuji Hand 建立一条可观察、可回放、可验证的手部控制与数据生产链路。第一阶段以 Isaac 为仿真后端，以 Google MediaPipe 为手部观测输入。当前已进一步实现 MuJoCo 的 FR3 v2 + Hand 2 right 桌面机械基线；已交付能力以 `docs/components/` 和对应验证报告为准。
 
 架构同时为以下后续能力保留稳定扩展面：
 
 - Wuji Glove 或外骨骼输入。
-- MuJoCo 仿真后端。
+- MuJoCo 上的遥操作、采集、任务和策略执行层。
 - Wuji 真机、复杂 ROS2 系统。
 - 尚待明确语义的“PI 模式”server-client 集成。
 
-本阶段只做目录、职责、数据契约、验证策略和迁移规则的预演，不实现业务代码，不宣称未来 adapter 已可运行。
+本章继续约束目录、职责、数据契约、验证策略和迁移规则；具体 adapter 是否可运行必须由 component 文档和测试证据确认，不能由本章的未来边界推断。
 
 ## 2. 需求基线
 
@@ -86,7 +86,7 @@ flowchart LR
     S -->|reject / stop| EVT[Safety Event]
     CMD --> E[Execution Port]
     E --> IS[Isaac Adapter]
-    E -. future .-> MS[MuJoCo Adapter]
+    E -. future canonical execution integration .-> MS[MuJoCo Adapter]
     E -. future .-> HW[Wuji / ROS2 / PI Adapter]
     IS --> F[Joint / Simulator Feedback]
     MS -.-> F
@@ -151,7 +151,7 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
 │   ├── adapters/
 │   │   ├── input/                 mediapipe；未来 glove/exoskeleton
 │   │   ├── retargeting/           官方 SDK/算法包装；不泄漏外部类型
-│   │   ├── simulation/            isaac；未来 mujoco
+│   │   ├── simulation/            isaac / mujoco
 │   │   ├── robot/                 未来 wuji_sdk 真机输出
 │   │   ├── transport/             未来 ros2/pi server-client
 │   │   └── storage/               MCAP/Parquet/文件系统等实现
