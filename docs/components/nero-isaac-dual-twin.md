@@ -1,19 +1,21 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
-状态：**PARTIAL / 部分完成（NV-2 五层组合与 tabletop v5 82/82 已通过；live Glove、
+状态：**PARTIAL / 部分完成（NV-2 五层组合与 tabletop v6 84/84 已通过；live Glove、
 deliberate contact/penetration、self-collision 最终 Gate 与 measured
 Workcell/attachment 未闭合，2026-07-28）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
 目标机上的 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。当前
-tabletop v5 的 82 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/
+tabletop v6 的 84 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/
 组合手型、隔离、finite/limits、reset/topology/recovery 检查，并增加 tabletop
-attachment、同侧桌沿 mount、左右准备位及手部朝向的 14 项资格检查。结果不包含真实
-NERO 或 Hand 2 运动，也不把 nominal 装配、端口轴假设和工作台数值解释为现场测量事实。
+attachment、同侧桌沿 mount、左右准备位、手部朝向及左右小臂近水平的 16 项资格检查。
+结果不包含真实 NERO 或 Hand 2 运动，也不把 nominal 装配、端口轴假设和工作台数值
+解释为现场测量事实。
 
 NV-2 尚不能标记为完整完成：
 
-- 专用网口 `enx6c1ff7cd0e76` 尚待临时配置 `192.168.1.10/24`，因此尚无
+- 专用网口 `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，但尚未执行 SDK discovery，
+  因此尚无
   `hand_skeleton → canonical → retarget → supervision → Isaac` 的实际 Glove live
   证据；
 - 合并 q27 articulation 的最终 self-collision policy 仍待项目负责人确认；
@@ -30,10 +32,10 @@ NV-2 尚不能标记为完整完成：
 | 五层组合 | 已建立 | 4 个资产实例、2 个 Assembly root、nominal Workcell、Session v1 |
 | 逻辑命令 | 已建立 | 左/右 NERO q7 + 左/右 Hand 2 q20，4 个显式 route、54 logical DoF |
 | Isaac 物理拓扑 | 已验证 | 左右各一棵 q27 articulation，共 2 棵 |
-| tabletop v5 | 已通过 | 82/82：保留 scripted physical v2 的 68 项，并增加 attachment、mount、q7 准备位和手部朝向 Gate |
+| tabletop v6 | 已通过 | 84/84：保留 scripted physical v2 的 68 项，并增加 attachment、mount、q7 准备位、手部朝向和小臂近水平 Gate |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 与近景待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
-| 真实 Glove live 路径 | 未执行 | 专用 NIC 待配置静态 IPv4，尚未取得 live `hand_skeleton` |
+| 真实 Glove live 路径 | 未执行 | 专用 NIC 已配置；待 SDK discovery/identity，尚未取得 live `hand_skeleton` |
 | Tracker → 右 NERO 平移 | 人工通过 | Workstation2 三方向已核对；仅为仿真输入映射 |
 | Tracker → 右 NERO rotation | 合成通过、待人工验证 | pure-rotation 240/240、relative SE(3)、右 q7 only；`--tracker-rotation` 显式启用 |
 | self-collision policy | 待确认 | 当前 smoke 关闭合并 articulation 自碰撞，保留外部碰撞 |
@@ -54,7 +56,8 @@ Asset Manifest
 ### Asset Manifest
 
 - `configs/assets/agilex_nero_v1.yaml` 定义 NERO 产品身份、`base_link`、
-  `tool_flange=link7` 和 canonical q7 layout。
+  `forearm_proximal=link4`、`forearm_distal=link5`、`tool_flange=link7` 和
+  canonical q7 layout。
 - `configs/assets/wuji_hand2_beta1_left_v1.yaml` 与
   `configs/assets/wuji_hand2_beta1_right_v1.yaml` 定义左右 Hand 2 身份、侧别和
   side-specific q20 layout。
@@ -65,7 +68,7 @@ Asset Manifest
 ### Backend Binding
 
 - NERO Binding 固定到 Isaac Sim 6.0.1 的派生 USD，并显式映射
-  `base_link`、`link7` 和 `joint1..joint7`。
+  `base_link`、`link4`、`link5`、`link7` 和 `joint1..joint7`。
 - 左右 Hand 2 Binding 直接引用 `wuji-description v2026.6.27` 的完整物理 USD，
   分别映射 20 个 canonical finger joint。
 - 不生成 visual-only 派生资产；不以省略 q20 route 的方式伪造“不可控手”。
@@ -126,12 +129,14 @@ contract；它是 NV-2 scripted/fixture 仿真的唯一 composition root。Sessi
 
 | 侧别 | q7 准备位（deg） |
 |---|---|
-| left | `[-10, -60, 0, -30, -90, 0, 0]` |
-| right | `[+10, -60, 0, -30, -90, 0, 0]` |
+| left | `[-10, -45, 0, -45, -90, 0, 0]` |
+| right | `[+10, -45, 0, -45, -90, 0, 0]` |
 
-同一 profile 将 NERO q7 Isaac drive gain 设为 `stiffness=3000`、
-`damping=150`。这些是 Isaac-only qualification 数值，不修改通用 NERO profile、
-固定来源 USD 或硬件控制器事实。
+同一 profile 将 NERO q7 Isaac drive gain 设为 `stiffness=6000`、
+`damping=212.13203435596427`，并把 Asset/Binding 解析出的 `link4 → link5`
+世界轴竖直分量限制为 `<=0.02`。这些是 Isaac-only qualification 数值，不修改通用
+NERO profile、固定来源 USD 或硬件控制器事实。J7 初值仍为 `0°`；J7 限位、来源
+URDF 和 Assembly attachment 均未因本次准备位调整而改变。
 
 ## 两棵 q27 物理 articulation
 
@@ -202,8 +207,8 @@ supervisor，`>=0.95` 才是 success。缺帧或被拒绝的观测不会创建�
 | Hand 2 source | `wuji-description v2026.6.27` / `aee64892ebcf8e3237bedc30231bb09476cbc71d` |
 | Hand 2 left USD | `646287f10ac0a2097bf602facc02c9af17f0f1cf8982c38037f69bb695492eca` |
 | Hand 2 right USD | `3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00` |
-| tabletop qualification profile | `dac2127aa57e9509d041d74a50d6ebf96445654dbd2f5635df640442890ba5af` |
-| full Session hash | `c082dcc4e6c67375cab30435bd1fbe77fa136e8d1b43d525ba467f0464ed7b4e` |
+| tabletop qualification profile | `e00bcd4d62e74a4aac56b4ed549c0f45eea2d048026b87289232364044d41ad5` |
+| full Session hash | `aa154d8ab25ee48d7b5bd5c75b9cb8d218e20774b4c273f88d4f9709a939aab9` |
 
 ## 运行与验证入口
 
@@ -212,9 +217,9 @@ supervisor，`>=0.95` 才是 success。缺帧或被拒绝的观测不会创建�
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v5.json \
-  --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v5.png \
-  --top-screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v5.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json \
+  --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v6.png \
+  --top-screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v6.png
 ```
 
 ### Tracker live 映射入口
@@ -266,9 +271,9 @@ override 只用于有意实验。此 calibration 标记为 `simulation_only`，�
 
 ```text
 artifacts/validation/nv2/nero-dual-asset-smoke.json
-artifacts/validation/nv2/nero-dual-hand2-tabletop-v5.json
-artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v5.png
-artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v5.png
+artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json
+artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v6.png
+artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v6.png
 artifacts/validation/nv2/nero-dual-hand2-physical-v2.json       # 历史 68/68 基线
 artifacts/validation/nv2/nero-dual-hand2-physical-v2.png        # 历史 v2 截图
 artifacts/validation/nv2/nero-dual-hand2-physical-headless.json  # v1 历史基线
@@ -278,21 +283,22 @@ artifacts/validation/nv2/nero-dual-hand2-physical.png           # v1 历史截�
 目标机执行时对应路径前缀为
 `/home/lenovo/swy/wujihand/`。
 
-tabletop v5 报告的 82 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
+tabletop v6 报告的 84 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
 q27 root、q7/q20 partition 稳定、左右 q7 回到 Session qualification profile
 指定准备位，并可在 reset 后恢复左中指 PIP 命令。固定工作台 collider
 `/World/Workcell/simulation_nominal_table` 存在；初始、每个 scripted hand baseline
 及 reset 后的双 q27 静置均在 `0.005 rad` 容差内有界收敛。
 
-v5 的几何测量值来自 Isaac stage：
+v6 的几何测量值来自 Isaac stage：
 
 | Gate | left | right |
 |---|---:|---:|
 | Hand 2 纵轴与小臂轴点积 | `≈1.0` | `≈1.0` |
 | 端口假设轴朝桌外点积 | `1.0` | `1.0` |
-| 手纵轴朝桌内点积 | `0.98158` | `0.98180` |
-| 手纵轴竖直分量绝对值 | `0.09025` | `0.08771` |
-| 掌面朝下点积 | `0.99589` | `0.99607` |
+| `link4 → link5` 竖直分量绝对值 | `0.01807` | `0.01775` |
+| 手纵轴朝桌内点积 | `0.98372` | `0.98381` |
+| 手纵轴竖直分量绝对值 | `0.05803` | `0.05608` |
+| 掌面朝下点积 | `0.99830` | `0.99840` |
 
 其中 attachment、手轴与掌面值是仿真几何测量；端口点积仅验证
 “pinned mesh 推断的 `base local -X` 轴 + nominal mount”的内部一致性，仍待实物确认，
@@ -300,16 +306,16 @@ v5 的几何测量值来自 Isaac stage：
 
 报告明确记录 `deliberate_unknown_penetration_probe=false`：它没有引入 deliberate
 contact/unknown penetration 场景。same-digit uncommanded linkage 仅作为诊断，
-other-finger isolation 才是本轮 Gate。v5 报告 SHA-256 是
-`27812360eea72ba10f5a7730113400e3c477e1b0ffc60cbcebf3cbf0feab521f`，斜视和俯视截图
+other-finger isolation 才是本轮 Gate。v6 报告 SHA-256 是
+`6805fbe65a1ae940258a9b440eb49386f7f0c0c181fb4d64edd678ecd15fcf4a`，斜视和俯视截图
 SHA-256 分别是
-`c92b692edf2200b9948409e3afdc8b12f47334ab6127e5c057c5fc499eab3f9f` 与
-`09fe5d2c3a727e6126754546460232a22361d8d683043ac56c204f23493f816a`。
+`d419e9f283430846cb527d8c9a54de1c6fbaec84c9be27ffab2199317fe31613` 与
+`a18c24c163040a277ff02d9316a89b965212f0d7430aa173682474bd3c9ac9e2`。
 
 历史 scripted physical v2 的 68/68
 （报告 `5623b8552f54cfd186640a5b857179bca2b7cbd935f4d847451cf1912573b20f`，
 截图 `2366d024a8d26f85ca97fd2c79aa190a148270ac8e01be85592587a79e201a6a`）
-仍保留为前一版基线，但当前结论以 tabletop v5 为准；v1 文件只保留为更早历史基线。
+仍保留为前一版基线，但当前结论以 tabletop v6 为准；v1 文件只保留为更早历史基线。
 
 ## 尚需关闭
 
@@ -324,9 +330,11 @@ SHA-256 分别是
 4. 执行 deliberate external contact/unknown penetration 场景、异常穿透量化和近景
    视觉检查；不得以当前 bounded rest settling 代替。
 5. 首次 live 后保存脱敏 canonical `hand_skeleton` replay 与对应 q20/rejection 记录。
-6. 后续取得法兰/转接件 CAD、真实桌面和底座 mount 测量，建立 measured Assembly /
-   Workcell revision。该材料不阻塞当前 nominal 功能联调，但在物理对应或真机阶段前
-   必须闭合。
+6. 后续取得二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景、J7
+   零位/符号/限位只读回读，以及 NERO—Hand 2 转接件 CAD/STEP 或带尺寸装配图，再
+   判断当前视觉差异来自 URDF、J7 零位、Hand 2 base 还是 adapter transform，并建立
+   measured Assembly / Workcell revision。该材料不阻塞当前 nominal 功能联调，
+   但在修改 J7/attachment 或进入真机阶段前必须闭合。
 
 ## 官方依据
 

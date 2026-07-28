@@ -7,6 +7,8 @@ side: none
 canonical_profile: configs/profiles/agilex_nero_q7_provisional_v1.yaml
 frames:
   base: base_link
+  forearm_proximal: link4
+  forearm_distal: link5
   tool_flange: link7
 control_groups:
   - group_id: arm_joints

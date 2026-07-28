@@ -58,6 +58,7 @@ _THRESHOLD_KEYS = frozenset(
         "hand_world_inward_min_dot",
         "hand_world_vertical_abs_max",
         "hand_palm_down_min_dot",
+        "forearm_world_vertical_abs_max",
         "initial_q7_max_error_rad",
     }
 )
@@ -163,6 +164,7 @@ class NeroTabletopThresholds:
     hand_world_inward_min_dot: float
     hand_world_vertical_abs_max: float
     hand_palm_down_min_dot: float
+    forearm_world_vertical_abs_max: float
     initial_q7_max_error_rad: float
 
 
@@ -374,6 +376,10 @@ def load_nero_dual_tabletop_qualification_profile(
         hand_palm_down_min_dot=_unit_interval(
             threshold_data["hand_palm_down_min_dot"],
             field="thresholds.hand_palm_down_min_dot",
+        ),
+        forearm_world_vertical_abs_max=_unit_interval(
+            threshold_data["forearm_world_vertical_abs_max"],
+            field="thresholds.forearm_world_vertical_abs_max",
         ),
         initial_q7_max_error_rad=initial_q7_max_error_rad,
     )

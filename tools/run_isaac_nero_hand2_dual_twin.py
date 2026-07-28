@@ -576,6 +576,19 @@ def _world_axis(
     return result / norm
 
 
+def _world_position(stage: Any, prim_path: str) -> npt.NDArray[np.float64]:
+    prim = stage.GetPrimAtPath(prim_path)
+    if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
+        raise RuntimeError(f"position measurement prim is invalid: {prim_path}")
+    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    result = np.asarray(tuple(matrix.ExtractTranslation()), dtype=np.float64)
+    if result.shape != (3,) or not np.isfinite(result).all():
+        raise RuntimeError(
+            f"position measurement is not a finite vector for {prim_path}: {result.tolist()}"
+        )
+    return result
+
+
 def _step(world: World, frames: int, *, render: bool) -> None:
     for _ in range(frames):
         world.step(render=render)
@@ -2109,6 +2122,30 @@ def main() -> int:
     for runtime in SIDES:
         side = runtime.side
         attachment = authored[side].config
+        arm_asset = RESOLVED.instance(runtime.arm_instance_id).asset
+        forearm_proximal = _one_prim(
+            stage,
+            prefix=runtime.arm_prim_path,
+            name=arm_asset.frame_name("forearm_proximal"),
+            rigid_body=True,
+        )
+        forearm_distal = _one_prim(
+            stage,
+            prefix=runtime.arm_prim_path,
+            name=arm_asset.frame_name("forearm_distal"),
+            rigid_body=True,
+        )
+        forearm_delta_world = _world_position(
+            stage,
+            str(forearm_distal.GetPath()),
+        ) - _world_position(
+            stage,
+            str(forearm_proximal.GetPath()),
+        )
+        forearm_length_m = float(np.linalg.norm(forearm_delta_world))
+        if not np.isfinite(forearm_length_m) or forearm_length_m <= 0.0:
+            raise RuntimeError(f"{side} forearm measurement is degenerate")
+        forearm_axis_world = forearm_delta_world / forearm_length_m
         flange_axis_world = _world_axis(
             stage,
             attachment.parent_link_path,
@@ -2142,6 +2179,7 @@ def main() -> int:
             )
         )
         hand_world_vertical_abs = float(abs(hand_axis_world[2]))
+        forearm_world_vertical_abs = float(abs(forearm_axis_world[2]))
         hand_palm_down_dot = float(
             np.dot(
                 palm_normal_world,
@@ -2153,10 +2191,13 @@ def main() -> int:
             "hand_longitudinal_axis_world_xyz": hand_axis_world.tolist(),
             "hand_palm_normal_axis_world_xyz": palm_normal_world.tolist(),
             "base_port_axis_world_xyz": port_axis_world.tolist(),
+            "forearm_axis_world_xyz": forearm_axis_world.tolist(),
+            "forearm_length_m": forearm_length_m,
             "attachment_axis_dot": attachment_axis_dot,
             "base_port_outward_dot": base_port_outward_dot,
             "hand_world_inward_dot": hand_world_inward_dot,
             "hand_world_vertical_abs": hand_world_vertical_abs,
+            "forearm_world_vertical_abs": forearm_world_vertical_abs,
             "hand_palm_down_dot": hand_palm_down_dot,
         }
         checks[f"{side}_attachment_axis_aligned"] = bool(
@@ -2170,6 +2211,9 @@ def main() -> int:
         )
         checks[f"{side}_hand_axis_near_horizontal"] = bool(
             hand_world_vertical_abs <= thresholds.hand_world_vertical_abs_max
+        )
+        checks[f"{side}_forearm_axis_near_horizontal"] = bool(
+            forearm_world_vertical_abs <= thresholds.forearm_world_vertical_abs_max
         )
         checks[f"{side}_hand_palm_points_down"] = bool(
             hand_palm_down_dot >= thresholds.hand_palm_down_min_dot

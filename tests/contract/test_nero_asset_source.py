@@ -92,6 +92,8 @@ def test_nero_asset_owns_backend_neutral_q7_identity() -> None:
     assert asset.kind == "robot_arm"
     assert asset.side == "none"
     assert asset.frame_name("base") == profile.base_frame == "base_link"
+    assert asset.frame_name("forearm_proximal") == "link4"
+    assert asset.frame_name("forearm_distal") == "link5"
     assert asset.frame_name("tool_flange") == profile.tool_flange_frame == "link7"
     group = asset.control_group("arm_joints")
     assert group.layout_id == profile.layout_id == "agilex_nero_q7_v1"
@@ -224,6 +226,8 @@ def test_nero_isaac_binding_locks_the_reproducible_derived_package() -> None:
     assert binding.root == binding.backend_frame(asset.frame_name("base"))
     assert dict(binding.frame_map) == {
         profile.base_frame: profile.base_frame,
+        asset.frame_name("forearm_proximal"): "link4",
+        asset.frame_name("forearm_distal"): "link5",
         profile.tool_flange_frame: profile.tool_flange_frame,
     }
     assert binding.group_binding("arm_joints").joints == profile.layout.names == NERO_JOINT_NAMES

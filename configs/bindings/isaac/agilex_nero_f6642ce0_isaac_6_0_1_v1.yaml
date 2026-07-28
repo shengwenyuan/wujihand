@@ -17,6 +17,8 @@ root: base_link
 namespace_policy: prefix
 frame_map:
   base_link: base_link
+  link4: link4
+  link5: link5
   link7: link7
 group_bindings:
   - group_id: arm_joints

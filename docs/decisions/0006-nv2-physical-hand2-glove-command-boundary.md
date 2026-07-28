@@ -123,7 +123,7 @@ external collision shapes/contact = retained
 - 若改为 `true`，需先为 NERO 增加明确 collision filtering，再重跑结构、contact、
   GUI 和稳定性 Gate。
 
-在确认前，tabletop v5 的 82/82 证明当前 disabled policy 下双侧 q7/q20、
+在确认前，tabletop v6 的 84/84 证明当前 disabled policy 下双侧 q7/q20、
 五指/组合手型、隔离、reset/recovery、limits、有界静置收敛，以及 nominal
 attachment/mount/q7 准备位的几何方向；它不证明 Hand 2 internal self-collision，
 也不证明 deliberate contact/unknown penetration 或 live Glove，因此不关闭完整
@@ -140,7 +140,7 @@ NV-2 允许使用名称和 assumption 都明确为 `simulation_nominal` 的 Work
 
 当前 Workcell 将两底座放在同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为
 `+90°`；Session runtime 唯一引用 typed tabletop qualification profile，保存左右
-q7 `[∓10°, -60°, 0°, -30°, -90°, 0°, 0°]`、Isaac-only drive gain 和几何
+q7 `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]`、Isaac-only drive gain 和几何
 阈值。端口轴 `base local -X` 仅由固定 mesh 外凸特征推断，仍待实物确认。该 profile
 不是新的配置层，不修改共享 Asset 的通用 q7 home，也不是硬件控制器参数。
 
@@ -194,9 +194,10 @@ Assembly/Workcell revision，不得静默覆盖 nominal 文件。
   `hand_skeleton → canonical → retarget → Isaac` smoke；
 - self-collision policy 对应的 contact/GUI 资格证据。
 
-当前 tabletop v5 报告的 82 项检查全部通过：保留 scripted physical v2 的双侧 q7、
+当前 tabletop v6 报告的 84 项检查全部通过：保留 scripted physical v2 的双侧 q7、
 五指/组合手型、隔离、finite/limits、命令后 topology reset、回到批准初态及
-post-reset recovery，并增加分侧 q7 初态、手—小臂轴、桌内方向、掌面向下和端口
+post-reset recovery，并增加分侧 q7 初态、手—法兰轴、`link4 → link5` 小臂近水平、
+桌内方向、掌面向下和端口
 假设轴朝外检查；
 controller/supervisor/composer 的无硬件测试也已覆盖 composition-level invalid
 fail-closed。报告只证明 fixed external collider 保留和 bounded rest settling，

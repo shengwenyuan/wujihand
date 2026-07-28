@@ -50,6 +50,19 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
    直到 NV-2 collision review 给出证据。
 8. 在真实 NERO 运动前，分别只读获取两台设备的固件、当前 q7 范围和最大速度，
    对齐零位、符号与 J2 坐标定义。若与临时 profile 不兼容，则暂停并修订本 ADR。
+9. NV-2 tabletop 准备位采用
+   `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]`。这里按项目负责人确认调整的是
+   J2 与 J4：减小 J2 弯折绝对值，同时增加 J4 弯折绝对值，使
+   `forearm_proximal=link4 → forearm_distal=link5` 在 Isaac world 中近水平。
+   两个语义帧属于 NERO Asset，后端 prim 由 Binding 映射；水平阈值属于 Session
+   引用的 qualification profile，runner 只消费解析结果。
+10. qualification profile 的 Isaac-only q7 drive gain 采用
+    `stiffness=6000`、`damping=212.13203435596427`，用于抵消组合 Hand 2 重力负载下
+    约一度的静态下垂并满足 `|forearm_axis.z| <= 0.02`。该数值不是硬件控制器参数。
+11. 本轮不修改 J7 初值、J7 限位、来源 URDF 或
+    `link7 → hand_base Ry(+90°)` Assembly。现有截图能说明视觉装配方向尚待核对，
+    但不足以区分 NERO `link7`、Hand 2 base、转接件或零位定义中的哪一项有误，
+    因而不把它定性为 URDF 缺陷。
 
 ## 结果
 
@@ -62,6 +75,13 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   模型事实。
 - Hand 2 到 `link7` 的变换仍是独立的 `simulation_nominal` Assembly attachment
   assumption，不由本 ADR 推断为真实机械适配关系。
+- tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过；左右
+  `link4 → link5` 竖直分量绝对值分别为 `0.01807` 与 `0.01775`。该结果只证明
+  当前组合仿真的准备位和 drive qualification，不证明实物法兰拼接方向。
+- 在决定 J7/attachment 边界前，需要新增三类材料：二维码对应 NERO 末端法兰的
+  已知 q7/零位近景与螺孔 clocking、两台设备 J7 零位/符号/限位只读回读，以及
+  NERO—Hand 2 转接件 CAD/STEP 或带尺寸装配图。若该核对流程后续跨机型复用，再将
+  其固化为 skill 或只读 MCP；本次一次性证据请求不单独扩建工具。
 
 ## 依据
 

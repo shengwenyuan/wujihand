@@ -51,14 +51,14 @@ def test_loads_route_qualified_initial_q7_and_geometry_contract() -> None:
         "arm_joints",
         "agilex_nero_q7_v1",
     ) == pytest.approx(
-        np.deg2rad([-10.0, -60.0, 0.0, -30.0, -90.0, 0.0, 0.0])
+        np.deg2rad([-10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0])
     )
     assert profile.initial_position(
         "nero_right",
         "arm_joints",
         "agilex_nero_q7_v1",
     ) == pytest.approx(
-        np.deg2rad([10.0, -60.0, 0.0, -30.0, -90.0, 0.0, 0.0])
+        np.deg2rad([10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0])
     )
     assert profile.geometry_contract.hand_longitudinal_axis_local_xyz == (
         0.0,
@@ -77,8 +77,9 @@ def test_loads_route_qualified_initial_q7_and_geometry_contract() -> None:
     )
     assert profile.thresholds.hand_world_vertical_abs_max == pytest.approx(0.10)
     assert profile.thresholds.hand_palm_down_min_dot == pytest.approx(0.99)
-    assert profile.arm_drive_gains.stiffness == pytest.approx(3000.0)
-    assert profile.arm_drive_gains.damping == pytest.approx(150.0)
+    assert profile.thresholds.forearm_world_vertical_abs_max == pytest.approx(0.02)
+    assert profile.arm_drive_gains.stiffness == pytest.approx(6000.0)
+    assert profile.arm_drive_gains.damping == pytest.approx(212.13203435596427)
     assert (
         "tabletop_q7_is_simulation_nominal_not_a_hardware_safe_pose"
         in profile.assumptions

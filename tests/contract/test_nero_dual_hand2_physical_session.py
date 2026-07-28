@@ -93,8 +93,8 @@ def test_physical_dual_session_owns_per_instance_tabletop_q7_and_isaac_gains() -
     )
 
     expected_degrees = {
-        "nero_left": [-10.0, -60.0, 0.0, -30.0, -90.0, 0.0, 0.0],
-        "nero_right": [10.0, -60.0, 0.0, -30.0, -90.0, 0.0, 0.0],
+        "nero_left": [-10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0],
+        "nero_right": [10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0],
     }
     for instance_id, degrees in expected_degrees.items():
         instance = resolved.instance(instance_id)
@@ -112,8 +112,8 @@ def test_physical_dual_session_owns_per_instance_tabletop_q7_and_isaac_gains() -
         )
         assert model.layout.validate_vector(q7) == pytest.approx(q7)
 
-    assert tabletop.arm_drive_gains.stiffness == pytest.approx(3000.0)
-    assert tabletop.arm_drive_gains.damping == pytest.approx(150.0)
+    assert tabletop.arm_drive_gains.stiffness == pytest.approx(6000.0)
+    assert tabletop.arm_drive_gains.damping == pytest.approx(212.13203435596427)
     assert (
         "arm_drive_gains_are_isaac_qualification_values_not_hardware_controller_facts"
         in tabletop.assumptions
