@@ -310,17 +310,7 @@ def test_missing_sample_holds_briefly_then_requires_new_reference() -> None:
     assert subject.requires_reference
 
 
-@pytest.mark.parametrize(
-    ("replacement", "reason"),
-    (
-        ({"tracking_state": TrackingState.LOST}, "tracking_lost_reference_required"),
-        ({"stream_id": "vive.left"}, "identity_or_frame_mismatch_reference_required"),
-    ),
-)
-def test_invalid_or_wrong_identity_sample_disarms_epoch(
-    replacement: dict[str, object],
-    reason: str,
-) -> None:
+def test_wrong_identity_sample_disarms_epoch() -> None:
     subject = mapper()
     subject.arm(
         sample(sequence=0, host_time_ns=100),
@@ -342,17 +332,113 @@ def test_invalid_or_wrong_identity_sample_disarms_epoch(
         "host_time_ns": 102,
         "device_time_ns": None,
     }
-    values.update(replacement)
-    if values["tracking_state"] is not TrackingState.RUNNING:
-        values.update(position_m=None, quat_wxyz=None, pose_valid=False, quality=None)
+    values.update(stream_id="vive.left")
     decision = subject.advance(
         TrackedRigidBodySample(**values),  # type: ignore[arg-type]
         now_ns=103,
     )
 
-    assert decision.reason == reason
+    assert decision.reason == "identity_or_frame_mismatch_reference_required"
     assert decision.requires_reference
     assert subject.requires_reference
+
+
+def test_disconnected_tracker_disarms_epoch_immediately() -> None:
+    subject = mapper()
+    subject.arm(
+        sample(sequence=0, host_time_ns=100),
+        np.zeros(3),
+        now_ns=101,
+    )
+    decision = subject.advance(
+        TrackedRigidBodySample(
+            stream_id="vive.right",
+            device_serial="LHR-24B6E288",
+            logical_role="operator_right",
+            sequence=1,
+            tracking_frame="vive_tracking",
+            position_m=None,
+            quat_wxyz=None,
+            connected=False,
+            pose_valid=False,
+            tracking_state=TrackingState.LOST,
+            quality=None,
+            host_time_ns=102,
+            device_time_ns=None,
+        ),
+        now_ns=103,
+    )
+
+    assert decision.reason == "tracking_lost_reference_required"
+    assert decision.requires_reference
+    assert subject.requires_reference
+
+
+def test_connected_invalid_tracking_holds_briefly_then_requires_reference() -> None:
+    subject = mapper()
+    subject.arm(
+        sample(sequence=0, host_time_ns=1_000_000_000),
+        (0.1, 0.2, 0.3),
+        now_ns=1_000_000_001,
+    )
+
+    held = subject.advance(
+        sample(
+            sequence=1,
+            host_time_ns=1_100_000_000,
+            state=TrackingState.CALIBRATING,
+        ),
+        now_ns=1_100_000_001,
+    )
+    stale = subject.advance(
+        sample(
+            sequence=2,
+            host_time_ns=1_300_000_000,
+            state=TrackingState.CALIBRATING,
+        ),
+        now_ns=1_300_000_001,
+    )
+
+    assert held.reason == "tracking_calibrating_hold"
+    assert held.target_position_m == pytest.approx((0.1, 0.2, 0.3))
+    assert held.input_host_time_ns == 1_000_000_000
+    assert not held.accepted
+    assert not held.requires_reference
+    assert stale.reason == "tracking_calibrating_reference_required"
+    assert stale.target_position_m is None
+    assert stale.requires_reference
+    assert subject.requires_reference
+
+
+def test_running_sample_resumes_same_reference_after_transient_invalid_state() -> None:
+    subject = mapper()
+    subject.arm(
+        sample(sequence=0, host_time_ns=1_000_000_000),
+        (0.1, 0.2, 0.3),
+        now_ns=1_000_000_001,
+    )
+    subject.advance(
+        sample(
+            sequence=1,
+            host_time_ns=1_100_000_000,
+            state=TrackingState.OUT_OF_RANGE,
+        ),
+        now_ns=1_100_000_001,
+    )
+
+    resumed = subject.advance(
+        sample(
+            sequence=2,
+            host_time_ns=1_150_000_000,
+            position_m=(1.2, 2.0, 3.0),
+        ),
+        now_ns=1_150_000_001,
+    )
+
+    assert resumed.reason == "tracking"
+    assert resumed.accepted
+    assert resumed.target_position_m == pytest.approx((0.1, 0.15, 0.3))
+    assert not resumed.requires_reference
 
 
 def test_non_monotonic_sample_disarms_instead_of_reusing_pose() -> None:

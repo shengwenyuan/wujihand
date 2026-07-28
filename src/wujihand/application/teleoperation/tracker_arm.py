@@ -263,26 +263,25 @@ class RelativeTrackerPoseMapper:
         assert self._last_target_orientation is not None
         assert self._last_input_time_ns is not None
         if sample is None:
-            if now - self._last_input_time_ns > self.stale_after_ns:
-                self.disarm()
-                return self._reference_required("stale_input_reference_required")
-            return self._decision(
-                target=self._last_target_m,
-                target_orientation=self._last_target_orientation,
-                tracker_delta=None,
-                world_delta=None,
-                tracker_delta_rotation=None,
-                workcell_delta_rotation=None,
-                rotation_delta_rad=None,
-                input_host_time_ns=self._last_input_time_ns,
-                accepted=False,
-                translation_clamped=False,
-                rotation_clamped=False,
-                requires_reference=False,
-                reason="no_new_sample_hold",
+            return self._hold_last_target_until_stale(
+                now_ns=now,
+                hold_reason="no_new_sample_hold",
+                stale_reason="stale_input_reference_required",
             )
 
         reason = self._invalid_sample_reason(sample, now)
+        if (
+            reason is not None
+            and reason.startswith("tracking_")
+            and type(sample) is TrackedRigidBodySample
+            and sample.connected
+            and sample.tracking_state is not TrackingState.RUNNING
+        ):
+            return self._hold_last_target_until_stale(
+                now_ns=now,
+                hold_reason=f"{reason}_hold",
+                stale_reason=f"{reason}_reference_required",
+            )
         if reason is None and (
             self._last_sequence is None or sample.sequence <= self._last_sequence
         ):
@@ -429,6 +428,37 @@ class RelativeTrackerPoseMapper:
             reason=reason,
         )
 
+    def _hold_last_target_until_stale(
+        self,
+        *,
+        now_ns: int,
+        hold_reason: str,
+        stale_reason: str,
+    ) -> TrackerPoseDecision:
+        """Hold a non-actionable observation briefly without refreshing it."""
+
+        assert self._last_target_m is not None
+        assert self._last_target_orientation is not None
+        assert self._last_input_time_ns is not None
+        if now_ns - self._last_input_time_ns > self.stale_after_ns:
+            self.disarm()
+            return self._reference_required(stale_reason)
+        return self._decision(
+            target=self._last_target_m,
+            target_orientation=self._last_target_orientation,
+            tracker_delta=None,
+            world_delta=None,
+            tracker_delta_rotation=None,
+            workcell_delta_rotation=None,
+            rotation_delta_rad=None,
+            input_host_time_ns=self._last_input_time_ns,
+            accepted=False,
+            translation_clamped=False,
+            rotation_clamped=False,
+            requires_reference=False,
+            reason=hold_reason,
+        )
+
     @staticmethod
     def _decision(
         *,
@@ -511,13 +541,14 @@ class RelativeTrackerTranslationMapper(RelativeTrackerPoseMapper):
         self,
         sample: TrackedRigidBodySample,
         reference_target_position_m: object,
+        reference_target_orientation_wxyz: Sequence[float] = IDENTITY_QUATERNION_WXYZ,
         *,
         now_ns: int,
     ) -> TrackerPoseDecision:
         return super().arm(
             sample,
             reference_target_position_m,
-            IDENTITY_QUATERNION_WXYZ,
+            reference_target_orientation_wxyz,
             now_ns=now_ns,
         )
 

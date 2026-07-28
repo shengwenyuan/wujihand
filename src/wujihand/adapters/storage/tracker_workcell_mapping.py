@@ -52,7 +52,7 @@ def _number(
 ) -> float:
     if type(value) not in (int, float):
         raise ValueError(f"{field} must be a number")
-    result = float(value)
+    result = float(cast(int | float, value))
     if not math.isfinite(result) or result <= lower_exclusive or result > upper_inclusive:
         raise ValueError(f"{field} must be in ({lower_exclusive}, {upper_inclusive}]")
     return result
