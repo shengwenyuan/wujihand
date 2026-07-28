@@ -363,6 +363,40 @@ invalid input 派生的新 q20 intent。
 该结果必须按“未执行”处理，不能由 fake SDK/composition test 或 82 项 tabletop
 仿真代替。
 
+## Tracker → 右 NERO relative SE(3)
+
+Workstation2 真人 Tracker 的左右、前后、上下三方向已经由操作者在 Isaac GUI 中确认。
+轴映射已从 runner 移到五层之外的 simulation-only calibration：
+
+```text
+configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
+```
+
+该 profile 的同一 proper rotation matrix 同时映射位移轴和相对旋转轴。rotation
+显式使用 `--tracker-rotation` 启用，采用
+`C · (R_current · R_referenceᵀ) · Cᵀ` 的 Workcell 空间相对量；默认限幅为 `15°`。
+它不修改五层 Session，也不是实体 NERO TCP calibration。
+
+纯 rotation 合成流已在 Isaac Sim 6.0.1 headless 执行 240 frames：
+
+| 项目 | 结果 |
+|---|---:|
+| 平移输入 | `0 m` |
+| rotation target 最大值 | `9.4547°` |
+| link7 rotation feedback 最大值 | `10.0836°` |
+| Lula IK | `240/240` |
+| 右 q7 最大反馈变化 | `0.15438 rad` |
+| 右 Hand 2 最大被动反馈变化 | `0.06806 rad`，低于 `0.10 rad` Gate |
+| 左 q27 最大反馈变化 | `0.00714 rad`，低于 `0.03 rad` Gate |
+| 最终结果 | `passed=true` |
+
+报告：
+`artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-02.json`，
+SHA-256
+`da96f99b113c8ab1794f22da2930d0dbb86576dfa1337659515311677c5c1291`。
+该结果闭合代码、映射和 Isaac IK 路径；真人 Tracker 的 roll/pitch/yaw 方向仍需 GUI
+人工确认。
+
 ## Gate NV-2 对照
 
 | Gate 项 | 状态 | 证据或缺口 |
@@ -376,6 +410,8 @@ invalid input 派生的新 q20 intent。
 | 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-60,0,-30,-90,0,0]°`；v5 初始/post-reset checks |
 | 手朝桌内、近水平且掌面向下 | 通过（nominal） | inward、vertical 与 palm-down 五项 stage 几何测量均过 threshold |
 | q7 响应与双实例隔离 | 通过 | tabletop v5 82/82，包含历史 v2 相关 Gate |
+| Tracker → 右 NERO XYZ 方向 | 通过（人工 GUI） | Workstation2 三方向核对；simulation-only calibration |
+| Tracker → 右 NERO roll/pitch/yaw | 合成通过、待人工 GUI | pure-rotation 240/240，报告 `passed=true`；真人方向待核对 |
 | 左右逐指与组合手型 fixture | 通过 | 双侧五指单指 phase + 双侧 15-joint 组合 phase |
 | sampled feedback finite 且在 canonical limits 内 | 通过 | v5 全局、左右及 post-reset checks |
 | 命令后 reset/topology/recovery | 通过 | 两根 q27 重验、partition stable、回到初态并恢复命令 |

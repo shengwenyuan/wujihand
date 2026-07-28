@@ -16,6 +16,7 @@ import argparse
 from dataclasses import dataclass
 from importlib.metadata import version
 import json
+import math
 from pathlib import Path
 import sys
 import time
@@ -38,11 +39,18 @@ from wujihand.application.qualification import (
 )
 from wujihand.application.teleoperation import (
     GloveHand2SimulationController,
-    RelativeTrackerTranslationMapper,
+    RelativeTrackerPoseMapper,
     compose_q27_hand_target,
 )
+from wujihand.adapters.storage import (
+    TrackerWorkcellMapping,
+    load_tracker_workcell_mapping,
+)
 from wujihand.domain import HandSide
-from wujihand.domain.pose import rotation_matrix_to_quaternion_wxyz
+from wujihand.domain.pose import (
+    quaternion_geodesic_distance_rad,
+    rotation_matrix_to_quaternion_wxyz,
+)
 from wujihand.runtime import SessionResolver
 from wujihand.specs import AttachmentSpec, PoseSpec
 
@@ -50,6 +58,7 @@ from wujihand.specs import AttachmentSpec, PoseSpec
 DEFAULT_SESSION = (
     ROOT / "configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
 )
+DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,15 +100,44 @@ def parse_args() -> argparse.Namespace:
         "--tracker-live",
         action="store_true",
         help=(
-            "Opt in to bounded canonical Tracker XYZ control of only the "
-            "simulated right NERO."
+            "Opt in to bounded canonical Tracker pose control of only the "
+            "simulated right NERO; rotation remains separately opt-in."
         ),
     )
     parser.add_argument("--tracker-serial")
     parser.add_argument("--tracker-udp-port", type=int, default=49154)
     parser.add_argument("--tracker-frames", type=int, default=2400)
-    parser.add_argument("--tracker-scale", type=float, default=0.25)
-    parser.add_argument("--tracker-max-delta-m", type=float, default=0.08)
+    parser.add_argument(
+        "--tracker-mapping",
+        type=Path,
+        default=DEFAULT_TRACKER_MAPPING,
+        help="Simulation-only Tracker-to-workcell calibration YAML.",
+    )
+    parser.add_argument(
+        "--tracker-rotation",
+        action="store_true",
+        help="Map relative Tracker orientation as a bounded link7 target.",
+    )
+    parser.add_argument(
+        "--tracker-scale",
+        type=float,
+        help="Optional translation-scale override for the mapping profile.",
+    )
+    parser.add_argument(
+        "--tracker-max-delta-m",
+        type=float,
+        help="Optional per-axis translation clamp override.",
+    )
+    parser.add_argument(
+        "--tracker-rotation-scale",
+        type=float,
+        help="Optional relative rotation-scale override.",
+    )
+    parser.add_argument(
+        "--tracker-max-rotation-deg",
+        type=float,
+        help="Optional shortest-angle rotation clamp override.",
+    )
     parser.add_argument("--tracker-stale-s", type=float, default=0.25)
     parser.add_argument(
         "--tracker-auto-reference",
@@ -142,14 +180,20 @@ if not ARGS.tracker_live and ARGS.tracker_serial is not None:
     raise SystemExit("--tracker-serial requires --tracker-live")
 if not ARGS.tracker_live and ARGS.tracker_auto_reference:
     raise SystemExit("--tracker-auto-reference requires --tracker-live")
+if not ARGS.tracker_live and ARGS.tracker_rotation:
+    raise SystemExit("--tracker-rotation requires --tracker-live")
 if not 1 <= ARGS.tracker_udp_port <= 65535:
     raise SystemExit("--tracker-udp-port must be in [1, 65535]")
 if ARGS.tracker_frames < 1:
     raise SystemExit("--tracker-frames must be positive")
-if not 0.0 < ARGS.tracker_scale <= 1.0:
+if ARGS.tracker_scale is not None and not 0.0 < ARGS.tracker_scale <= 1.0:
     raise SystemExit("--tracker-scale must be in (0, 1]")
-if not 0.0 < ARGS.tracker_max_delta_m <= 0.15:
+if ARGS.tracker_max_delta_m is not None and not 0.0 < ARGS.tracker_max_delta_m <= 0.15:
     raise SystemExit("--tracker-max-delta-m must be in (0, 0.15]")
+if ARGS.tracker_rotation_scale is not None and not 0.0 < ARGS.tracker_rotation_scale <= 1.0:
+    raise SystemExit("--tracker-rotation-scale must be in (0, 1]")
+if ARGS.tracker_max_rotation_deg is not None and not 0.0 < ARGS.tracker_max_rotation_deg <= 45.0:
+    raise SystemExit("--tracker-max-rotation-deg must be in (0, 45]")
 if not 0.05 <= ARGS.tracker_stale_s <= 1.0:
     raise SystemExit("--tracker-stale-s must be in [0.05, 1.0]")
 
@@ -161,6 +205,45 @@ if RESOLVED.session.backend != "isaac" or RESOLVED.session.runtime_role != "simu
     raise SystemExit("NV-2 runner requires an Isaac simulation Session")
 if RESOLVED.session.runtime.transport_contract is not None:
     raise SystemExit("NV-2 scripted runner must not declare a transport contract")
+
+TRACKER_MAPPING: TrackerWorkcellMapping | None = None
+TRACKER_MAPPING_PATH: Path | None = None
+TRACKER_TRANSLATION_SCALE: float | None = None
+TRACKER_MAX_TRANSLATION_DELTA_M: float | None = None
+TRACKER_ROTATION_SCALE: float | None = None
+TRACKER_MAX_ROTATION_DELTA_RAD: float | None = None
+if ARGS.tracker_live:
+    TRACKER_MAPPING_PATH = (
+        ARGS.tracker_mapping if ARGS.tracker_mapping.is_absolute() else ROOT / ARGS.tracker_mapping
+    ).resolve()
+    try:
+        TRACKER_MAPPING = load_tracker_workcell_mapping(TRACKER_MAPPING_PATH)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if TRACKER_MAPPING.workcell_frame != RESOLVED.workcell.world_frame:
+        raise SystemExit(
+            "Tracker mapping workcell_frame differs from resolved Workcell "
+            f"world_frame: {TRACKER_MAPPING.workcell_frame!r} != "
+            f"{RESOLVED.workcell.world_frame!r}"
+        )
+    TRACKER_TRANSLATION_SCALE = (
+        TRACKER_MAPPING.translation_scale if ARGS.tracker_scale is None else ARGS.tracker_scale
+    )
+    TRACKER_MAX_TRANSLATION_DELTA_M = (
+        TRACKER_MAPPING.max_translation_delta_m
+        if ARGS.tracker_max_delta_m is None
+        else ARGS.tracker_max_delta_m
+    )
+    TRACKER_ROTATION_SCALE = (
+        TRACKER_MAPPING.rotation_scale
+        if ARGS.tracker_rotation_scale is None
+        else ARGS.tracker_rotation_scale
+    )
+    TRACKER_MAX_ROTATION_DELTA_RAD = math.radians(
+        TRACKER_MAPPING.max_rotation_delta_deg
+        if ARGS.tracker_max_rotation_deg is None
+        else ARGS.tracker_max_rotation_deg
+    )
 
 from isaacsim import SimulationApp  # type: ignore[import-not-found]
 
@@ -225,28 +308,14 @@ REST_SETTLING_MAX_WINDOWS = 8
 RESET_INITIAL_TOLERANCE_RAD = 0.08
 TRACKER_REFERENCE_WAIT_S = 10.0
 TRACKER_RESPONSE_MIN_RAD = 0.005
+TRACKER_ROTATION_RESPONSE_MIN_RAD = math.radians(1.0)
 TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD = 0.03
 TRACKER_HAND_FEEDBACK_TOLERANCE_RAD = 0.10
 TRACKER_STREAM_ID = "vive.right"
 TRACKER_LOGICAL_ROLE = "operator_right"
-TRACKER_FRAME = "vive_tracking"
-# Workstation2 measured OpenVR standing frame:
-# body right = Tracker -Z, body forward = Tracker -X, body up = Tracker +Y.
-# Workcell frame: +X right, +Y table-inward, +Z up.
-TRACKER_TO_WORKCELL = (
-    (0.0, 0.0, -1.0),   # Workcell X = -Tracker Z
-    (-1.0, 0.0, 0.0),   # Workcell Y = -Tracker X
-    (0.0, 1.0, 0.0),    # Workcell Z =  Tracker Y
-)
-NERO_LULA_DESCRIPTION = (
-    ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
-)
-NERO_LULA_URDF = (
-    ROOT / "third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf"
-)
-NERO_LULA_URDF_SHA256 = (
-    "c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278"
-)
+NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
+NERO_LULA_URDF = ROOT / "third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf"
+NERO_LULA_URDF_SHA256 = "c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278"
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
@@ -417,13 +486,9 @@ def _side_runtimes() -> tuple[SideRuntime, SideRuntime]:
 
 SIDES = _side_runtimes()
 if RESOLVED.session.runtime.compatibility_profile is None:
-    raise RuntimeError(
-        "NV-2 tabletop qualification requires a Session compatibility profile"
-    )
+    raise RuntimeError("NV-2 tabletop qualification requires a Session compatibility profile")
 TABLETOP_PROFILE_PATH = ROOT / RESOLVED.session.runtime.compatibility_profile
-TABLETOP_PROFILE = load_nero_dual_tabletop_qualification_profile(
-    TABLETOP_PROFILE_PATH
-)
+TABLETOP_PROFILE = load_nero_dual_tabletop_qualification_profile(TABLETOP_PROFILE_PATH)
 
 
 def _set_world_pose(prim: Any, pose: Pose) -> None:
@@ -493,16 +558,13 @@ def _world_axis(
     prim = stage.GetPrimAtPath(prim_path)
     if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
         raise RuntimeError(f"axis measurement prim is invalid: {prim_path}")
-    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()
-    )
+    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
     direction = matrix.TransformDir(Gf.Vec3d(*local_axis_xyz))
     result = np.asarray(tuple(direction), dtype=np.float64)
     norm = float(np.linalg.norm(result))
     if not np.isfinite(result).all() or not np.isclose(norm, 1.0, atol=1e-6):
         raise RuntimeError(
-            f"axis measurement is not a finite unit vector for {prim_path}: "
-            f"{result.tolist()}"
+            f"axis measurement is not a finite unit vector for {prim_path}: {result.tolist()}"
         )
     return result / norm
 
@@ -557,9 +619,9 @@ def _capture_screenshot(
         raise RuntimeError(
             f"active screenshot camera prim is invalid: {SCREENSHOT_CAMERA_PRIM_PATH}"
         )
-    camera_world_transform = UsdGeom.Xformable(
-        camera_prim
-    ).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+    camera_world_transform = UsdGeom.Xformable(camera_prim).ComputeLocalToWorldTransform(
+        Usd.TimeCode.Default()
+    )
     capture = capture_viewport_to_file(viewport, file_path=str(path))
     captured = simulation_app.run_coroutine(capture.wait_for_result(completion_frames=30))
     omni.kit.renderer_capture.acquire_renderer_capture_interface().wait_async_capture()
@@ -569,11 +631,7 @@ def _capture_screenshot(
         "active_viewport_camera_path": str(viewport.camera_path),
         "camera_prim_valid": True,
         "camera_world_transform_row_major": [
-            [
-                float(camera_world_transform[row][column])
-                for column in range(4)
-            ]
-            for row in range(4)
+            [float(camera_world_transform[row][column]) for column in range(4)] for row in range(4)
         ],
         "camera_world_position": [
             float(value) for value in camera_world_transform.ExtractTranslation()
@@ -789,6 +847,15 @@ def _run_tracker_live(
 ) -> int:
     """Run the isolated Tracker -> right NERO simulation smoke."""
 
+    if (
+        TRACKER_MAPPING is None
+        or TRACKER_MAPPING_PATH is None
+        or TRACKER_TRANSLATION_SCALE is None
+        or TRACKER_MAX_TRANSLATION_DELTA_M is None
+        or TRACKER_ROTATION_SCALE is None
+        or TRACKER_MAX_ROTATION_DELTA_RAD is None
+    ):
+        raise RuntimeError("Tracker mapping was not resolved before Isaac startup")
     if sha256_file(NERO_LULA_URDF) != NERO_LULA_URDF_SHA256:
         raise RuntimeError("source-locked NERO URDF hash drifted")
     if not NERO_LULA_DESCRIPTION.is_file():
@@ -801,8 +868,7 @@ def _run_tracker_live(
     )
     if tuple(solver.get_joint_names()) != NERO_JOINT_NAMES:
         raise RuntimeError(
-            "NERO Lula cspace differs from the canonical q7 layout: "
-            f"{solver.get_joint_names()}"
+            f"NERO Lula cspace differs from the canonical q7 layout: {solver.get_joint_names()}"
         )
     if "link7" not in solver.get_all_frame_names():
         raise RuntimeError("NERO Lula model does not expose link7")
@@ -811,13 +877,9 @@ def _run_tracker_live(
         np.asarray(right_runtime.mount_pose.quat_wxyz, dtype=np.float64),
     )
 
-    initial_feedback = {
-        side: _positions(articulations[side]) for side in ("left", "right")
-    }
+    initial_feedback = {side: _positions(articulations[side]) for side in ("left", "right")}
     initial_left_arm_command = arm_targets["left"].copy()
-    initial_hand_commands = {
-        side: hand_targets[side].copy() for side in ("left", "right")
-    }
+    initial_hand_commands = {side: hand_targets[side].copy() for side in ("left", "right")}
     right_arm_indices = np.asarray(
         partitions["right"].arm_indices_q7,
         dtype=np.int64,
@@ -842,19 +904,20 @@ def _run_tracker_live(
         or not np.isfinite(reference_rotation).all()
     ):
         raise RuntimeError("NERO Lula FK returned an invalid reference pose")
-    reference_orientation_wxyz = rotation_matrix_to_quaternion_wxyz(
-        reference_rotation
-    )
+    reference_orientation_wxyz = rotation_matrix_to_quaternion_wxyz(reference_rotation)
 
-    mapper = RelativeTrackerTranslationMapper(
+    mapper = RelativeTrackerPoseMapper(
         stream_id=TRACKER_STREAM_ID,
         device_serial=ARGS.tracker_serial,
         logical_role=TRACKER_LOGICAL_ROLE,
-        tracking_frame=TRACKER_FRAME,
-        tracker_to_world=TRACKER_TO_WORKCELL,
-        scale=ARGS.tracker_scale,
-        max_delta_m=ARGS.tracker_max_delta_m,
+        tracking_frame=TRACKER_MAPPING.tracking_frame,
+        tracker_to_workcell=TRACKER_MAPPING.tracker_to_workcell,
+        translation_scale=TRACKER_TRANSLATION_SCALE,
+        max_translation_delta_m=TRACKER_MAX_TRANSLATION_DELTA_M,
+        rotation_scale=TRACKER_ROTATION_SCALE,
+        max_rotation_delta_rad=TRACKER_MAX_ROTATION_DELTA_RAD,
         stale_after_s=ARGS.tracker_stale_s,
+        rotation_enabled=ARGS.tracker_rotation,
     )
     supervisor = JointCommandSupervisor(
         arm_profiles["right"].layout,
@@ -882,7 +945,7 @@ def _run_tracker_live(
         stream_id=TRACKER_STREAM_ID,
         device_serial=ARGS.tracker_serial,
         logical_role=TRACKER_LOGICAL_ROLE,
-        tracking_frame=TRACKER_FRAME,
+        tracking_frame=TRACKER_MAPPING.tracking_frame,
     ) as receiver:
         if not ARGS.tracker_auto_reference:
             print(
@@ -892,9 +955,7 @@ def _run_tracker_live(
             try:
                 input()
             except EOFError as exc:
-                raise RuntimeError(
-                    "stdin closed before Tracker reference confirmation"
-                ) from exc
+                raise RuntimeError("stdin closed before Tracker reference confirmation") from exc
         reference_requested_ns = time.monotonic_ns()
         reference_deadline_ns = reference_requested_ns + round(
             TRACKER_REFERENCE_WAIT_S * 1_000_000_000
@@ -904,14 +965,12 @@ def _run_tracker_live(
         while time.monotonic_ns() < reference_deadline_ns:
             now_ns = time.monotonic_ns()
             candidate = receiver.receive_latest(now_ns=now_ns)
-            if (
-                candidate is not None
-                and candidate.host_time_ns >= reference_requested_ns
-            ):
+            if candidate is not None and candidate.host_time_ns >= reference_requested_ns:
                 try:
                     mapper.arm(
                         candidate,
                         reference_position_m,
+                        reference_orientation_wxyz,
                         now_ns=now_ns,
                     )
                 except ValueError as exc:
@@ -933,26 +992,42 @@ def _run_tracker_live(
             "TRACKER_REFERENCE_READY "
             f"serial={reference_sample.device_serial} "
             f"position_m={list(reference_sample.position_m or ())} "
-            "mapping='tracker[x,y,z] -> workcell[-z,-x,y]' "
-            f"scale={ARGS.tracker_scale:g} clamp=±{ARGS.tracker_max_delta_m:g}m",
+            f"mapping_id={TRACKER_MAPPING.mapping_id} "
+            f"tracker_to_workcell={TRACKER_MAPPING.tracker_to_workcell} "
+            f"translation_scale={TRACKER_TRANSLATION_SCALE:g} "
+            f"translation_clamp=±{TRACKER_MAX_TRANSLATION_DELTA_M:g}m "
+            f"rotation={'enabled' if ARGS.tracker_rotation else 'disabled'} "
+            f"rotation_scale={TRACKER_ROTATION_SCALE:g} "
+            "rotation_clamp="
+            f"±{math.degrees(TRACKER_MAX_ROTATION_DELTA_RAD):g}deg",
             flush=True,
         )
-        print(
-            "现在依次小幅移动 Tracker：左右、前后、上下；仅右 NERO 应响应。",
-            flush=True,
-        )
+        if ARGS.tracker_rotation:
+            print(
+                "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴"
+                "旋转。仅右 NERO 应响应。",
+                flush=True,
+            )
+        else:
+            print(
+                "现在依次小幅移动 Tracker：左右、前后、上下；仅右 NERO 应响应。",
+                flush=True,
+            )
 
         frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
         next_deadline_ns = armed_ns
         last_tick_ns = armed_ns
         accepted_samples = 0
-        clamped_samples = 0
+        translation_clamped_samples = 0
+        rotation_clamped_samples = 0
         ik_successes = 0
         ik_failures = 0
         consecutive_ik_failures = 0
         completed_frames = 0
         termination_reason = "completed"
         max_world_delta_m = 0.0
+        max_target_rotation_delta_rad = 0.0
+        max_feedback_rotation_delta_rad = 0.0
         max_right_arm_feedback_delta_rad = 0.0
         max_right_hand_feedback_delta_rad = 0.0
         max_left_feedback_delta_rad = 0.0
@@ -967,8 +1042,13 @@ def _run_tracker_live(
             last_mapping = mapping
             if mapping.accepted:
                 accepted_samples += 1
-                clamped_samples += int(mapping.clamped)
-            if mapping.requires_reference or mapping.target_position_m is None:
+                translation_clamped_samples += int(mapping.translation_clamped)
+                rotation_clamped_samples += int(mapping.rotation_clamped)
+            if (
+                mapping.requires_reference
+                or mapping.target_position_m is None
+                or mapping.target_orientation_wxyz is None
+            ):
                 termination_reason = mapping.reason
                 break
             assert mapping.input_host_time_ns is not None
@@ -977,11 +1057,19 @@ def _run_tracker_live(
                     max_world_delta_m,
                     float(np.linalg.norm(mapping.world_delta_m)),
                 )
+            if mapping.rotation_delta_rad is not None:
+                max_target_rotation_delta_rad = max(
+                    max_target_rotation_delta_rad,
+                    mapping.rotation_delta_rad,
+                )
 
             solution, ik_success = solver.compute_inverse_kinematics(
                 "link7",
                 np.asarray(mapping.target_position_m, dtype=np.float64),
-                reference_orientation_wxyz,
+                np.asarray(
+                    mapping.target_orientation_wxyz,
+                    dtype=np.float64,
+                ),
                 warm_start=supervisor.last_command,
                 position_tolerance=0.002,
                 orientation_tolerance=0.02,
@@ -1043,6 +1131,24 @@ def _run_tracker_live(
                 max_left_feedback_delta_rad,
                 float(np.max(np.abs(current_left - initial_feedback["left"]))),
             )
+            if ARGS.tracker_rotation:
+                _, current_right_rotation = solver.compute_forward_kinematics(
+                    "link7",
+                    current_right[right_arm_indices],
+                )
+                current_right_orientation = rotation_matrix_to_quaternion_wxyz(
+                    np.asarray(
+                        current_right_rotation,
+                        dtype=np.float64,
+                    )
+                )
+                max_feedback_rotation_delta_rad = max(
+                    max_feedback_rotation_delta_rad,
+                    quaternion_geodesic_distance_rad(
+                        reference_orientation_wxyz,
+                        current_right_orientation,
+                    ),
+                )
             completed_frames += 1
             if frame_index % 60 == 0:
                 world_delta = (
@@ -1050,25 +1156,26 @@ def _run_tracker_live(
                     if mapping.world_delta_m is None
                     else [round(value, 4) for value in mapping.world_delta_m]
                 )
+                rotation_delta_deg = (
+                    None
+                    if mapping.rotation_delta_rad is None
+                    else round(math.degrees(mapping.rotation_delta_rad), 2)
+                )
                 print(
                     f"tracker_frame={frame_index:04d} "
                     f"world_delta_m={world_delta} "
+                    f"rotation_delta_deg={rotation_delta_deg} "
                     f"ik={'ok' if ik_success else 'hold'} "
                     "q7="
                     f"{[round(float(value), 3) for value in arm_targets['right']]}",
                     flush=True,
                 )
             last_tick_ns = tick_ns
-            remaining_s = (
-                next_deadline_ns - time.monotonic_ns()
-            ) / 1_000_000_000
+            remaining_s = (next_deadline_ns - time.monotonic_ns()) / 1_000_000_000
             if remaining_s > 0.0:
                 time.sleep(remaining_s)
 
-        completed = (
-            termination_reason == "completed"
-            and completed_frames == ARGS.tracker_frames
-        )
+        completed = termination_reason == "completed" and completed_frames == ARGS.tracker_frames
         right_hand_command_held = bool(
             np.array_equal(
                 hand_targets["right"],
@@ -1082,20 +1189,28 @@ def _run_tracker_live(
                 initial_hand_commands["left"],
             )
         )
+        rotation_target_exercised = bool(
+            not ARGS.tracker_rotation
+            or max_target_rotation_delta_rad >= TRACKER_ROTATION_RESPONSE_MIN_RAD
+        )
+        rotation_feedback_responded = bool(
+            not ARGS.tracker_rotation
+            or max_feedback_rotation_delta_rad >= TRACKER_ROTATION_RESPONSE_MIN_RAD
+        )
         passed = bool(
             completed
             and accepted_samples > 0
             and ik_successes > 0
             and max_right_arm_feedback_delta_rad >= TRACKER_RESPONSE_MIN_RAD
+            and rotation_target_exercised
+            and rotation_feedback_responded
             and right_hand_command_held
             and left_commands_held
-            and max_right_hand_feedback_delta_rad
-            <= TRACKER_HAND_FEEDBACK_TOLERANCE_RAD
-            and max_left_feedback_delta_rad
-            <= TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD
+            and max_right_hand_feedback_delta_rad <= TRACKER_HAND_FEEDBACK_TOLERANCE_RAD
+            and max_left_feedback_delta_rad <= TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD
         )
         report = {
-            "schema": "wujihand.isaac_tracker_right_nero_smoke.v1",
+            "schema": "wujihand.isaac_tracker_right_nero_smoke.v2",
             "scope": (
                 "simulation-only right NERO q7; left NERO and both Hand 2 held; "
                 "no ROS, CAN, NERO hardware, or Hand 2 hardware"
@@ -1107,25 +1222,34 @@ def _run_tracker_live(
                 "serial": ARGS.tracker_serial,
                 "stream_id": TRACKER_STREAM_ID,
                 "logical_role": TRACKER_LOGICAL_ROLE,
-                "tracking_frame": TRACKER_FRAME,
+                "tracking_frame": TRACKER_MAPPING.tracking_frame,
                 "udp_endpoint": f"127.0.0.1:{ARGS.tracker_udp_port}",
                 "accepted_samples": accepted_samples,
                 "receiver_accepted_drains": receiver.accepted,
                 "receiver_rejected_datagrams": receiver.rejected,
             },
             "mapping": {
-                "mode": "relative_xyz_translation_only",
-                "tracker_to_workcell": [
-                    list(row) for row in TRACKER_TO_WORKCELL
-                ],
-                "scale": ARGS.tracker_scale,
-                "max_delta_each_axis_m": ARGS.tracker_max_delta_m,
-                "stale_after_s": ARGS.tracker_stale_s,
-                "clamped_samples": clamped_samples,
-                "max_world_delta_norm_m": max_world_delta_m,
-                "fixed_link7_orientation_wxyz": (
-                    reference_orientation_wxyz.tolist()
+                "mode": (
+                    "relative_se3" if ARGS.tracker_rotation else "relative_xyz_translation_only"
                 ),
+                "profile": str(TRACKER_MAPPING_PATH),
+                "mapping_id": TRACKER_MAPPING.mapping_id,
+                "scope": TRACKER_MAPPING.scope,
+                "provenance": TRACKER_MAPPING.provenance,
+                "workcell_frame": TRACKER_MAPPING.workcell_frame,
+                "tracker_to_workcell": [list(row) for row in TRACKER_MAPPING.tracker_to_workcell],
+                "translation_scale": TRACKER_TRANSLATION_SCALE,
+                "max_translation_delta_each_axis_m": (TRACKER_MAX_TRANSLATION_DELTA_M),
+                "stale_after_s": ARGS.tracker_stale_s,
+                "translation_clamped_samples": (translation_clamped_samples),
+                "max_world_delta_norm_m": max_world_delta_m,
+                "rotation_enabled": ARGS.tracker_rotation,
+                "rotation_scale": TRACKER_ROTATION_SCALE,
+                "max_rotation_delta_deg": math.degrees(TRACKER_MAX_ROTATION_DELTA_RAD),
+                "relative_rotation_semantics": (TRACKER_MAPPING.relative_rotation_semantics),
+                "rotation_clamped_samples": rotation_clamped_samples,
+                "max_target_rotation_delta_deg": math.degrees(max_target_rotation_delta_rad),
+                "reference_link7_orientation_wxyz": (reference_orientation_wxyz.tolist()),
             },
             "kinematics": {
                 "solver": "Isaac Sim 6.0.1 LulaKinematicsSolver",
@@ -1141,20 +1265,15 @@ def _run_tracker_live(
                 "requested_frames": ARGS.tracker_frames,
                 "completed_frames": completed_frames,
                 "termination_reason": termination_reason,
-                "last_mapping_reason": (
-                    None if last_mapping is None else last_mapping.reason
-                ),
+                "last_mapping_reason": (None if last_mapping is None else last_mapping.reason),
             },
             "measurements": {
-                "right_arm_max_feedback_delta_rad": (
-                    max_right_arm_feedback_delta_rad
+                "right_arm_max_feedback_delta_rad": (max_right_arm_feedback_delta_rad),
+                "right_link7_max_rotation_feedback_delta_deg": (
+                    math.degrees(max_feedback_rotation_delta_rad)
                 ),
-                "right_hand_max_feedback_delta_rad": (
-                    max_right_hand_feedback_delta_rad
-                ),
-                "left_q27_max_feedback_delta_rad": (
-                    max_left_feedback_delta_rad
-                ),
+                "right_hand_max_feedback_delta_rad": (max_right_hand_feedback_delta_rad),
+                "left_q27_max_feedback_delta_rad": (max_left_feedback_delta_rad),
                 "right_hand_command_held": right_hand_command_held,
                 "left_arm_and_hand_commands_held": left_commands_held,
             },
@@ -1163,26 +1282,22 @@ def _run_tracker_live(
                 "fresh_tracker_samples_received": accepted_samples > 0,
                 "ik_succeeded": ik_successes > 0,
                 "right_arm_responded": (
-                    max_right_arm_feedback_delta_rad
-                    >= TRACKER_RESPONSE_MIN_RAD
+                    max_right_arm_feedback_delta_rad >= TRACKER_RESPONSE_MIN_RAD
                 ),
+                "rotation_target_exercised": rotation_target_exercised,
+                "rotation_feedback_responded": (rotation_feedback_responded),
                 "right_hand_command_held": right_hand_command_held,
                 "right_hand_feedback_bounded": (
-                    max_right_hand_feedback_delta_rad
-                    <= TRACKER_HAND_FEEDBACK_TOLERANCE_RAD
+                    max_right_hand_feedback_delta_rad <= TRACKER_HAND_FEEDBACK_TOLERANCE_RAD
                 ),
                 "left_commands_held": left_commands_held,
                 "left_articulation_feedback_bounded": (
-                    max_left_feedback_delta_rad
-                    <= TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD
+                    max_left_feedback_delta_rad <= TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD
                 ),
             },
             "passed": passed,
         }
-        encoded = (
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n"
-        )
+        encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         if ARGS.report is not None:
             ARGS.report.parent.mkdir(parents=True, exist_ok=True)
             ARGS.report.write_text(encoded, encoding="utf-8")
@@ -1206,8 +1321,7 @@ def main() -> int:
     for entity in RESOLVED.workcell.entities:
         if entity.mobility != "fixed":
             raise RuntimeError(
-                f"NV-2 nominal qualification requires fixed workcell entities: "
-                f"{entity.entity_id}"
+                f"NV-2 nominal qualification requires fixed workcell entities: {entity.entity_id}"
             )
         if entity.primitive.kind == "plane":
             continue
@@ -1400,9 +1514,7 @@ def main() -> int:
                 or not np.allclose(actual_kps, kps)
                 or not np.allclose(actual_kds, kds)
             ):
-                raise RuntimeError(
-                    f"{side} qualification q7 drive gains were not applied"
-                )
+                raise RuntimeError(f"{side} qualification q7 drive gains were not applied")
             result[side] = {
                 "stiffness": actual_kps[0].tolist(),
                 "damping": actual_kds[0].tolist(),
@@ -1418,24 +1530,17 @@ def main() -> int:
         matches = [
             str(prim.GetPath())
             for prim in stage.Traverse()
-            if (
-                str(prim.GetPath()) == prefix
-                or str(prim.GetPath()).startswith(prefix + "/")
-            )
+            if (str(prim.GetPath()) == prefix or str(prim.GetPath()).startswith(prefix + "/"))
             and prim.HasAPI(UsdPhysics.CollisionAPI)
         ]
         if not matches:
-            raise RuntimeError(
-                f"fixed workcell entity has no authored external collider: {prefix}"
-            )
+            raise RuntimeError(f"fixed workcell entity has no authored external collider: {prefix}")
         external_fixed_collider_paths.extend(matches)
     external_fixed_collider_paths = sorted(set(external_fixed_collider_paths))
     if not external_fixed_collider_paths:
         raise RuntimeError("NV-2 nominal workcell has no fixed external collider")
 
-    arm_targets = {
-        side: initial_arm_targets[side].copy() for side in ("left", "right")
-    }
+    arm_targets = {side: initial_arm_targets[side].copy() for side in ("left", "right")}
     hand_targets = {side: hand_profiles[side].rest_position.copy() for side in ("left", "right")}
 
     def apply_targets() -> None:
@@ -1463,17 +1568,13 @@ def main() -> int:
         if key in feedback:
             raise RuntimeError(f"duplicate feedback phase key: {key}")
         feedback[key] = {
-            side: _positions(articulations[side]).tolist()
-            for side in ("left", "right")
+            side: _positions(articulations[side]).tolist() for side in ("left", "right")
         }
 
     def alias_feedback(source_key: str, alias_key: str) -> None:
         if alias_key in feedback:
             raise RuntimeError(f"duplicate feedback phase key: {alias_key}")
-        feedback[alias_key] = {
-            side: list(feedback[source_key][side])
-            for side in ("left", "right")
-        }
+        feedback[alias_key] = {side: list(feedback[source_key][side]) for side in ("left", "right")}
 
     def settle_until_stable(settling_id: str) -> tuple[str, str]:
         """Wait for two consecutive bounded q27 windows or fail closed."""
@@ -1584,8 +1685,7 @@ def main() -> int:
         alias_feedback(stable_key, baseline_key)
 
         commanded_profile_indices = tuple(
-            profile.layout.names.index(name)
-            for name in target.commanded_joint_names
+            profile.layout.names.index(name) for name in target.commanded_joint_names
         )
         hand_targets[side] = profile.layout.validate_vector(target.q20_rad).copy()
         apply_targets()
@@ -1593,8 +1693,7 @@ def main() -> int:
         command_key = f"{target.phase_id}_command"
         capture_feedback(command_key)
         commanded_runtime_indices = tuple(
-            partitions[side].hand_indices_q20[index]
-            for index in commanded_profile_indices
+            partitions[side].hand_indices_q20[index] for index in commanded_profile_indices
         )
         return ScriptedHandPhase(
             target=target,
@@ -1626,9 +1725,7 @@ def main() -> int:
     partitions_before_reset = dict(partitions)
     world.reset()
     partitions_after_reset, root_paths_after_reset = validate_articulations()
-    arm_drive_after_reset = apply_qualification_arm_drive_gains(
-        partitions_after_reset
-    )
+    arm_drive_after_reset = apply_qualification_arm_drive_gains(partitions_after_reset)
     topology_stable_after_reset = (
         root_paths_after_reset == root_paths_before_reset
         and partitions_after_reset == partitions_before_reset
@@ -1641,9 +1738,7 @@ def main() -> int:
         arm_targets[side] = initial_arm_targets[side].copy()
         hand_targets[side] = hand_profiles[side].rest_position.copy()
     apply_targets()
-    post_reset_previous_key, post_reset_final_key = settle_until_stable(
-        "post_reset"
-    )
+    post_reset_previous_key, post_reset_final_key = settle_until_stable("post_reset")
     alias_feedback(post_reset_previous_key, "post_reset_settle_a")
     alias_feedback(post_reset_final_key, "post_reset_settle_b")
 
@@ -1651,9 +1746,7 @@ def main() -> int:
     recovery_profile = hand_profiles[recovery_side]
     recovery_joint_name = "l_middle_finger_pip"
     recovery_profile_index = recovery_profile.layout.names.index(recovery_joint_name)
-    recovery_runtime_index = partitions[recovery_side].hand_indices_q20[
-        recovery_profile_index
-    ]
+    recovery_runtime_index = partitions[recovery_side].hand_indices_q20[recovery_profile_index]
     recovery_delta_rad = min(ARGS.hand_amplitude_rad * 0.5, 0.20)
     hand_targets[recovery_side] = recovery_profile.rest_position.copy()
     hand_targets[recovery_side][recovery_profile_index] += recovery_delta_rad
@@ -1680,10 +1773,7 @@ def main() -> int:
         return float(np.max(np.abs(delta)))
 
     def max_all_sides_delta(current: str, previous: str) -> float:
-        return max(
-            max_phase_delta(current, previous, side)
-            for side in ("left", "right")
-        )
+        return max(max_phase_delta(current, previous, side) for side in ("left", "right"))
 
     def response_threshold(command_delta_rad: float) -> float:
         return max(
@@ -1739,9 +1829,7 @@ def main() -> int:
             )
             <= MOTION_ISOLATION_TOLERANCE_RAD
         ),
-        "fixed_external_workcell_collider_present": bool(
-            external_fixed_collider_paths
-        ),
+        "fixed_external_workcell_collider_present": bool(external_fixed_collider_paths),
         "initial_two_window_settling_finite": bool(
             np.isfinite(arrays["initial_settle_a"]["left"]).all()
             and np.isfinite(arrays["initial_settle_a"]["right"]).all()
@@ -1749,8 +1837,7 @@ def main() -> int:
             and np.isfinite(arrays["initial"]["right"]).all()
         ),
         "initial_two_window_settling_bounded": bool(
-            max_all_sides_delta("initial", "initial_settle_a")
-            <= REST_SETTLING_DELTA_TOLERANCE_RAD
+            max_all_sides_delta("initial", "initial_settle_a") <= REST_SETTLING_DELTA_TOLERANCE_RAD
         ),
         "post_reset_two_window_settling_finite": bool(
             np.isfinite(arrays["post_reset_settle_a"]["left"]).all()
@@ -1764,8 +1851,7 @@ def main() -> int:
         ),
         "post_command_reset_two_q27_revalidated": topology_stable_after_reset,
         "post_command_reset_returned_to_approved_initial": bool(
-            max_all_sides_delta("post_reset_settle_b", "initial")
-            <= RESET_INITIAL_TOLERANCE_RAD
+            max_all_sides_delta("post_reset_settle_b", "initial") <= RESET_INITIAL_TOLERANCE_RAD
         ),
         "post_reset_recovery_responded": bool(
             arrays["post_reset_recovery"][recovery_side][recovery_runtime_index]
@@ -1812,20 +1898,15 @@ def main() -> int:
             phase.target.commanded_joint_names,
         )
         other_digit_runtime_indices = tuple(
-            partition.hand_indices_q20[index]
-            for index in digit_partition.other_digit_indices
+            partition.hand_indices_q20[index] for index in digit_partition.other_digit_indices
         )
         same_digit_uncommanded_runtime_indices = tuple(
             partition.hand_indices_q20[index]
             for index in digit_partition.same_digit_uncommanded_indices
         )
         response = (
-            arrays[phase.command_key][side][
-                np.asarray(commanded_runtime, dtype=np.int64)
-            ]
-            - arrays[phase.baseline_key][side][
-                np.asarray(commanded_runtime, dtype=np.int64)
-            ]
+            arrays[phase.command_key][side][np.asarray(commanded_runtime, dtype=np.int64)]
+            - arrays[phase.baseline_key][side][np.asarray(commanded_runtime, dtype=np.int64)]
         )
         checks[f"{phase.target.phase_id}_responded"] = bool(
             np.all(response >= response_threshold(phase.target.command_delta_rad))
@@ -1848,13 +1929,9 @@ def main() -> int:
         single_digit_motion_diagnostics[phase.target.phase_id] = {
             "commanded_digit": digit_partition.commanded_digit,
             "other_fingers_max_feedback_delta_rad": other_digits_max_delta_rad,
-            "same_digit_uncommanded_max_feedback_delta_rad": (
-                same_digit_uncommanded_max_delta_rad
-            ),
+            "same_digit_uncommanded_max_feedback_delta_rad": (same_digit_uncommanded_max_delta_rad),
             "same_digit_linkage_is_gate_check": False,
-            "other_fingers_isolation_tolerance_rad": (
-                MOTION_ISOLATION_TOLERANCE_RAD
-            ),
+            "other_fingers_isolation_tolerance_rad": (MOTION_ISOLATION_TOLERANCE_RAD),
         }
         checks[f"{phase.target.phase_id}_both_q7_held"] = bool(
             max_phase_delta(
@@ -1963,24 +2040,16 @@ def main() -> int:
         hand_values = rows[:, np.asarray(partition.hand_indices_q20)]
         return bool(
             np.all(
-                arm_values
-                >= np.asarray(arm_profile.layout.lower)
-                - FEEDBACK_LIMIT_TOLERANCE_RAD
+                arm_values >= np.asarray(arm_profile.layout.lower) - FEEDBACK_LIMIT_TOLERANCE_RAD
             )
             and np.all(
-                arm_values
-                <= np.asarray(arm_profile.layout.upper)
-                + FEEDBACK_LIMIT_TOLERANCE_RAD
+                arm_values <= np.asarray(arm_profile.layout.upper) + FEEDBACK_LIMIT_TOLERANCE_RAD
             )
             and np.all(
-                hand_values
-                >= np.asarray(hand_profile.layout.lower)
-                - FEEDBACK_LIMIT_TOLERANCE_RAD
+                hand_values >= np.asarray(hand_profile.layout.lower) - FEEDBACK_LIMIT_TOLERANCE_RAD
             )
             and np.all(
-                hand_values
-                <= np.asarray(hand_profile.layout.upper)
-                + FEEDBACK_LIMIT_TOLERANCE_RAD
+                hand_values <= np.asarray(hand_profile.layout.upper) + FEEDBACK_LIMIT_TOLERANCE_RAD
             )
         )
 
@@ -1996,18 +2065,15 @@ def main() -> int:
                 arrays["post_reset_settle_b"][side],
             )
         )
-        checks[f"{side}_post_reset_feedback_within_limits"] = (
-            feedback_rows_within_limits(side, reset_rows)
+        checks[f"{side}_post_reset_feedback_within_limits"] = feedback_rows_within_limits(
+            side, reset_rows
         )
         arm_indices = np.asarray(partitions[side].arm_indices_q7)
         initial_error = np.max(
             np.abs(arrays["initial"][side][arm_indices] - initial_arm_targets[side])
         )
         post_reset_error = np.max(
-            np.abs(
-                arrays["post_reset_settle_b"][side][arm_indices]
-                - initial_arm_targets[side]
-            )
+            np.abs(arrays["post_reset_settle_b"][side][arm_indices] - initial_arm_targets[side])
         )
         checks[f"{side}_initial_q7_target_reached"] = bool(
             initial_error <= TABLETOP_PROFILE.thresholds.initial_q7_max_error_rad
@@ -2148,8 +2214,7 @@ def main() -> int:
             "status": TABLETOP_PROFILE.status,
             "sha256": sha256_file(TABLETOP_PROFILE_PATH),
             "initial_arm_q7_rad": {
-                side: initial_arm_targets[side].tolist()
-                for side in ("left", "right")
+                side: initial_arm_targets[side].tolist() for side in ("left", "right")
             },
             "assumptions": list(TABLETOP_PROFILE.assumptions),
             "arm_drive_gains": {
@@ -2209,20 +2274,13 @@ def main() -> int:
                     recovery_same_digit_uncommanded_runtime_indices,
                 ),
                 "same_digit_linkage_is_gate_check": False,
-                "other_fingers_isolation_tolerance_rad": (
-                    MOTION_ISOLATION_TOLERANCE_RAD
-                ),
+                "other_fingers_isolation_tolerance_rad": (MOTION_ISOLATION_TOLERANCE_RAD),
             },
         },
         "topology_reset": {
-            "articulation_root_paths_before_reset": list(
-                root_paths_before_reset
-            ),
-            "articulation_root_paths_after_reset": list(
-                root_paths_after_reset
-            ),
-            "partitions_stable": partitions_after_reset
-            == partitions_before_reset,
+            "articulation_root_paths_before_reset": list(root_paths_before_reset),
+            "articulation_root_paths_after_reset": list(root_paths_after_reset),
+            "partitions_stable": partitions_after_reset == partitions_before_reset,
         },
         "external_collision_settling": {
             "fixed_workcell_collider_paths": external_fixed_collider_paths,
@@ -2255,11 +2313,7 @@ def main() -> int:
         "feedback": feedback,
         "checks": checks,
         "screenshot": {
-            "path": (
-                None
-                if ARGS.screenshot is None
-                else ARGS.screenshot.resolve().as_posix()
-            ),
+            "path": (None if ARGS.screenshot is None else ARGS.screenshot.resolve().as_posix()),
             "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
             "camera_eye_frame": OBLIQUE_CAMERA_EYE_FRAME,
             "camera_target_frame": OBLIQUE_CAMERA_TARGET_FRAME,
@@ -2269,9 +2323,7 @@ def main() -> int:
         },
         "top_screenshot": {
             "path": (
-                None
-                if ARGS.top_screenshot is None
-                else ARGS.top_screenshot.resolve().as_posix()
+                None if ARGS.top_screenshot is None else ARGS.top_screenshot.resolve().as_posix()
             ),
             "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
             "camera_eye_frame": TOP_CAMERA_EYE_FRAME,

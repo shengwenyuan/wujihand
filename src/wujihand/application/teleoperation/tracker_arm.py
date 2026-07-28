@@ -1,9 +1,9 @@
-"""Backend-neutral relative translation mapping for one tracked robot arm.
+"""Backend-neutral relative pose mapping for one tracked robot arm.
 
-The mapper consumes only the canonical rigid-body contract.  It owns the
-reference epoch, coordinate-frame mapping, translation scale, workspace clamp,
-and stale-input behavior; OpenVR and Isaac objects stay in their adapters and
-composition roots.
+The mapper consumes only the canonical rigid-body contract. It owns the
+reference epoch, coordinate-frame mapping, translation/rotation scale, bounded
+relative motion, and stale-input behavior; OpenVR and Isaac objects stay in
+their adapters and composition roots.
 """
 
 from __future__ import annotations
@@ -16,11 +16,19 @@ import numpy as np
 import numpy.typing as npt
 
 from wujihand.domain import TrackedRigidBodySample, TrackingState
-from wujihand.domain.pose import validate_host_time_ns, validate_rotation_matrix
+from wujihand.domain.pose import (
+    IDENTITY_QUATERNION_WXYZ,
+    quaternion_wxyz_to_rotation_matrix,
+    rotation_matrix_to_quaternion_wxyz,
+    validate_host_time_ns,
+    validate_rotation_matrix,
+    validate_unit_quaternion_wxyz,
+)
 
 
 Vector3 = tuple[float, float, float]
 Matrix3 = tuple[Vector3, Vector3, Vector3]
+QuaternionWxyz = tuple[float, float, float, float]
 FloatArray = npt.NDArray[np.float64]
 
 
@@ -34,22 +42,83 @@ def _finite_vector3(value: object, *, field: str) -> FloatArray:
     return result
 
 
+def _scaled_clamped_rotation(
+    rotation: FloatArray,
+    *,
+    scale: float,
+    max_delta_rad: float,
+) -> tuple[FloatArray, FloatArray, float, bool]:
+    """Scale and clamp one proper rotation along its shortest axis-angle arc."""
+
+    quaternion = rotation_matrix_to_quaternion_wxyz(rotation)
+    if quaternion[0] < 0.0:
+        quaternion *= -1.0
+    sin_half = float(np.linalg.norm(quaternion[1:]))
+    if sin_half <= np.finfo(np.float64).eps:
+        identity = np.eye(3, dtype=np.float64)
+        return (
+            identity,
+            np.asarray(IDENTITY_QUATERNION_WXYZ, dtype=np.float64),
+            0.0,
+            False,
+        )
+
+    raw_angle = 2.0 * math.atan2(sin_half, float(quaternion[0]))
+    scaled_angle = scale * raw_angle
+    applied_angle = min(scaled_angle, max_delta_rad)
+    axis = quaternion[1:] / sin_half
+    applied_quaternion = np.concatenate(
+        (
+            np.asarray((math.cos(applied_angle / 2.0),), dtype=np.float64),
+            axis * math.sin(applied_angle / 2.0),
+        )
+    )
+    applied_rotation = quaternion_wxyz_to_rotation_matrix(applied_quaternion)
+    return (
+        applied_rotation,
+        applied_quaternion,
+        applied_angle,
+        scaled_angle > max_delta_rad + 1e-12,
+    )
+
+
 @dataclass(frozen=True, slots=True)
-class TrackerTranslationDecision:
-    """One mapping result, including explicit reference-loss semantics."""
+class TrackerPoseDecision:
+    """One relative SE(3) result with explicit reference-loss semantics."""
 
     target_position_m: Vector3 | None
+    target_orientation_wxyz: QuaternionWxyz | None
     tracker_delta_m: Vector3 | None
     world_delta_m: Vector3 | None
+    tracker_delta_rotation_wxyz: QuaternionWxyz | None
+    workcell_delta_rotation_wxyz: QuaternionWxyz | None
+    rotation_delta_rad: float | None
     input_host_time_ns: int | None
     accepted: bool
-    clamped: bool
+    translation_clamped: bool
+    rotation_clamped: bool
     requires_reference: bool
     reason: str
 
+    @property
+    def clamped(self) -> bool:
+        """Compatibility aggregate for consumers that do not split bounds."""
 
-class RelativeTrackerTranslationMapper:
-    """Map one Tracker reference epoch into a bounded world-frame XYZ target."""
+        return self.translation_clamped or self.rotation_clamped
+
+    @property
+    def workcell_delta_m(self) -> Vector3 | None:
+        """Preferred name for the legacy ``world_delta_m`` field."""
+
+        return self.world_delta_m
+
+
+# Compatibility name retained for the translation-only public API.
+TrackerTranslationDecision = TrackerPoseDecision
+
+
+class RelativeTrackerPoseMapper:
+    """Map one Tracker reference epoch into a bounded workcell-frame pose."""
 
     def __init__(
         self,
@@ -58,11 +127,14 @@ class RelativeTrackerTranslationMapper:
         device_serial: str,
         logical_role: str,
         tracking_frame: str,
-        tracker_to_world: Sequence[Sequence[float]],
-        scale: float,
-        max_delta_m: float,
+        tracker_to_workcell: Sequence[Sequence[float]],
+        translation_scale: float,
+        max_translation_delta_m: float,
+        rotation_scale: float,
+        max_rotation_delta_rad: float,
         stale_after_s: float,
         min_quality: float = 0.5,
+        rotation_enabled: bool = True,
     ) -> None:
         for field, value in (
             ("stream_id", stream_id),
@@ -72,27 +144,39 @@ class RelativeTrackerTranslationMapper:
         ):
             if not isinstance(value, str) or not value or len(value) > 128:
                 raise ValueError(f"{field} must be a bounded non-empty string")
-        if not math.isfinite(scale) or not 0.0 < scale <= 1.0:
-            raise ValueError("scale must be finite and in (0, 1]")
-        if not math.isfinite(max_delta_m) or not 0.0 < max_delta_m <= 0.5:
-            raise ValueError("max_delta_m must be finite and in (0, 0.5]")
+        if not math.isfinite(translation_scale) or not 0.0 < translation_scale <= 1.0:
+            raise ValueError("translation_scale must be finite and in (0, 1]")
+        if not math.isfinite(max_translation_delta_m) or not 0.0 < max_translation_delta_m <= 0.5:
+            raise ValueError("max_translation_delta_m must be finite and in (0, 0.5]")
+        if not math.isfinite(rotation_scale) or not 0.0 < rotation_scale <= 1.0:
+            raise ValueError("rotation_scale must be finite and in (0, 1]")
+        if not math.isfinite(max_rotation_delta_rad) or not 0.0 < max_rotation_delta_rad <= math.pi:
+            raise ValueError("max_rotation_delta_rad must be finite and in (0, pi]")
         if not math.isfinite(stale_after_s) or not 0.0 < stale_after_s <= 5.0:
             raise ValueError("stale_after_s must be finite and in (0, 5]")
         if not math.isfinite(min_quality) or not 0.0 < min_quality <= 1.0:
             raise ValueError("min_quality must be finite and in (0, 1]")
+        if type(rotation_enabled) is not bool:
+            raise ValueError("rotation_enabled must be a boolean")
 
         self.stream_id = stream_id
         self.device_serial = device_serial
         self.logical_role = logical_role
         self.tracking_frame = tracking_frame
-        self.tracker_to_world = validate_rotation_matrix(tracker_to_world)
-        self.scale = float(scale)
-        self.max_delta_m = float(max_delta_m)
+        self.tracker_to_workcell = validate_rotation_matrix(tracker_to_workcell)
+        self.translation_scale = float(translation_scale)
+        self.max_translation_delta_m = float(max_translation_delta_m)
+        self.rotation_scale = float(rotation_scale)
+        self.max_rotation_delta_rad = float(max_rotation_delta_rad)
         self.stale_after_ns = round(stale_after_s * 1_000_000_000)
         self.min_quality = float(min_quality)
+        self.rotation_enabled = rotation_enabled
         self._reference_tracker_m: FloatArray | None = None
+        self._reference_tracker_rotation: FloatArray | None = None
         self._reference_target_m: FloatArray | None = None
+        self._reference_target_rotation: FloatArray | None = None
         self._last_target_m: FloatArray | None = None
+        self._last_target_orientation: FloatArray | None = None
         self._last_sequence: int | None = None
         self._last_input_time_ns: int | None = None
         self._last_step_ns: int | None = None
@@ -105,9 +189,10 @@ class RelativeTrackerTranslationMapper:
         self,
         sample: TrackedRigidBodySample,
         reference_target_position_m: object,
+        reference_target_orientation_wxyz: Sequence[float],
         *,
         now_ns: int,
-    ) -> TrackerTranslationDecision:
+    ) -> TrackerPoseDecision:
         """Create a new reference epoch from one fresh actionable sample."""
 
         now = validate_host_time_ns(now_ns)
@@ -115,23 +200,42 @@ class RelativeTrackerTranslationMapper:
         if reason is not None:
             raise ValueError(f"cannot establish Tracker reference: {reason}")
         assert sample.position_m is not None
+        assert sample.quat_wxyz is not None
         target = _finite_vector3(
             reference_target_position_m,
             field="reference_target_position_m",
         )
-        self._reference_tracker_m = np.asarray(sample.position_m, dtype=np.float64)
+        target_orientation = validate_unit_quaternion_wxyz(reference_target_orientation_wxyz)
+        self._reference_tracker_m = np.asarray(
+            sample.position_m,
+            dtype=np.float64,
+        )
+        self._reference_tracker_rotation = quaternion_wxyz_to_rotation_matrix(sample.quat_wxyz)
         self._reference_target_m = target.copy()
+        self._reference_target_rotation = quaternion_wxyz_to_rotation_matrix(target_orientation)
         self._last_target_m = target.copy()
+        self._last_target_orientation = target_orientation.copy()
         self._last_sequence = sample.sequence
         self._last_input_time_ns = sample.host_time_ns
         self._last_step_ns = now
         return self._decision(
             target=target,
+            target_orientation=target_orientation,
             tracker_delta=np.zeros(3, dtype=np.float64),
             world_delta=np.zeros(3, dtype=np.float64),
+            tracker_delta_rotation=np.asarray(
+                IDENTITY_QUATERNION_WXYZ,
+                dtype=np.float64,
+            ),
+            workcell_delta_rotation=np.asarray(
+                IDENTITY_QUATERNION_WXYZ,
+                dtype=np.float64,
+            ),
+            rotation_delta_rad=0.0,
             input_host_time_ns=sample.host_time_ns,
             accepted=True,
-            clamped=False,
+            translation_clamped=False,
+            rotation_clamped=False,
             requires_reference=False,
             reason="reference_established",
         )
@@ -141,7 +245,7 @@ class RelativeTrackerTranslationMapper:
         sample: TrackedRigidBodySample | None,
         *,
         now_ns: int,
-    ) -> TrackerTranslationDecision:
+    ) -> TrackerPoseDecision:
         """Advance one mapping tick or explicitly require a new reference."""
 
         now = validate_host_time_ns(now_ns)
@@ -152,6 +256,7 @@ class RelativeTrackerTranslationMapper:
             return self._reference_required("reference_required")
 
         assert self._last_target_m is not None
+        assert self._last_target_orientation is not None
         assert self._last_input_time_ns is not None
         if sample is None:
             if now - self._last_input_time_ns > self.stale_after_ns:
@@ -159,11 +264,16 @@ class RelativeTrackerTranslationMapper:
                 return self._reference_required("stale_input_reference_required")
             return self._decision(
                 target=self._last_target_m,
+                target_orientation=self._last_target_orientation,
                 tracker_delta=None,
                 world_delta=None,
+                tracker_delta_rotation=None,
+                workcell_delta_rotation=None,
+                rotation_delta_rad=None,
                 input_host_time_ns=self._last_input_time_ns,
                 accepted=False,
-                clamped=False,
+                translation_clamped=False,
+                rotation_clamped=False,
                 requires_reference=False,
                 reason="no_new_sample_hold",
             )
@@ -180,32 +290,73 @@ class RelativeTrackerTranslationMapper:
             return self._reference_required(f"{reason}_reference_required")
 
         assert sample.position_m is not None
+        assert sample.quat_wxyz is not None
         assert self._reference_tracker_m is not None
+        assert self._reference_tracker_rotation is not None
         assert self._reference_target_m is not None
+        assert self._reference_target_rotation is not None
         tracker_delta = np.asarray(sample.position_m, dtype=np.float64) - self._reference_tracker_m
-        raw_world_delta = self.scale * (self.tracker_to_world @ tracker_delta)
+        raw_world_delta = self.translation_scale * (self.tracker_to_workcell @ tracker_delta)
         world_delta = np.clip(
             raw_world_delta,
-            -self.max_delta_m,
-            self.max_delta_m,
+            -self.max_translation_delta_m,
+            self.max_translation_delta_m,
         )
         target = self._reference_target_m + world_delta
-        clamped = not np.allclose(
+        translation_clamped = not np.allclose(
             raw_world_delta,
             world_delta,
             rtol=0.0,
             atol=1e-12,
         )
+
+        tracker_rotation = quaternion_wxyz_to_rotation_matrix(sample.quat_wxyz)
+        tracker_delta_rotation_matrix = tracker_rotation @ self._reference_tracker_rotation.T
+        tracker_delta_rotation = rotation_matrix_to_quaternion_wxyz(tracker_delta_rotation_matrix)
+        if self.rotation_enabled:
+            raw_workcell_delta_rotation = (
+                self.tracker_to_workcell
+                @ tracker_delta_rotation_matrix
+                @ self.tracker_to_workcell.T
+            )
+            (
+                workcell_delta_rotation_matrix,
+                workcell_delta_rotation,
+                rotation_delta_rad,
+                rotation_clamped,
+            ) = _scaled_clamped_rotation(
+                raw_workcell_delta_rotation,
+                scale=self.rotation_scale,
+                max_delta_rad=self.max_rotation_delta_rad,
+            )
+            target_rotation = workcell_delta_rotation_matrix @ self._reference_target_rotation
+            target_orientation = rotation_matrix_to_quaternion_wxyz(target_rotation)
+        else:
+            workcell_delta_rotation = np.asarray(
+                IDENTITY_QUATERNION_WXYZ,
+                dtype=np.float64,
+            )
+            rotation_delta_rad = 0.0
+            rotation_clamped = False
+            target_orientation = rotation_matrix_to_quaternion_wxyz(self._reference_target_rotation)
+
         self._last_target_m = target.copy()
+        self._last_target_orientation = target_orientation.copy()
         self._last_sequence = sample.sequence
         self._last_input_time_ns = sample.host_time_ns
+        clamped = translation_clamped or rotation_clamped
         return self._decision(
             target=target,
+            target_orientation=target_orientation,
             tracker_delta=tracker_delta,
             world_delta=world_delta,
+            tracker_delta_rotation=tracker_delta_rotation,
+            workcell_delta_rotation=workcell_delta_rotation,
+            rotation_delta_rad=rotation_delta_rad,
             input_host_time_ns=sample.host_time_ns,
             accepted=True,
-            clamped=clamped,
+            translation_clamped=translation_clamped,
+            rotation_clamped=rotation_clamped,
             requires_reference=False,
             reason="tracking_clamped" if clamped else "tracking",
         )
@@ -214,8 +365,11 @@ class RelativeTrackerTranslationMapper:
         """Forget the complete epoch so old poses can never re-arm motion."""
 
         self._reference_tracker_m = None
+        self._reference_tracker_rotation = None
         self._reference_target_m = None
+        self._reference_target_rotation = None
         self._last_target_m = None
+        self._last_target_orientation = None
         self._last_sequence = None
         self._last_input_time_ns = None
 
@@ -239,6 +393,7 @@ class RelativeTrackerTranslationMapper:
             or not typed.pose_valid
             or typed.tracking_state is not TrackingState.RUNNING
             or typed.position_m is None
+            or typed.quat_wxyz is None
         ):
             return f"tracking_{typed.tracking_state.value}"
         if typed.quality is None or typed.quality < self.min_quality:
@@ -249,14 +404,19 @@ class RelativeTrackerTranslationMapper:
             return "stale_timestamp"
         return None
 
-    def _reference_required(self, reason: str) -> TrackerTranslationDecision:
-        return TrackerTranslationDecision(
+    def _reference_required(self, reason: str) -> TrackerPoseDecision:
+        return TrackerPoseDecision(
             target_position_m=None,
+            target_orientation_wxyz=None,
             tracker_delta_m=None,
             world_delta_m=None,
+            tracker_delta_rotation_wxyz=None,
+            workcell_delta_rotation_wxyz=None,
+            rotation_delta_rad=None,
             input_host_time_ns=None,
             accepted=False,
-            clamped=False,
+            translation_clamped=False,
+            rotation_clamped=False,
             requires_reference=True,
             reason=reason,
         )
@@ -265,34 +425,101 @@ class RelativeTrackerTranslationMapper:
     def _decision(
         *,
         target: FloatArray,
+        target_orientation: FloatArray,
         tracker_delta: FloatArray | None,
         world_delta: FloatArray | None,
+        tracker_delta_rotation: FloatArray | None,
+        workcell_delta_rotation: FloatArray | None,
+        rotation_delta_rad: float | None,
         input_host_time_ns: int,
         accepted: bool,
-        clamped: bool,
+        translation_clamped: bool,
+        rotation_clamped: bool,
         requires_reference: bool,
         reason: str,
-    ) -> TrackerTranslationDecision:
+    ) -> TrackerPoseDecision:
         def vector(value: FloatArray | None) -> Vector3 | None:
             if value is None:
                 return None
             return cast(Vector3, tuple(float(item) for item in value))
 
-        return TrackerTranslationDecision(
+        def quaternion(value: FloatArray | None) -> QuaternionWxyz | None:
+            if value is None:
+                return None
+            return cast(
+                QuaternionWxyz,
+                tuple(float(item) for item in value),
+            )
+
+        return TrackerPoseDecision(
             target_position_m=vector(target),
+            target_orientation_wxyz=quaternion(target_orientation),
             tracker_delta_m=vector(tracker_delta),
             world_delta_m=vector(world_delta),
+            tracker_delta_rotation_wxyz=quaternion(tracker_delta_rotation),
+            workcell_delta_rotation_wxyz=quaternion(workcell_delta_rotation),
+            rotation_delta_rad=rotation_delta_rad,
             input_host_time_ns=input_host_time_ns,
             accepted=accepted,
-            clamped=clamped,
+            translation_clamped=translation_clamped,
+            rotation_clamped=rotation_clamped,
             requires_reference=requires_reference,
             reason=reason,
         )
 
 
+class RelativeTrackerTranslationMapper(RelativeTrackerPoseMapper):
+    """Compatibility wrapper that freezes target orientation at reference."""
+
+    def __init__(
+        self,
+        *,
+        stream_id: str,
+        device_serial: str,
+        logical_role: str,
+        tracking_frame: str,
+        tracker_to_world: Sequence[Sequence[float]],
+        scale: float,
+        max_delta_m: float,
+        stale_after_s: float,
+        min_quality: float = 0.5,
+    ) -> None:
+        super().__init__(
+            stream_id=stream_id,
+            device_serial=device_serial,
+            logical_role=logical_role,
+            tracking_frame=tracking_frame,
+            tracker_to_workcell=tracker_to_world,
+            translation_scale=scale,
+            max_translation_delta_m=max_delta_m,
+            rotation_scale=1.0,
+            max_rotation_delta_rad=math.pi,
+            stale_after_s=stale_after_s,
+            min_quality=min_quality,
+            rotation_enabled=False,
+        )
+
+    def arm(
+        self,
+        sample: TrackedRigidBodySample,
+        reference_target_position_m: object,
+        *,
+        now_ns: int,
+    ) -> TrackerPoseDecision:
+        return super().arm(
+            sample,
+            reference_target_position_m,
+            IDENTITY_QUATERNION_WXYZ,
+            now_ns=now_ns,
+        )
+
+
 __all__ = [
     "Matrix3",
+    "QuaternionWxyz",
+    "RelativeTrackerPoseMapper",
     "RelativeTrackerTranslationMapper",
+    "TrackerPoseDecision",
     "TrackerTranslationDecision",
     "Vector3",
 ]

@@ -34,6 +34,8 @@ NV-2 尚不能标记为完整完成：
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 与近景待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
 | 真实 Glove live 路径 | 未执行 | 专用 NIC 待配置静态 IPv4，尚未取得 live `hand_skeleton` |
+| Tracker → 右 NERO 平移 | 人工通过 | Workstation2 三方向已核对；仅为仿真输入映射 |
+| Tracker → 右 NERO rotation | 合成通过、待人工验证 | pure-rotation 240/240、relative SE(3)、右 q7 only；`--tracker-rotation` 显式启用 |
 | self-collision policy | 待确认 | 当前 smoke 关闭合并 articulation 自碰撞，保留外部碰撞 |
 | 真机 | 未接入 | 未执行 CAN、ROS command、NERO SDK command 或 Hand 2 command |
 
@@ -214,6 +216,36 @@ supervisor，`>=0.95` 才是 success。缺帧或被拒绝的观测不会创建�
   --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v5.png \
   --top-screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v5.png
 ```
+
+### Tracker live 映射入口
+
+Tracker 的现场轴映射不属于 Asset、Binding、Assembly、Workcell 或 Session 产品事实，
+因此存放在五层之外的 simulation-only calibration：
+
+```text
+configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
+```
+
+其中 `tracker_to_workcell` 是唯一的 `3×3` 轴映射入口，同时用于平移和旋转。当前
+Workstation2 人工三方向结果为：
+
+```text
+Workcell +X = Tracker -Z
+Workcell +Y = Tracker -X
+Workcell +Z = Tracker +Y
+```
+
+rotation 使用 reference epoch 的空间相对量：
+
+```text
+ΔR_workcell = C · (R_tracker_current · R_tracker_referenceᵀ) · Cᵀ
+R_link7_target = ΔR_workcell · R_link7_reference
+```
+
+默认保持历史 translation-only 行为；只有显式增加 `--tracker-rotation` 才向 Lula IK
+传入变化的 link7 orientation。YAML 还持有 translation/rotation scale 与限幅，
+CLI override 只用于有意实验。此 calibration 标记为 `simulation_only`，不能直接解释为
+真实 NERO TCP 标定或真机安全参数。
 
 | 入口 | 责任 |
 |---|---|

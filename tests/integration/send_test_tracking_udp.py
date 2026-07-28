@@ -15,6 +15,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from wujihand.adapters.transport import UdpTrackingSampleSender  # noqa: E402
 from wujihand.domain import TrackedRigidBodySample, TrackingState  # noqa: E402
+from wujihand.domain.pose import (  # noqa: E402
+    euler_zyx_to_quaternion_wxyz,
+)
 
 
 def main() -> int:
@@ -23,6 +26,18 @@ def main() -> int:
     parser.add_argument("--duration-s", type=float, default=60.0)
     parser.add_argument("--poll-hz", type=float, default=90.0)
     parser.add_argument("--serial", default="LHR-SYNTHETIC")
+    parser.add_argument(
+        "--translation-amplitude-m",
+        type=float,
+        default=0.20,
+        help="Sinusoidal Tracker +X translation; use 0 for rotation isolation.",
+    )
+    parser.add_argument(
+        "--rotation-amplitude-deg",
+        type=float,
+        default=0.0,
+        help="Optional sinusoidal rotation about Tracker +Y.",
+    )
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         raise SystemExit("--port must be in [1, 65535]")
@@ -30,6 +45,10 @@ def main() -> int:
         raise SystemExit("--duration-s must be in [1, 300]")
     if not 1.0 <= args.poll_hz <= 500.0:
         raise SystemExit("--poll-hz must be in [1, 500]")
+    if not 0.0 <= args.translation_amplitude_m <= 0.25:
+        raise SystemExit("--translation-amplitude-m must be in [0, 0.25]")
+    if not 0.0 <= args.rotation_amplitude_deg <= 30.0:
+        raise SystemExit("--rotation-amplitude-deg must be in [0, 30]")
 
     started_ns = time.monotonic_ns()
     deadline_ns = started_ns + round(args.duration_s * 1_000_000_000)
@@ -41,6 +60,12 @@ def main() -> int:
             if now_ns >= deadline_ns:
                 break
             elapsed_s = (now_ns - started_ns) / 1_000_000_000
+            rotation = euler_zyx_to_quaternion_wxyz(
+                yaw=0.0,
+                pitch=math.radians(args.rotation_amplitude_deg)
+                * math.sin(2.0 * math.pi * elapsed_s / 4.0),
+                roll=0.0,
+            )
             sender.send(
                 TrackedRigidBodySample(
                     stream_id="vive.right",
@@ -49,11 +74,11 @@ def main() -> int:
                     sequence=sequence,
                     tracking_frame="vive_tracking",
                     position_m=(
-                        0.20 * math.sin(2.0 * math.pi * elapsed_s / 4.0),
+                        args.translation_amplitude_m * math.sin(2.0 * math.pi * elapsed_s / 4.0),
                         1.0,
                         0.0,
                     ),
-                    quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+                    quat_wxyz=tuple(float(value) for value in rotation),
                     connected=True,
                     pose_valid=True,
                     tracking_state=TrackingState.RUNNING,
