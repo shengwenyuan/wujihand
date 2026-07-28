@@ -25,6 +25,7 @@ SESSION_NAMES = (
     "isaac_hand2_right_rotation_ball_qualification_v1.yaml",
     "isaac_hand2_right_rotation_ball_teleop_v1.yaml",
     "isaac_hand2_teleop_v1.yaml",
+    "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml",
     "mediapipe_hand2_hand_command_udp_v1.yaml",
     "mediapipe_hand2_q20_udp_v1.yaml",
     "mujoco_fr3v2_hand2_right_table_v1.yaml",

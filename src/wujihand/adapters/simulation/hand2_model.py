@@ -9,16 +9,21 @@ from typing import Any, Sequence
 import numpy as np
 import yaml
 
+from wujihand.domain.hand2 import HAND2_LAYOUT_IDS, hand2_layout
 from wujihand.domain.joints import FloatArray, JointLayout
 
 
 @dataclass(frozen=True, slots=True)
 class Hand2ModelProfile:
+    side: str
+    layout_id: str
     layout: JointLayout
     rest_position: FloatArray
     provenance: dict[str, str]
 
-    def firmware_to_backend(self, q20: Sequence[float], backend_names: Sequence[str]) -> FloatArray:
+    def firmware_to_backend(
+        self, q20: Sequence[float], backend_names: Sequence[str]
+    ) -> FloatArray:
         """Reorder a firmware-layout command into simulator DOF order."""
 
         values = self.layout.validate_vector(q20)
@@ -66,7 +71,9 @@ class Hand2ModelProfile:
             )
         if not np.isfinite(values).all():
             raise ValueError("backend vector contains NaN or infinity")
-        indices = np.asarray(self._finger_indices_in_backend(backend_names), dtype=np.int64)
+        indices = np.asarray(
+            self._finger_indices_in_backend(backend_names), dtype=np.int64
+        )
         return self.layout.validate_vector(values[indices]).copy()
 
 
@@ -74,8 +81,9 @@ def load_hand2_model_profile(path: str | Path) -> Hand2ModelProfile:
     data: dict[str, Any] = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     if data.get("schema_version") != 1:
         raise ValueError("unsupported Hand 2 model profile schema")
-    if data.get("product") != "wuji_hand_2_beta_1" or data.get("side") != "right":
-        raise ValueError("profile is not Wuji Hand 2 Beta 1 right")
+    side = data.get("side")
+    if data.get("product") != "wuji_hand_2_beta_1" or side not in {"left", "right"}:
+        raise ValueError("profile is not a side-specific Wuji Hand 2 Beta 1 profile")
     joints = data["joints"]
     layout = JointLayout(
         names=tuple(joint["name"] for joint in joints),
@@ -85,6 +93,17 @@ def load_hand2_model_profile(path: str | Path) -> Hand2ModelProfile:
     )
     if layout.size != 20:
         raise ValueError(f"expected 20 Hand 2 joints, got {layout.size}")
+    expected_layout = hand2_layout(side)
+    if layout != expected_layout:
+        raise ValueError(
+            f"profile joint layout differs from pinned Hand 2 {side} firmware layout"
+        )
     rest = layout.validate_vector(data["rest_position"])
     provenance = {key: str(value) for key, value in data["derived_from"].items()}
-    return Hand2ModelProfile(layout=layout, rest_position=rest, provenance=provenance)
+    return Hand2ModelProfile(
+        side=side,
+        layout_id=HAND2_LAYOUT_IDS[side],
+        layout=layout,
+        rest_position=rest,
+        provenance=provenance,
+    )

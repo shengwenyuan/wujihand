@@ -6,6 +6,100 @@ sources:
     retrieved_at: 2026-07-11
     local_runtime_path: artifacts/models/mediapipe/hand_landmarker.task
     sha256: fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1
+  - name: agilex-agx-arm-urdf
+    kind: git
+    url: https://github.com/agilexrobotics/agx_arm_urdf.git
+    commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    retrieved_at: 2026-07-28
+    local_runtime_path: third_party/src/agx_arm_urdf
+    license_path: LICENSE
+    license_sha256: 247944c63de1573653722ba784f96123da267105b7b48577e0c8826a24b809f6
+    sparse_paths:
+      - LICENSE
+      - nero/urdf/nero_description.urdf
+      - nero/meshes/base_link.stl
+      - nero/meshes/link1.stl
+      - nero/meshes/link2.stl
+      - nero/meshes/link3.stl
+      - nero/meshes/link4.stl
+      - nero/meshes/link5.stl
+      - nero/meshes/link6.stl
+      - nero/meshes/link7.stl
+      - nero/meshes/dae/base_link.dae
+      - nero/meshes/dae/link1.dae
+      - nero/meshes/dae/link2.dae
+      - nero/meshes/dae/link3.dae
+      - nero/meshes/dae/link4.dae
+      - nero/meshes/dae/link5.dae
+      - nero/meshes/dae/link6.dae
+      - nero/meshes/dae/link7.dae
+    artifacts:
+      nero/urdf/nero_description.urdf: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
+    asset_trees:
+      nero/meshes: 2323405c805cbc4187f451a22d02954fc952a8a2b67b9602119ad26e1ee5031e
+  - name: agilex-pyagxarm
+    kind: git
+    url: https://github.com/agilexrobotics/pyAgxArm.git
+    commit: cc498c00af0bcb9e297943e94f4792c0e3ee5b2c
+    retrieved_at: 2026-07-28
+    local_runtime_path: third_party/src/pyAgxArm
+    license_path: LICENSE
+    license_sha256: ea8af5e789cb2d4e9b10bce3874982ade163b749b6bfbdb32e2df21c4d106de1
+    sparse_paths:
+      - LICENSE
+      - pyproject.toml
+      - pyAgxArm/api/constants.py
+    artifacts:
+      pyAgxArm/api/constants.py: aa43cd6543a526ddb8b74ee15b4aa4bce6d7741fc23508cd5b73036c30e0ff0b
+  - name: agilex-agx-arm-ros2
+    kind: git
+    url: https://github.com/agilexrobotics/agx_arm_ros.git
+    commit: 91e6b2e5eb2d9880e85230d0add9945e27387d87
+    retrieved_at: 2026-07-28
+    local_runtime_path: third_party/src/agx_arm_ros
+    license_path: LICENSE
+    license_sha256: 247944c63de1573653722ba784f96123da267105b7b48577e0c8826a24b809f6
+    sparse_paths:
+      - LICENSE
+      - .gitmodules
+      - src/agx_arm_moveit/config/agx_arm.urdf.xacro
+    artifacts:
+      .gitmodules: 9a1cb4b5cfb8d3fa6c085bc164f6e5b39eb606b9b484a98412985bb454364fac
+      src/agx_arm_moveit/config/agx_arm.urdf.xacro: ab4b8b16f8ce532a9a448f4032befc3cce85377671a55e2bc560bad74d817443
+  - name: agilex-nero-user-manual-v1
+    kind: documentation
+    url: https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/air57k7k3nhgeuxb
+    sha256: d461e999534d33940110989c35303727b98eafb1391bbb32aa0b2ec8fd597053
+    retrieved_at: 2026-07-28
+    local_runtime_path: third_party/docs/agilex/nero-user-manual-v1
+  - name: agilex-nero-7f-body-qr-2026-07-17
+    kind: documentation
+    url: https://qr61.cn/oMm9uo/q4oW6ZW
+    sha256: 67663ff94a05e642a43162c2ff4a1a95d1926a6236114f9904d1544b66e9c700
+    retrieved_at: 2026-07-28
+    local_runtime_path: third_party/docs/agilex/nero-7f-body-qr-2026-07-17
+  - name: agilex-nero-isaac-6-0-1
+    kind: generated
+    sha256: 07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0
+    generated_at: 2026-07-28
+    generated_by: tools/import_nero_urdf_to_usd.py
+    generator_sha256: 9b724d413808cb419732d1d26b17169084c5c0a77268df47ff38d654a7d1dd83
+    import_adapter: src/wujihand/adapters/simulation/nero_urdf_import.py
+    import_adapter_sha256: e403835886a38df1aa82de5c784d7a622966d929ae42f257f9450cac68272dbc
+    generator_recipe: configs/profiles/agilex_nero_isaac_6_0_1_import_v1.yaml
+    generator_recipe_sha256: 3566450d3f7eb2a6079a39ba554fcf74e9fa9796ea036442a4225a13189f89ec
+    isaac_distribution_version: 6.0.1.0
+    urdf_importer_extension_version: 3.11.2
+    asset_transformer_extension_version: 1.2.5
+    asset_transformer_rules_extension_version: 1.7.10
+    derived_from: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    inherited_license: MIT
+    local_runtime_path: artifacts/derived/isaac/6.0.1/agilex_nero
+    artifacts:
+      nero_description/nero_description.usda: d8ca2ceb58ad57cab0dc521323b560631207ba1838d4be0c1ddd8f85a27d5289
+      nero_description.import.json: 236915c248585f7a849eab22b21f1f54cd76826ea15b7a45ad64fe96f421e6fe
+    asset_trees:
+      nero_description: 07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0
   - name: wuji-description
     kind: git
     url: https://github.com/wuji-technology/wuji-description.git
@@ -17,15 +111,22 @@ sources:
     license_sha256: 38b27e3155e0c1c8d6f3e909e7a00359a302085dfd9ae963b52a91cbbe25afa3
     sparse_paths:
       - hand2_beta/body/urdf
+      - hand2_beta/body/meshes/left
       - hand2_beta/body/meshes/right
       - hand2_beta/body/mjcf
+      - hand2_beta/body/usd/left
       - hand2_beta/body/usd/right
     artifacts:
+      hand2_beta/body/urdf/left.urdf: d93de699b5bbe0a573ea9725ebb7e6ad6547b6ed3593f7f5591664ee220648f0
       hand2_beta/body/urdf/right.urdf: f3bb5d0031a1972e06faafa8a6ab191dcf5ab5abfebbf5d27cb510ee8d004a06
       hand2_beta/body/mjcf/right.xml: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
+      hand2_beta/body/usd/left/wujihand.usd: 646287f10ac0a2097bf602facc02c9af17f0f1cf8982c38037f69bb695492eca
       hand2_beta/body/usd/right/wujihand.usd: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
     asset_trees:
+      hand2_beta/body/meshes/left: 0913af28e4b94e4dedb0d2169018a684f100dec0795f38457ad63924e959dda2
       hand2_beta/body/meshes/right: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
+      hand2_beta/body/usd/left: bbe2f1939f3e36ddf58b5a3864440a618e0be9118c3d5cb9ce5132b929cd9d22
+      hand2_beta/body/usd/right: 1992b90288b6d414cc487e2bc37ba6853970cae7cb74b6177bf56d46342383b4
   - name: mujoco-menagerie-fr3-v2
     kind: git
     url: https://github.com/google-deepmind/mujoco_menagerie.git

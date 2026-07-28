@@ -1,0 +1,18 @@
+schema: wujihand.asset_manifest.v1
+asset_id: agilex_nero
+revision: model_f6642ce0_v1
+kind: robot_arm
+product: agilex_nero
+side: none
+canonical_profile: configs/profiles/agilex_nero_q7_provisional_v1.yaml
+frames:
+  base: base_link
+  tool_flange: link7
+control_groups:
+  - group_id: arm_joints
+    semantic: arm_joint_position
+    layout_id: agilex_nero_q7_v1
+    dof_count: 7
+    command_interface: position
+    joint_profile: configs/profiles/agilex_nero_q7_provisional_v1.yaml
+provenance_source: third_party/sources.lock.yaml#agilex-agx-arm-urdf

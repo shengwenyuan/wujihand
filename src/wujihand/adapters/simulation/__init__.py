@@ -22,6 +22,21 @@ from .mujoco_fr3_hand2 import (
     MujocoJointBinding,
     build_mujoco_fr3_hand2_model,
 )
+from .nero_hand2_twin import (
+    NeroHand2AttachmentConfig,
+    NeroHand2AttachmentHandles,
+    NeroHand2DofPartition,
+    author_nero_hand2_attachment,
+    discover_nero_hand2_dofs,
+)
+from .nero_tabletop import (
+    NeroDualTabletopQualificationProfile,
+    NeroTabletopArmDriveGains,
+    NeroTabletopGeometryContract,
+    NeroTabletopInitialArmPosition,
+    NeroTabletopThresholds,
+    load_nero_dual_tabletop_qualification_profile,
+)
 from .hand2_rotation_mount import (
     Hand2RotationMountConfig,
     RotationMountDofPartition,
@@ -49,6 +64,14 @@ __all__ = [
     "MujocoFr3Hand2",
     "MujocoFr3Hand2State",
     "MujocoJointBinding",
+    "NeroHand2AttachmentConfig",
+    "NeroHand2AttachmentHandles",
+    "NeroHand2DofPartition",
+    "NeroDualTabletopQualificationProfile",
+    "NeroTabletopArmDriveGains",
+    "NeroTabletopGeometryContract",
+    "NeroTabletopInitialArmPosition",
+    "NeroTabletopThresholds",
     "RotationMountDofPartition",
     "RotationMountHandles",
     "add_hand2_ball_scene",
@@ -57,8 +80,11 @@ __all__ = [
     "default_ball_contact_filters",
     "discover_rotation_mount_dofs",
     "build_mujoco_fr3_hand2_model",
+    "author_nero_hand2_attachment",
+    "discover_nero_hand2_dofs",
     "load_fr3_model_profile",
     "load_hand2_model_profile",
+    "load_nero_dual_tabletop_qualification_profile",
     "principal_axes_joint_frame_quaternion",
     "quaternion_wxyz_to_d6_rpy_degrees",
     "set_rotation_mount_target_quaternion",

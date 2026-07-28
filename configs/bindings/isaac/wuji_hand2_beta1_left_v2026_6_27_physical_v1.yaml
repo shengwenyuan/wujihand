@@ -1,0 +1,49 @@
+schema: wujihand.backend_binding.v1
+binding_id: wuji_hand2_beta1_left_isaac_v2026_6_27_physical
+asset_id: wuji_hand2_beta1_left
+asset_revision: beta1
+asset_side: left
+backend: isaac
+loader: usd
+artifact:
+  source: wuji-description
+  source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
+  path: hand2_beta/body/usd/left/wujihand.usd
+resource_trees:
+  - source: wuji-description
+    source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
+    path: hand2_beta/body/usd/left
+  - source: wuji-description
+    source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
+    path: hand2_beta/body/meshes/left
+root: l_base_link
+namespace_policy: prefix
+frame_map:
+  hand_base: l_base_link
+  hand2_left_neutral: l_base_link
+group_bindings:
+  - group_id: finger_joints
+    joints:
+      - l_thumb_cmc_flex
+      - l_thumb_cmc_abd
+      - l_thumb_mcp
+      - l_thumb_ip
+      - l_index_finger_mcp_flex
+      - l_index_finger_mcp_abd
+      - l_index_finger_pip
+      - l_index_finger_dip
+      - l_middle_finger_mcp_flex
+      - l_middle_finger_mcp_abd
+      - l_middle_finger_pip
+      - l_middle_finger_dip
+      - l_ring_finger_mcp_flex
+      - l_ring_finger_mcp_abd
+      - l_ring_finger_pip
+      - l_ring_finger_dip
+      - l_pinky_mcp_flex
+      - l_pinky_mcp_abd
+      - l_pinky_pip
+      - l_pinky_dip
+    actuators: []
+builder: null
+compatibility_profile: null

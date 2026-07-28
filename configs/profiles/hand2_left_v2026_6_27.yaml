@@ -1,0 +1,38 @@
+schema_version: 1
+product: wuji_hand_2_beta_1
+side: left
+units:
+  position: rad
+  velocity: rad_s
+derived_from:
+  repository: https://github.com/wuji-technology/wuji-description.git
+  tag: v2026.6.27
+  commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
+  urdf: hand2_beta/body/urdf/left.urdf
+  urdf_sha256: d93de699b5bbe0a573ea9725ebb7e6ad6547b6ed3593f7f5591664ee220648f0
+  usd: hand2_beta/body/usd/left/wujihand.usd
+  usd_sha256: 646287f10ac0a2097bf602facc02c9af17f0f1cf8982c38037f69bb695492eca
+joint_order_semantics: wuji_hand2_firmware_order_thumb_to_pinky_v1
+rest_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+joints:
+  - {name: l_thumb_cmc_flex, lower: -1.187, upper: 1.291, velocity: 8.587}
+  - {name: l_thumb_cmc_abd, lower: -1.484, upper: 0.698, velocity: 11.1}
+  - {name: l_thumb_mcp, lower: -1.047, upper: 1.570, velocity: 12.86}
+  - {name: l_thumb_ip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: l_index_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: l_index_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: l_index_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: l_index_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: l_middle_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: l_middle_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: l_middle_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: l_middle_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: l_ring_finger_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: l_ring_finger_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: l_ring_finger_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: l_ring_finger_dip, lower: -1.047, upper: 1.570, velocity: 13.5}
+  - {name: l_pinky_mcp_flex, lower: -1.047, upper: 1.570, velocity: 8.203}
+  - {name: l_pinky_mcp_abd, lower: -0.698, upper: 0.698, velocity: 8.11}
+  - {name: l_pinky_pip, lower: -1.047, upper: 2.094, velocity: 12.86}
+  - {name: l_pinky_dip, lower: -1.047, upper: 1.570, velocity: 13.5}

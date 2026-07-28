@@ -7,28 +7,49 @@ import numpy as np
 import pytest
 
 from wujihand.adapters.simulation import load_hand2_model_profile
-from wujihand.domain import HAND2_RIGHT_LAYOUT
+from wujihand.domain import HAND2_LEFT_LAYOUT, HAND2_RIGHT_LAYOUT, JointLayout
 
 
 ROOT = Path(__file__).parents[2]
 PROFILE = ROOT / "configs/profiles/hand2_right_v2026_6_27.yaml"
 URDF = ROOT / "third_party/src/wuji-description/hand2_beta/body/urdf/right.urdf"
+LEFT_PROFILE = ROOT / "configs/profiles/hand2_left_v2026_6_27.yaml"
+LEFT_URDF = ROOT / "third_party/src/wuji-description/hand2_beta/body/urdf/left.urdf"
 
 
-def test_profile_matches_pinned_domain_contract() -> None:
-    profile = load_hand2_model_profile(PROFILE)
-    assert profile.layout == HAND2_RIGHT_LAYOUT
+@pytest.mark.parametrize(
+    ("profile_path", "side", "expected_layout"),
+    [
+        (LEFT_PROFILE, "left", HAND2_LEFT_LAYOUT),
+        (PROFILE, "right", HAND2_RIGHT_LAYOUT),
+    ],
+)
+def test_profile_matches_pinned_domain_contract(
+    profile_path: Path,
+    side: str,
+    expected_layout: JointLayout,
+) -> None:
+    profile = load_hand2_model_profile(profile_path)
+    assert profile.side == side
+    assert profile.layout == expected_layout
     assert profile.layout.size == 20
     assert profile.provenance["tag"] == "v2026.6.27"
 
 
 @pytest.mark.requires_upstream_asset
-def test_profile_matches_pinned_urdf_joint_order_and_limits() -> None:
-    if not URDF.is_file():
+@pytest.mark.parametrize(
+    ("profile_path", "urdf_path"),
+    [(LEFT_PROFILE, LEFT_URDF), (PROFILE, URDF)],
+)
+def test_profile_matches_pinned_urdf_joint_order_and_limits(
+    profile_path: Path,
+    urdf_path: Path,
+) -> None:
+    if not urdf_path.is_file():
         pytest.skip("restore wuji-description from third_party/sources.lock.yaml")
 
-    profile = load_hand2_model_profile(PROFILE)
-    root = ET.parse(URDF).getroot()
+    profile = load_hand2_model_profile(profile_path)
+    root = ET.parse(urdf_path).getroot()
     joints = [joint for joint in root.findall("joint") if joint.attrib["type"] != "fixed"]
     assert [joint.attrib["name"] for joint in joints] == list(profile.layout.names)
     np.testing.assert_allclose(

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402  # Isaac modules must be imported after SimulationApp starts.
-"""Run a supervised Wuji Hand 2 table scene in native Isaac Sim 5.1.
+"""Run a supervised Wuji Hand 2 table scene in a resolved Isaac Sim Session.
 
 The scene accepts either loopback UDP teleoperation or a bounded scripted command.
 Isaac Lab is not required. Validation artifacts are generated only when explicitly
@@ -109,6 +109,7 @@ from isaacsim.core.api.objects import FixedCuboid
 from isaacsim.core.prims import Articulation
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.utils.viewports import set_camera_view
+from isaacsim.core.version import get_version as get_isaac_sim_version
 from wujihand.adapters.simulation import load_hand2_model_profile
 from wujihand.adapters.transport import UdpJointCommandReceiver
 from wujihand.application.supervision import JointCommandSupervisor
@@ -349,7 +350,7 @@ def main() -> int:
     if not captured or not screenshot.is_file():
         raise RuntimeError("Isaac viewport capture did not complete")
     report = {
-        "isaac_sim": "5.1.0",
+        "isaac_sim": get_isaac_sim_version()[0],
         "session": SESSION_RUNTIME.resolved.session.session_id,
         "session_hash": SESSION_RUNTIME.resolved.session_hash,
         "asset": str(ARGS.asset.resolve()),

@@ -1,0 +1,95 @@
+schema: wujihand.nero_joint_profile.v1
+profile_id: agilex_nero_q7_provisional_v1
+product: agilex_nero
+status: provisional_simulation_pending_device_readback
+layout_id: agilex_nero_q7_v1
+units:
+  position: rad
+  velocity: rad_s
+frames:
+  base: base_link
+  tool_flange: link7
+home_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+limit_policy:
+  position: pinned_urdf_with_sdk_cross_check
+  velocity: manual_max_below_urdf_max
+  unresolved: manual_j2_zero_and_range_differs_from_urdf_sdk
+  hardware_gate: read_back_both_devices_before_real_motion
+provenance:
+  urdf:
+    repository: https://github.com/agilexrobotics/agx_arm_urdf.git
+    commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    path: nero/urdf/nero_description.urdf
+    sha256: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
+    license: MIT
+  sdk:
+    repository: https://github.com/agilexrobotics/pyAgxArm.git
+    commit: cc498c00af0bcb9e297943e94f4792c0e3ee5b2c
+    path: pyAgxArm/api/constants.py
+    sha256: aa43cd6543a526ddb8b74ee15b4aa4bce6d7741fc23508cd5b73036c30e0ff0b
+    license: LGPL-3.0-only
+  ros2:
+    repository: https://github.com/agilexrobotics/agx_arm_ros.git
+    commit: 91e6b2e5eb2d9880e85230d0add9945e27387d87
+    urdf_submodule_commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    flange_frame: link7
+    tcp_frame: tcp_link
+  manual:
+    title: NERO用户手册
+    version: V1.0.0
+    source_url: https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/air57k7k3nhgeuxb
+    original_sha256: d461e999534d33940110989c35303727b98eafb1391bbb32aa0b2ec8fd597053
+    sections:
+      - 1.2 性能参数
+      - 3.3 机械臂DH参数说明
+      - 6.8.1关节限制设置
+joints:
+  - name: joint1
+    child_link: link1
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -2.70526
+    upper: 2.70526
+    velocity: 3.141592653589793
+    urdf_velocity: 5.0
+  - name: joint2
+    child_link: link2
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -1.74
+    upper: 1.74
+    velocity: 3.141592653589793
+    urdf_velocity: 5.0
+  - name: joint3
+    child_link: link3
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -2.75
+    upper: 2.75
+    velocity: 3.141592653589793
+    urdf_velocity: 5.0
+  - name: joint4
+    child_link: link4
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -1.01
+    upper: 2.14
+    velocity: 3.9269908169872414
+    urdf_velocity: 5.0
+  - name: joint5
+    child_link: link5
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -2.75
+    upper: 2.75
+    velocity: 3.9269908169872414
+    urdf_velocity: 5.0
+  - name: joint6
+    child_link: link6
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -0.73
+    upper: 0.95
+    velocity: 3.9269908169872414
+    urdf_velocity: 5.0
+  - name: joint7
+    child_link: link7
+    axis_xyz: [0.0, 0.0, 1.0]
+    lower: -1.5707963
+    upper: 1.5707963
+    velocity: 3.9269908169872414
+    urdf_velocity: 5.0

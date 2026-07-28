@@ -1,0 +1,17 @@
+# Isaac/Lula kinematics descriptor for the source-locked NERO URDF.
+# This file is a simulation adapter profile, not a real-machine limit source.
+api_version: 1.0
+cspace:
+  - joint1
+  - joint2
+  - joint3
+  - joint4
+  - joint5
+  - joint6
+  - joint7
+root_link: base_link
+default_q: [0.1745329252, -1.0471975512, 0.0, -0.5235987756, -1.5707963268, 0.0, 0.0]
+acceleration_limits: [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0]
+jerk_limits: [30.0, 30.0, 30.0, 30.0, 30.0, 30.0, 30.0]
+cspace_to_urdf_rules: []
+collision_spheres: []

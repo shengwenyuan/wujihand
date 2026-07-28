@@ -1,0 +1,37 @@
+schema: wujihand.nero_dual_tabletop_qualification.v1
+profile_id: isaac_nero_dual_tabletop_qualification_v1
+status: simulation_nominal_pending_measured_workcell
+units:
+  position: rad
+initial_arm_positions:
+  - instance_id: nero_left
+    group_id: arm_joints
+    layout_id: agilex_nero_q7_v1
+    q7_rad: [-0.1745329252, -1.0471975512, 0.0, -0.5235987756, -1.5707963268, 0.0, 0.0]
+  - instance_id: nero_right
+    group_id: arm_joints
+    layout_id: agilex_nero_q7_v1
+    q7_rad: [0.1745329252, -1.0471975512, 0.0, -0.5235987756, -1.5707963268, 0.0, 0.0]
+geometry_contract:
+  base_port_axis_local_xyz: [-1.0, 0.0, 0.0]
+  table_outward_axis_world_xyz: [0.0, -1.0, 0.0]
+  hand_longitudinal_axis_local_xyz: [0.0, 0.0, 1.0]
+  hand_palm_normal_axis_local_xyz: [1.0, 0.0, 0.0]
+  flange_forearm_axis_local_xyz: [1.0, 0.0, 0.0]
+  table_inward_axis_world_xyz: [0.0, 1.0, 0.0]
+  table_down_axis_world_xyz: [0.0, 0.0, -1.0]
+thresholds:
+  attachment_axis_min_dot: 0.999
+  base_port_outward_min_dot: 0.999
+  hand_world_inward_min_dot: 0.90
+  hand_world_vertical_abs_max: 0.10
+  hand_palm_down_min_dot: 0.99
+  initial_q7_max_error_rad: 0.08
+arm_drive_gains:
+  stiffness: 3000.0
+  damping: 150.0
+assumptions:
+  - base_local_negative_x_port_axis_inferred_from_pinned_mesh_pending_physical_confirmation
+  - tabletop_q7_is_simulation_nominal_not_a_hardware_safe_pose
+  - arm_drive_gains_are_isaac_qualification_values_not_hardware_controller_facts
+  - measured_mounts_and_adapter_cad_remain_required_before_physical_correspondence
