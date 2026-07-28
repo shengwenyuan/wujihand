@@ -99,7 +99,8 @@ Session 是每个进程的 composition root，不是新的 launch graph 或消�
   并引用 typed compatibility profile。
 - `configs/workcells/isaac_nero_dual_hand2_simulation_nominal_v1.yaml` 直接声明 NV-2
   bring-up 桌面、table top、两台位于同一近侧桌沿的 NERO mount，以及斜视/俯视
-  camera frame。Assembly 单独拥有 `link7 → hand_base` 的 `Ry(+90°)`；Session runtime
+  camera frame。NERO Binding compatibility profile 拥有 J7/法兰 frame correction，
+  Assembly 单独拥有 identity `link7 → hand_base` 直连关系；Session runtime
   唯一引用 typed tabletop qualification profile，保存左右分侧 q7 初态、Isaac-only
   q7 drive gain 和几何阈值。文件名与 assumptions 明确这些值不是现场测量或真机
   controller 参数；它可用于功能仿真，不能形成真实 clearance、精度或安全包络结论。
@@ -246,11 +247,13 @@ Isaac authored-stage、PhysX 和真人输入回归不能由普通 fast suite 代
 场景仍有其固定 Isaac 环境；NV-2 dual q27 以 Isaac Sim 6.0.1 单独做阶段验证。真人
 MediaPipe 需要相机/模型，真人 Glove 需要实际设备、Wuji SDK、side/serial 与有效
 calibration。缺少对应环境时必须记录为“未执行”，不能由 fake SDK 或 fixture 替代。
-当前 NV-2 tabletop v6 已通过 84/84：保留 scripted physical v2 的双侧 q7、
+历史 NV-2 tabletop v6 已通过 84/84：保留 scripted physical v2 的双侧 q7、
 五指/组合手型、隔离、reset/topology/recovery 与 bounded rest settling，并增加
 分侧 q7 初态、手—法兰轴、`link4 → link5` 小臂近水平、桌内方向、掌面朝下和
 端口假设轴朝外检查；这不包括
-deliberate contact/unknown penetration。端口轴由固定 mesh 推断，仍待实物确认。
+deliberate contact/unknown penetration。J7/Assembly 定义随后发生修订，因此 v6
+只作为历史证据；新定义已通过本地 contract，目标机 Isaac 回归待执行。端口轴由
+固定 mesh 推断，仍待实物确认。
 真实 Glove live 尚未执行，等待专用网口
 `enx6c1ff7cd0e76` 临时配置 `192.168.1.10/24`。
 因此五层与 scripted physical 子 Gate 的成功不等于完整 NV-2 完成；NV-2 状态仍为

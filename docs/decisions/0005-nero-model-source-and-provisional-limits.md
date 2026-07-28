@@ -59,10 +59,21 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
 10. qualification profile 的 Isaac-only q7 drive gain 采用
     `stiffness=6000`、`damping=212.13203435596427`，用于抵消组合 Hand 2 重力负载下
     约一度的静态下垂并满足 `|forearm_axis.z| <= 0.02`。该数值不是硬件控制器参数。
-11. 本轮不修改 J7 初值、J7 限位、来源 URDF 或
-    `link7 → hand_base Ry(+90°)` Assembly。现有截图能说明视觉装配方向尚待核对，
-    但不足以区分 NERO `link7`、Hand 2 base、转接件或零位定义中的哪一项有误，
-    因而不把它定性为 URDF 缺陷。
+11. 项目负责人确认当前 `J7=0` 时 Hand 2 相对机械臂的世界位姿正确、没有直角转接
+    结构，并接受“Assembly 不应拥有 `+90°`”的边界。固定来源 URDF/USD 继续只读；
+    NERO Isaac Binding 引用
+    `agilex_nero_7f_flange_frame_correction_v1`，把原来 Assembly 的
+    `Ry(+90°)` 后乘到 J7 origin/`link7` 法兰机械帧。修正后的 J7 origin 为
+    `quat_wxyz=[0.5, 0.5, 0.5, 0.5]`，等价 RPY 为
+    `[π/2, 0, π/2]`。
+12. Assembly 的左右 `link7 → hand_base` 均改为零平移、单位四元数。按
+    `old_link7_world × Ry(+90°) = corrected_link7_world × I`，`J7=0` 时已确认正确的
+    Hand 2 世界位姿保持不变；法兰圆柱、J7 轴和 Hand 2 则共享同一修正坐标。
+    Tracker 使用的 Lula URDF 从固定来源生成同一 J7 修正，不允许 Isaac 与 IK 使用
+    两套末端定义。
+13. attachment Gate 同时验证法兰法向、孔位 clocking 轴与连接原点，不再用
+    `link7 +X` 伪装“法兰轴”的单点积通过。该修正仅批准用于当前二维码标识的 NERO
+    7F 仿真；真机运动前仍需只读核对 J7 轴、零位和符号。
 
 ## 结果
 
@@ -73,15 +84,15 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   真机型号、零位或限位验证。
 - 通用 q7 profile 与 tabletop qualification 姿态分离；后者不会污染可复用的机械臂
   模型事实。
-- Hand 2 到 `link7` 的变换仍是独立的 `simulation_nominal` Assembly attachment
-  assumption，不由本 ADR 推断为真实机械适配关系。
+- J7/法兰固定修正归 Backend Binding，Hand 2 直连关系归 Assembly；Assembly 不再
+  表达一个不存在的直角转接结构。
 - tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过；左右
   `link4 → link5` 竖直分量绝对值分别为 `0.01807` 与 `0.01775`。该结果只证明
-  当前组合仿真的准备位和 drive qualification，不证明实物法兰拼接方向。
-- 在决定 J7/attachment 边界前，需要新增三类材料：二维码对应 NERO 末端法兰的
-  已知 q7/零位近景与螺孔 clocking、两台设备 J7 零位/符号/限位只读回读，以及
-  NERO—Hand 2 转接件 CAD/STEP 或带尺寸装配图。若该核对流程后续跨机型复用，再将
-  其固化为 skill 或只读 MCP；本次一次性证据请求不单独扩建工具。
+  修正前历史组合的准备位和 drive qualification，不是新法兰定义的回归证据。
+- 新定义已通过本地 schema、URDF materialization、五层 Session 和全仓测试；当前
+  Workstation2 不可访问，Isaac tabletop v7、截图和 Tracker rotation 回归仍待执行。
+- 物理对应仍需要两台设备 J7 轴/零位/符号只读回读，以及可明确螺孔 clocking 的
+  末端近景或接口图；不再假设存在直角转接件，也不把缺失 CAD 写成当前实现阻塞项。
 
 ## 依据
 
@@ -97,6 +108,8 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   - “6.8.1 关节限制设置”
   - Source URL：
     [https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/air57k7k3nhgeuxb](https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/air57k7k3nhgeuxb)
+  - 其中“3.3 机械臂DH参数说明”的 J7 行记录 `alpha=90°`、`d=0.0235 m`；
+    该项只作为来源几何交叉核对，不单独证明本 Binding 修正适用于真机。
 - 松灵机器人，《Nero-7轴机械臂使用资料》，“结构模型”“二次开发链接”：
   [https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/hf8x32y0tevqyi3g](https://agilexsupport.yuque.com/staff-hso6mo/alxgtf/hf8x32y0tevqyi3g)
 - AgileX，固定版本

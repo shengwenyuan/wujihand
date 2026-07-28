@@ -151,11 +151,11 @@
   Python 3.12 的固定 Hand 2 Session 最小兼容证据。
 - NV-1 已建立 VIVE input adapter；NV-2 已建立 NERO/Hand 2 Asset 与 Binding、固定导入
   recipe、双根 Assembly、`simulation_nominal` Workcell、Session v1、canonical
-  Glove/retarget/supervision 链和双 q27 runner。当前 tabletop v6 已通过 84/84，
+  Glove/retarget/supervision 链和双 q27 runner。历史 tabletop v6 已通过 84/84，
   覆盖原 68 项 scripted physical Gate，以及桌沿安装、左右分侧 q7 准备位、手—法兰
   轴对齐、`link4 → link5` 小臂近水平、掌面向下和端口假设轴朝外；仍需关闭实际 Glove live、deliberate
   contact/异常穿透近景资格、合并 q27 self-collision 最终决策，以及后续 measured
-  Workcell/attachment。
+  Workcell/attachment。J7/Assembly 新定义已完成本地 contract，目标机回归待执行。
 - 当前仍没有 ROS 2 package、真机 robot adapter、通用 recorder、延迟分解或独立
   精度评估。
 
@@ -613,16 +613,19 @@ observation 与 Hand 2 retargeting 驱动。
   表示，不再等待 visual-only 资产。
 - 双根 Assembly、nominal Workcell、Session v1 四个 logical route、canonical Glove
   observation/HandIntent 契约、supervision composition 及 q27 simulation adapter 已建立。
-- Workstation2 / Isaac Sim 6.0.1 上的 tabletop v6 已通过 84/84：保留 scripted
+- Workstation2 / Isaac Sim 6.0.1 上的历史 tabletop v6 已通过 84/84：保留 scripted
   physical v2 的左右 q7、双侧五指/组合手型、隔离、finite/limits、reset/recovery
   68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、手—法兰轴对齐、
   `link4 → link5` 小臂近水平、手向桌内、掌面向下和端口假设轴朝外等 Gate。
-- Assembly 将左右 `link7 → hand_base` 固定为 local `Ry(+90°)`；Workcell 将两底座
-  放到同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为 `+90°`。Session 引用的 typed
+- 项目负责人确认当前 Hand 2 世界位姿正确、没有直角转接结构。NERO Binding profile
+  将旧 Assembly `Ry(+90°)` 迁移为 source-locked J7/法兰 frame correction；Isaac
+  live stage 与 Tracker Lula URDF 共用该 profile，Assembly 改为 identity。
+  Workcell 将两底座放到同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为 `+90°`。
+  Session 引用的 typed
   qualification profile 保存左右 q7
   `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]` 及 Isaac-only q7 drive gain
   `stiffness=6000, damping=212.13203435596427`，没有修改通用 NERO profile 的全零机械初态或固定
-  来源 USD。
+  来源 URDF/USD。
 - v6 运行测得左右 `link4 → link5` 小臂轴竖直分量绝对值为
   `0.01807/0.01775`，左右手纵轴朝桌内点积约 `0.98372/0.98381`、竖直分量
   绝对值约 `0.05803/0.05608`、掌面朝下点积约 `0.99830/0.99840`。端口轴
@@ -634,11 +637,11 @@ observation 与 Hand 2 retargeting 驱动。
 - Wuji SDK 2026.7.21 已在 Python 3.12 环境验证左右 `21×3 → q20` 求解；专用网口
   `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，live Glove→Isaac Gate 仍待 SDK
   discovery、identity 记录与现场执行。
-- 正式实物 mount 仍等待法兰/适配器 CAD 和现场测量；NV-2 使用显式
-  `simulation_nominal` transform 完成仿真 Gate，不把该值声明为真机事实。
-- 本轮不修改 J7 初值/限位、来源 URDF 或 Assembly `Ry(+90°)`。截图只能确认末端
-  视觉边界需要对齐，尚不能区分 URDF、J7 零位、Hand 2 base 与 adapter transform；
-  在取得法兰螺孔 clocking、J7 只读回读和转接件 CAD/STEP 前保持该项冻结。
+- 当前法兰修正已通过本地 profile、URDF materialization、五层 Session 和全仓测试；
+  目标台式机暂不可访问，因此新定义的 Isaac tabletop v7、截图和 Tracker rotation
+  回归仍待执行，历史 v6 不得冒充新定义的运行证据。
+- 真机对应仍需法兰螺孔 clocking 近景/接口图和两台设备 J7 轴、零位、符号只读回读；
+  不要求本轮提供不存在的直角转接件 CAD。
 
 **本阶段冻结的两点架构决策**
 
@@ -660,13 +663,14 @@ observation 与 Hand 2 retargeting 驱动。
    保守子集，建立 canonical NERO q7 layout/profile。
 4. 新增 NERO Asset、Isaac Binding；同一 Asset 复用为左右两个实例。
 5. 新增 Hand 2 left Asset/Binding，并复用现有 right Asset/Binding。
-6. 建立双根 Assembly：左右 NERO 为 root，对应完整物理 Hand 2 为 child；锁定
-   `simulation_nominal` flange attachment `Ry(+90°)` 并验证 side/frame。Isaac adapter 在
-   初始化前将每个 NERO+Hand 2 组合为一棵 q27 articulation，且不修改来源 USD。
+6. 建立双根 Assembly：左右 NERO 为 root，对应完整物理 Hand 2 为 child；Assembly
+   使用 identity 直连。NERO Binding profile 统一修正 J7/法兰 frame，Isaac stage 与
+   Lula IK 使用同一修正；adapter 在初始化前将每个 NERO+Hand 2 组合为一棵 q27
+   articulation，且不修改来源 URDF/USD。
 7. NV-2 功能仿真使用明确标记的 `simulation_nominal` Workcell/mount；它可关闭
    软件装配与运动 Gate，但不得升级为现场机械事实。当前 nominal mount 位于同一
-   桌沿并使 mesh 推断的端口轴朝外；精确 Workcell revision 留待法兰 CAD、实物端口
-   朝向确认和现场测量后替换。
+   桌沿并使 mesh 推断的端口轴朝外；精确 Workcell revision 留待实物端口朝向确认和
+   现场测量后替换。
 8. 为所有 backend symbol 应用稳定 namespace，避免两套 `joint1`/`base_link` 冲突。
 9. 在 Session v1 中建立四条显式 command route：左右 NERO q7、左右 Hand 2 q20；
    resolver 必须验证 Asset/Binding/layout/backend/source lock 闭合。左右不同的桌面
@@ -697,16 +701,19 @@ observation 与 Hand 2 retargeting 驱动。
 
 - Session 恰好解析四个显式 control group：`2 × q7` NERO 与 `2 × q20` Hand 2，
   共 54 logical DoF；左右命名、layout 和 command route 无碰撞。历史 scripted
-  physical v2 已通过，当前 tabletop v6 已完整继承并重验。
+  physical v2 已通过；tabletop v6 曾完整继承并重验，但在 J7/Assembly 定义变化后
+  已转为历史证据，当前 Gate 等待 tabletop v7。
 - Isaac stage 恰好形成两棵 q27 articulation；Hand 2 world root 不再生效，
   FixedJoint body targets 正确，且每侧 q7/q20 分区完整、互斥。命令后 reset 已重验
   两棵 q27 与稳定分区。
 - 两只 Hand 2 可见、侧别正确、随对应法兰运动；20 个主动关节、drive、collision、
   rigid body 与 articulation 在 Isaac 6.0.1 中可解释。
-- 两臂可分别执行小幅 scripted q7，另一臂不受影响。tabletop v6 已通过。
+- 两臂可分别执行小幅 scripted q7，另一臂不受影响。历史 tabletop v6 已通过；
+  corrected flange 定义待目标机重验。
 - 左右 q20 fixture 可分别完成逐指/手型小幅运动，另一只手与两臂 q7 不受影响；
   feedback finite 且在 Hand 2 canonical limits 内。历史 scripted physical v2 已覆盖
-  双侧五指、双侧组合手型和 post-reset recovery，当前 tabletop v6 已完整继承并重验。
+  双侧五指、双侧组合手型和 post-reset recovery；tabletop v6 已历史重验，新法兰
+  定义待 tabletop v7。
 - 可用 Wuji Glove 的 `hand_skeleton` live 流至少完成一侧
   `Glove → canonical 21×3 → Hand2 retarget q20 → Isaac` 自由空间 smoke；
   另一侧路径用相同 contract/fixture 验证。若现场有双侧 Glove，则补双侧 live smoke。
@@ -715,11 +722,12 @@ observation 与 Hand 2 retargeting 驱动。
   无硬件 controller/composition 测试已证明这些输入不会创建新的 input-derived
   `HandIntent`；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回
   rest。真人 live failure injection 随 live Gate 补验。
-- 全部 feedback finite 且在批准后的 canonical limits 内。tabletop v6 已通过。
+- 全部 feedback finite 且在批准后的 canonical limits 内。历史 tabletop v6 已通过，
+  新法兰定义待目标机重验。
 - 两底座位于同一桌沿，左右 Hand 2 主轴与 `link7` 法兰轴对齐、指向桌内且掌面朝下；
   `link4 → link5` 小臂近水平，显式 q7 初态与 reset 后反馈分别满足 qualification
-  threshold。tabletop v6 的 84/84 已通过；端口物理侧别与末端实物拼接仍需项目负责人
-  结合新材料确认。
+  threshold。历史 tabletop v6 的 84/84 已通过；新定义新增法向、clocking 和原点
+  三类 attachment Gate，待目标机 tabletop v7。
 - nominal 工作台的固定外部 collider 存在，初始状态、各 scripted baseline 与 reset 后
   均有界静置收敛；该部分已通过。deliberate contact/unknown penetration 与近景人工
   检查尚未执行。最终结果只关闭功能仿真 Gate，不形成现场 clearance 或物理精度结论。
@@ -727,8 +735,8 @@ observation 与 Hand 2 retargeting 驱动。
 
 **材料与工具评审**
 
-优先请求：二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景、两台
-设备 J7 零位/符号/限位只读回读、NERO—Hand 2 转接件 CAD/STEP 或带尺寸装配图、
+优先请求：二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景/接口图、两台
+设备 J7 轴/零位/符号/限位只读回读、
 底座端口方向照片/图纸、精确底座/工作台测量、固件限位表、左右
 Hand 2 装配示意、Glove side/序列号、Wuji SDK 版本和有效标定产物。若 NERO 多源核对
 将长期重复，评估 `lookup-nero-docs` skill；若 Glove 接入/标定/fixture 流程会在后续

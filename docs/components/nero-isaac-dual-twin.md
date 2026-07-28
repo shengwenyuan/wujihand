@@ -1,12 +1,11 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
-状态：**PARTIAL / 部分完成（NV-2 五层组合与 tabletop v6 84/84 已通过；live Glove、
-deliberate contact/penetration、self-collision 最终 Gate 与 measured
-Workcell/attachment 未闭合，2026-07-28）**。
+状态：**PARTIAL / 部分完成（J7/法兰统一修正已完成本地验证；历史 tabletop v6
+84/84；新定义的 Workstation2 Isaac 回归因目标机暂不可访问而待执行，2026-07-28）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
-目标机上的 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。当前
-tabletop v6 的 84 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/
+目标机上的历史 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。
+tabletop v6 的 84 项历史检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/
 组合手型、隔离、finite/limits、reset/topology/recovery 检查，并增加 tabletop
 attachment、同侧桌沿 mount、左右准备位、手部朝向及左右小臂近水平的 16 项资格检查。
 结果不包含真实 NERO 或 Hand 2 运动，也不把 nominal 装配、端口轴假设和工作台数值
@@ -21,7 +20,7 @@ NV-2 尚不能标记为完整完成：
 - 合并 q27 articulation 的最终 self-collision policy 仍待项目负责人确认；
 - fixed external collider 与 bounded rest settling 已通过，但 deliberate
   contact/unknown penetration 场景和近景视觉资格尚未执行；
-- 正式法兰/转接件 CAD、桌面和底座 mount 仍待 measured revision。
+- 设备 J7 frame、法兰孔位 clocking、桌面和底座 mount 仍待 measured revision。
 
 ## 能力与边界
 
@@ -32,7 +31,8 @@ NV-2 尚不能标记为完整完成：
 | 五层组合 | 已建立 | 4 个资产实例、2 个 Assembly root、nominal Workcell、Session v1 |
 | 逻辑命令 | 已建立 | 左/右 NERO q7 + 左/右 Hand 2 q20，4 个显式 route、54 logical DoF |
 | Isaac 物理拓扑 | 已验证 | 左右各一棵 q27 articulation，共 2 棵 |
-| tabletop v6 | 已通过 | 84/84：保留 scripted physical v2 的 68 项，并增加 attachment、mount、q7 准备位、手部朝向和小臂近水平 Gate |
+| tabletop v6 | 历史通过 | 84/84：旧 attachment 定义的回归基线 |
+| corrected flange tabletop v7 | 待执行 | 本地 contract 通过；目标机暂不可访问，预计 88 项 |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 与近景待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
 | 真实 Glove live 路径 | 未执行 | 专用 NIC 已配置；待 SDK discovery/identity，尚未取得 live `hand_skeleton` |
@@ -68,7 +68,9 @@ Asset Manifest
 ### Backend Binding
 
 - NERO Binding 固定到 Isaac Sim 6.0.1 的派生 USD，并显式映射
-  `base_link`、`link4`、`link5`、`link7` 和 `joint1..joint7`。
+  `base_link`、`link4`、`link5`、`link7` 和 `joint1..joint7`。Binding 的
+  compatibility profile 拥有 source-locked J7/法兰坐标修正；live Isaac stage 与
+  Tracker Lula URDF 必须消费同一 profile。
 - 左右 Hand 2 Binding 直接引用 `wuji-description v2026.6.27` 的完整物理 USD，
   分别映射 20 个 canonical finger joint。
 - 不生成 visual-only 派生资产；不以省略 q20 route 的方式伪造“不可控手”。
@@ -83,17 +85,16 @@ nero_left  (root) -> link7 -> hand_left  (physical q20 child)
 nero_right (root) -> link7 -> hand_right (physical q20 child)
 ```
 
-当前左右 `link7 → hand_base` attachment 都使用 local `Ry(+90°)`：
+当前左右 `link7 → hand_base` attachment 是直接装配：
 
 ```text
 position_m = [0, 0, 0]
-quat_wxyz = [0.70710678, 0, 0.70710678, 0]
+quat_wxyz = [1, 0, 0, 0]
 ```
 
-该 transform 显式标记为
-`simulation_nominal_pitch_plus_90_pending_adapter_cad_measurement`，用于使 Hand 2
-纵轴与小臂轴对齐。它只服务功能仿真，不表示真实 NERO 法兰已安装 Hand 2，也不替代
-转接件 CAD 或物理测量。
+此前位于 Assembly 的 local `Ry(+90°)` 已迁移到 NERO Binding 的 J7/法兰机械帧。
+因此 `J7=0` 时 Hand 2 已确认的世界位姿保持不变，但 Assembly 不再描述不存在的
+直角转接结构。物理对应仍待设备 J7 轴、零位、符号和螺孔 clocking 只读核对。
 
 ### Workcell
 
@@ -135,20 +136,24 @@ contract；它是 NV-2 scripted/fixture 仿真的唯一 composition root。Sessi
 同一 profile 将 NERO q7 Isaac drive gain 设为 `stiffness=6000`、
 `damping=212.13203435596427`，并把 Asset/Binding 解析出的 `link4 → link5`
 世界轴竖直分量限制为 `<=0.02`。这些是 Isaac-only qualification 数值，不修改通用
-NERO profile、固定来源 USD 或硬件控制器事实。J7 初值仍为 `0°`；J7 限位、来源
-URDF 和 Assembly attachment 均未因本次准备位调整而改变。
+NERO profile、固定来源 URDF/USD 或硬件控制器事实。J7 初值仍为 `0°`，J7 限位
+不变；Binding overlay 将 J7 origin 从来源
+`[0.70710678, 0.70710678, 0, 0]` 修正为 `[0.5, 0.5, 0.5, 0.5]`。生成的 Lula
+URDF 使用同一修正，Assembly 则保持 identity。
 
 ## 两棵 q27 物理 articulation
 
 五层中的四个 logical control group 不等于四棵 Isaac articulation。
 `src/wujihand/adapters/simulation/nero_hand2_twin.py` 在 PhysX 初始化前为每一侧：
 
-1. 从已解析 Assembly 读取 `link7 → hand_base` transform；
-2. 把 Hand 2 base 放到目标法兰位姿，避免约束建立时产生 snap impulse；
-3. 禁用 Hand 2 USD 原有的 world-fixed `root_joint`；
-4. 从该 prim 移除 `ArticulationRootAPI`；
-5. author `NERO link7 → Hand 2 base` FixedJoint；
-6. 按 joint name 和 USD joint path 核对 q7/q20 分区。
+1. 从 NERO Binding profile 对 live stage 的 J7 joint frame 与 `link7` 施加同一
+   source-locked 修正；
+2. 从已解析 Assembly 读取 identity `link7 → hand_base` transform；
+3. 把 Hand 2 base 放到目标法兰位姿，避免约束建立时产生 snap impulse；
+4. 禁用 Hand 2 USD 原有的 world-fixed `root_joint`；
+5. 从该 prim 移除 `ArticulationRootAPI`；
+6. author `NERO link7 → Hand 2 base` FixedJoint；
+7. 按 joint name 和 USD joint path 核对 q7/q20 分区。
 
 固定上游 USD 保持只读；修改只存在于当前 live stage overlay。最终 stage 恰好有左右
 两个 articulation root，每个 articulation 为：
@@ -283,7 +288,7 @@ artifacts/validation/nv2/nero-dual-hand2-physical.png           # v1 历史截�
 目标机执行时对应路径前缀为
 `/home/lenovo/swy/wujihand/`。
 
-tabletop v6 报告的 84 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
+历史 tabletop v6 报告的 84 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
 q27 root、q7/q20 partition 稳定、左右 q7 回到 Session qualification profile
 指定准备位，并可在 reset 后恢复左中指 PIP 命令。固定工作台 collider
 `/World/Workcell/simulation_nominal_table` 存在；初始、每个 scripted hand baseline
@@ -315,7 +320,8 @@ SHA-256 分别是
 历史 scripted physical v2 的 68/68
 （报告 `5623b8552f54cfd186640a5b857179bca2b7cbd935f4d847451cf1912573b20f`，
 截图 `2366d024a8d26f85ca97fd2c79aa190a148270ac8e01be85592587a79e201a6a`）
-仍保留为前一版基线，但当前结论以 tabletop v6 为准；v1 文件只保留为更早历史基线。
+仍保留为前一版基线；v6 也已因 J7/Assembly 定义变化转为历史证据，当前结论等待
+corrected flange tabletop v7。v1 文件只保留为更早历史基线。
 
 ## 尚需关闭
 
@@ -330,11 +336,9 @@ SHA-256 分别是
 4. 执行 deliberate external contact/unknown penetration 场景、异常穿透量化和近景
    视觉检查；不得以当前 bounded rest settling 代替。
 5. 首次 live 后保存脱敏 canonical `hand_skeleton` replay 与对应 q20/rejection 记录。
-6. 后续取得二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景、J7
-   零位/符号/限位只读回读，以及 NERO—Hand 2 转接件 CAD/STEP 或带尺寸装配图，再
-   判断当前视觉差异来自 URDF、J7 零位、Hand 2 base 还是 adapter transform，并建立
-   measured Assembly / Workcell revision。该材料不阻塞当前 nominal 功能联调，
-   但在修改 J7/attachment 或进入真机阶段前必须闭合。
+6. 目标机恢复后先执行 corrected flange tabletop v7、近景截图和 Tracker
+   rotation/SE(3) 回归；进入真机阶段前再取得法兰螺孔 clocking 近景/接口图，以及
+   J7 轴、零位、符号和限位只读回读，形成 measured Binding / Assembly revision。
 
 ## 官方依据
 
