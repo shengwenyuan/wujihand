@@ -49,7 +49,9 @@ def test_specs_do_not_depend_on_runtime_adapters_or_external_sdks() -> None:
         "mujoco",
         "isaacsim",
         "omni",
+        "openvr",
         "pxr",
+        "rclpy",
         "wuji_sdk",
     )
 
@@ -78,6 +80,52 @@ def test_adapters_do_not_import_runtime() -> None:
     assert not {path: imports for path, imports in violations.items() if imports}
 
 
+def test_domain_ports_and_application_preserve_inward_dependency_direction() -> None:
+    forbidden_by_layer = {
+        "domain": (
+            "wujihand.specs",
+            "wujihand.ports",
+            "wujihand.application",
+            "wujihand.adapters",
+            "wujihand.runtime",
+        ),
+        "ports": (
+            "wujihand.specs",
+            "wujihand.application",
+            "wujihand.adapters",
+            "wujihand.runtime",
+        ),
+        "application": (
+            "wujihand.specs",
+            "wujihand.adapters",
+            "wujihand.runtime",
+        ),
+    }
+    external_sdks = (
+        "isaacsim",
+        "mujoco",
+        "omni",
+        "openvr",
+        "pxr",
+        "rclpy",
+        "wuji_sdk",
+    )
+
+    violations: dict[str, list[str]] = {}
+    for layer, forbidden_internal in forbidden_by_layer.items():
+        forbidden = (*forbidden_internal, *external_sdks)
+        for path in (SRC / layer).rglob("*.py"):
+            imports = sorted(
+                module
+                for module in _imports(path)
+                if module.startswith(forbidden)
+            )
+            if imports:
+                violations[path.relative_to(ROOT).as_posix()] = imports
+
+    assert not violations
+
+
 def test_compat_contracts_are_isolated_from_runtime_adapters_and_external_sdks() -> None:
     forbidden_prefixes = (
         "wujihand.runtime",
@@ -85,7 +133,9 @@ def test_compat_contracts_are_isolated_from_runtime_adapters_and_external_sdks()
         "mujoco",
         "isaacsim",
         "omni",
+        "openvr",
         "pxr",
+        "rclpy",
     )
     violations = {
         path.relative_to(ROOT).as_posix(): sorted(

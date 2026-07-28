@@ -17,8 +17,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import pyrealsense2 as rs
-from wuji_sdk import Handedness, RetargetSession
-from wuji_sdk.retargeting import HandModel
+from wuji_sdk import Handedness, HandModel, RetargetSession
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -16,7 +16,7 @@ derived_from:
   mjcf_sha256: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
   mjcf_asset_dir: hand2_beta/body/meshes/right
   mjcf_asset_tree_sha256: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
-joint_order_semantics: wuji_sdk_2026_7_2_retarget_firmware_order
+joint_order_semantics: wuji_hand2_firmware_order_thumb_to_pinky_v1
 rest_position: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 joints:

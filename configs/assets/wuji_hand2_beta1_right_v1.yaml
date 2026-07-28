@@ -4,7 +4,7 @@ revision: beta1
 kind: robot_hand
 product: wuji_hand_2
 side: right
-canonical_profile: null
+canonical_profile: configs/profiles/hand2_right_v2026_6_27.yaml
 frames:
   base: hand_base
   pose_command: hand2_right_neutral
@@ -14,5 +14,5 @@ control_groups:
     layout_id: wuji_hand2_right_firmware_v1
     dof_count: 20
     command_interface: position
-    joint_profile: null
+    joint_profile: configs/profiles/hand2_right_v2026_6_27.yaml
 provenance_source: third_party/sources.lock.yaml#wuji-description
