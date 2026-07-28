@@ -119,6 +119,11 @@ def parse_args() -> argparse.Namespace:
         help="Map relative Tracker orientation as a bounded link7 target.",
     )
     parser.add_argument(
+        "--tracker-freeze-translation",
+        action="store_true",
+        help="Hold the reference link7 position for an isolated rotation test.",
+    )
+    parser.add_argument(
         "--tracker-scale",
         type=float,
         help="Optional translation-scale override for the mapping profile.",
@@ -182,6 +187,8 @@ if not ARGS.tracker_live and ARGS.tracker_auto_reference:
     raise SystemExit("--tracker-auto-reference requires --tracker-live")
 if not ARGS.tracker_live and ARGS.tracker_rotation:
     raise SystemExit("--tracker-rotation requires --tracker-live")
+if ARGS.tracker_freeze_translation and not ARGS.tracker_rotation:
+    raise SystemExit("--tracker-freeze-translation requires --tracker-rotation")
 if not 1 <= ARGS.tracker_udp_port <= 65535:
     raise SystemExit("--tracker-udp-port must be in [1, 65535]")
 if ARGS.tracker_frames < 1:
@@ -917,6 +924,7 @@ def _run_tracker_live(
         rotation_scale=TRACKER_ROTATION_SCALE,
         max_rotation_delta_rad=TRACKER_MAX_ROTATION_DELTA_RAD,
         stale_after_s=ARGS.tracker_stale_s,
+        translation_enabled=not ARGS.tracker_freeze_translation,
         rotation_enabled=ARGS.tracker_rotation,
     )
     supervisor = JointCommandSupervisor(
@@ -994,6 +1002,8 @@ def _run_tracker_live(
             f"position_m={list(reference_sample.position_m or ())} "
             f"mapping_id={TRACKER_MAPPING.mapping_id} "
             f"tracker_to_workcell={TRACKER_MAPPING.tracker_to_workcell} "
+            "translation="
+            f"{'frozen' if ARGS.tracker_freeze_translation else 'enabled'} "
             f"translation_scale={TRACKER_TRANSLATION_SCALE:g} "
             f"translation_clamp=±{TRACKER_MAX_TRANSLATION_DELTA_M:g}m "
             f"rotation={'enabled' if ARGS.tracker_rotation else 'disabled'} "
@@ -1002,7 +1012,13 @@ def _run_tracker_live(
             f"±{math.degrees(TRACKER_MAX_ROTATION_DELTA_RAD):g}deg",
             flush=True,
         )
-        if ARGS.tracker_rotation:
+        if ARGS.tracker_freeze_translation:
+            print(
+                "rotation-only：保持 link7 参考位置；依次绕身体右向、前向、"
+                "上向轴小幅旋转。仅右 NERO 应响应。",
+                flush=True,
+            )
+        elif ARGS.tracker_rotation:
             print(
                 "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴"
                 "旋转。仅右 NERO 应响应。",
@@ -1230,7 +1246,11 @@ def _run_tracker_live(
             },
             "mapping": {
                 "mode": (
-                    "relative_se3" if ARGS.tracker_rotation else "relative_xyz_translation_only"
+                    "relative_rotation_only"
+                    if ARGS.tracker_freeze_translation
+                    else (
+                        "relative_se3" if ARGS.tracker_rotation else "relative_xyz_translation_only"
+                    )
                 ),
                 "profile": str(TRACKER_MAPPING_PATH),
                 "mapping_id": TRACKER_MAPPING.mapping_id,
@@ -1239,6 +1259,7 @@ def _run_tracker_live(
                 "workcell_frame": TRACKER_MAPPING.workcell_frame,
                 "tracker_to_workcell": [list(row) for row in TRACKER_MAPPING.tracker_to_workcell],
                 "translation_scale": TRACKER_TRANSLATION_SCALE,
+                "translation_enabled": (not ARGS.tracker_freeze_translation),
                 "max_translation_delta_each_axis_m": (TRACKER_MAX_TRANSLATION_DELTA_M),
                 "stale_after_s": ARGS.tracker_stale_s,
                 "translation_clamped_samples": (translation_clamped_samples),

@@ -58,6 +58,7 @@ def mapper() -> RelativeTrackerTranslationMapper:
 def pose_mapper(
     *,
     max_rotation_delta_rad: float = np.deg2rad(15.0),
+    translation_enabled: bool = True,
 ) -> RelativeTrackerPoseMapper:
     return RelativeTrackerPoseMapper(
         stream_id="vive.right",
@@ -74,6 +75,7 @@ def pose_mapper(
         rotation_scale=1.0,
         max_rotation_delta_rad=max_rotation_delta_rad,
         stale_after_s=0.25,
+        translation_enabled=translation_enabled,
     )
 
 
@@ -258,6 +260,35 @@ def test_rotation_uses_reference_epoch_and_clamps_shortest_delta() -> None:
         quaternion_wxyz_to_rotation_matrix(expected_target),
         atol=1e-12,
     )
+
+
+def test_rotation_only_mode_freezes_position_despite_tracker_translation() -> None:
+    subject = pose_mapper(translation_enabled=False)
+    subject.arm(
+        sample(sequence=0, host_time_ns=100),
+        (0.4, 0.5, 0.6),
+        (1.0, 0.0, 0.0, 0.0),
+        now_ns=101,
+    )
+    tracker_rotation = euler_zyx_to_quaternion_wxyz(
+        yaw=0.0,
+        pitch=np.deg2rad(8.0),
+        roll=0.0,
+    )
+    decision = subject.advance(
+        sample(
+            sequence=1,
+            host_time_ns=102,
+            position_m=(3.0, -4.0, 5.0),
+            quat_wxyz=tuple(float(value) for value in tracker_rotation),
+        ),
+        now_ns=103,
+    )
+
+    assert decision.tracker_delta_m == pytest.approx((2.0, -6.0, 2.0))
+    assert decision.world_delta_m == pytest.approx((0.0, 0.0, 0.0))
+    assert decision.target_position_m == pytest.approx((0.4, 0.5, 0.6))
+    assert decision.rotation_delta_rad == pytest.approx(np.deg2rad(8.0))
 
 
 def test_missing_sample_holds_briefly_then_requires_new_reference() -> None:

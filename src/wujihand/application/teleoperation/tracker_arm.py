@@ -134,6 +134,7 @@ class RelativeTrackerPoseMapper:
         max_rotation_delta_rad: float,
         stale_after_s: float,
         min_quality: float = 0.5,
+        translation_enabled: bool = True,
         rotation_enabled: bool = True,
     ) -> None:
         for field, value in (
@@ -158,6 +159,8 @@ class RelativeTrackerPoseMapper:
             raise ValueError("min_quality must be finite and in (0, 1]")
         if type(rotation_enabled) is not bool:
             raise ValueError("rotation_enabled must be a boolean")
+        if type(translation_enabled) is not bool:
+            raise ValueError("translation_enabled must be a boolean")
 
         self.stream_id = stream_id
         self.device_serial = device_serial
@@ -170,6 +173,7 @@ class RelativeTrackerPoseMapper:
         self.max_rotation_delta_rad = float(max_rotation_delta_rad)
         self.stale_after_ns = round(stale_after_s * 1_000_000_000)
         self.min_quality = float(min_quality)
+        self.translation_enabled = translation_enabled
         self.rotation_enabled = rotation_enabled
         self._reference_tracker_m: FloatArray | None = None
         self._reference_tracker_rotation: FloatArray | None = None
@@ -296,12 +300,16 @@ class RelativeTrackerPoseMapper:
         assert self._reference_target_m is not None
         assert self._reference_target_rotation is not None
         tracker_delta = np.asarray(sample.position_m, dtype=np.float64) - self._reference_tracker_m
-        raw_world_delta = self.translation_scale * (self.tracker_to_workcell @ tracker_delta)
-        world_delta = np.clip(
-            raw_world_delta,
-            -self.max_translation_delta_m,
-            self.max_translation_delta_m,
-        )
+        if self.translation_enabled:
+            raw_world_delta = self.translation_scale * (self.tracker_to_workcell @ tracker_delta)
+            world_delta = np.clip(
+                raw_world_delta,
+                -self.max_translation_delta_m,
+                self.max_translation_delta_m,
+            )
+        else:
+            raw_world_delta = np.zeros(3, dtype=np.float64)
+            world_delta = raw_world_delta.copy()
         target = self._reference_target_m + world_delta
         translation_clamped = not np.allclose(
             raw_world_delta,

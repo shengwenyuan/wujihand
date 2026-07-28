@@ -243,8 +243,10 @@ R_link7_target = ΔR_workcell · R_link7_reference
 ```
 
 默认保持历史 translation-only 行为；只有显式增加 `--tracker-rotation` 才向 Lula IK
-传入变化的 link7 orientation。YAML 还持有 translation/rotation scale 与限幅，
-CLI override 只用于有意实验。此 calibration 标记为 `simulation_only`，不能直接解释为
+传入变化的 link7 orientation。单独验证 rotation 时再增加
+`--tracker-freeze-translation`，mapper 会忽略 Tracker 位移并固定 reference link7
+position；这两个开关必须联用。YAML 还持有 translation/rotation scale 与限幅，CLI
+override 只用于有意实验。此 calibration 标记为 `simulation_only`，不能直接解释为
 真实 NERO TCP 标定或真机安全参数。
 
 | 入口 | 责任 |

@@ -375,25 +375,28 @@ configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
 该 profile 的同一 proper rotation matrix 同时映射位移轴和相对旋转轴。rotation
 显式使用 `--tracker-rotation` 启用，采用
 `C · (R_current · R_referenceᵀ) · Cᵀ` 的 Workcell 空间相对量；默认限幅为 `15°`。
+本次资格验证同时使用 `--tracker-freeze-translation`：输入仍含 `0.20 m` 合成平移，
+但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
 
 纯 rotation 合成流已在 Isaac Sim 6.0.1 headless 执行 240 frames：
 
 | 项目 | 结果 |
 |---|---:|
-| 平移输入 | `0 m` |
-| rotation target 最大值 | `9.4547°` |
-| link7 rotation feedback 最大值 | `10.0836°` |
+| 合成 Tracker 平移幅度 | `0.20 m` |
+| 映射后 Workcell 位移最大值 | `0 m`（translation frozen） |
+| rotation target 最大值 | `9.9384°` |
+| link7 rotation feedback 最大值 | `10.6984°` |
 | Lula IK | `240/240` |
-| 右 q7 最大反馈变化 | `0.15438 rad` |
+| 右 q7 最大反馈变化 | `0.16379 rad` |
 | 右 Hand 2 最大被动反馈变化 | `0.06806 rad`，低于 `0.10 rad` Gate |
 | 左 q27 最大反馈变化 | `0.00714 rad`，低于 `0.03 rad` Gate |
 | 最终结果 | `passed=true` |
 
 报告：
-`artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-02.json`，
+`artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-only-01.json`，
 SHA-256
-`da96f99b113c8ab1794f22da2930d0dbb86576dfa1337659515311677c5c1291`。
+`76c2b17f17a91cc9b85ace06e1614165144516a4e6cc2352f2c4009b0abc41cd`。
 该结果闭合代码、映射和 Isaac IK 路径；真人 Tracker 的 roll/pitch/yaw 方向仍需 GUI
 人工确认。
 
