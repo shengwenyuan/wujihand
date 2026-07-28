@@ -117,19 +117,24 @@ def test_retarget_uses_exact_float32_media_pipe_matrix_and_q20_provenance() -> N
     assert intent.retarget_status is RetargetStatus.SUCCESS
     assert intent.retarget_confidence == pytest.approx(0.96)
     assert intent.retarget_model_id == "wuji_sdk.WujiHand2.2026.7.21"
-    assert intent.retarget_config_id == "wuji_sdk.builtin.WujiHand2.right.2026.7.21"
+    assert intent.retarget_config_id == (
+        "wuji_sdk.builtin.WujiHand2.right.2026.7.21."
+        "confidence_floor_0.000.success_0.900"
+    )
 
 
-def test_confidence_band_is_degraded_and_reset_admits_new_source_epoch() -> None:
+def test_low_confidence_is_degraded_and_reset_admits_new_source_epoch() -> None:
     session = _Session()
     adapter = WujiHand2RetargetAdapter(
         HandSide.RIGHT,
         session_factory=lambda side: session,
         sdk_version="2026.7.21",
     )
-    first = _observation(confidence=0.92)
+    first = _observation(confidence=0.48)
     intent = adapter.retarget(first, sequence=0, produced_time_ns=1_200)
     assert intent.retarget_status is RetargetStatus.DEGRADED
+    assert intent.retarget_confidence == pytest.approx(0.48)
+    assert len(session.inputs) == 1
 
     changed = _observation(
         sequence=42,
@@ -151,7 +156,6 @@ def test_confidence_band_is_degraded_and_reset_admits_new_source_epoch() -> None
     (
         (_observation(side=HandSide.LEFT), 1_200, "observation side"),
         (_observation(missing_index=8), 1_200, "all 21"),
-        (_observation(confidence=0.89), 1_200, "confidence"),
         (_observation(), 300_001_101, "stale"),
     ),
 )
@@ -173,6 +177,26 @@ def test_retarget_fails_closed_before_sdk_step(
             sequence=0,
             produced_time_ns=produced_time_ns,
         )
+    assert session.inputs == []
+
+
+def test_explicit_confidence_floor_remains_available_for_strict_deployments() -> None:
+    session = _Session()
+    adapter = WujiHand2RetargetAdapter(
+        HandSide.RIGHT,
+        minimum_landmark_confidence=0.75,
+        success_landmark_confidence=0.90,
+        session_factory=lambda side: session,
+        sdk_version="2026.7.21",
+    )
+
+    with pytest.raises(ValueError, match="confidence"):
+        adapter.retarget(
+            _observation(confidence=0.74),
+            sequence=0,
+            produced_time_ns=1_200,
+        )
+
     assert session.inputs == []
 
 

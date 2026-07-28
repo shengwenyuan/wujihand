@@ -46,6 +46,11 @@ from wujihand.adapters.storage import (
     TrackerWorkcellMapping,
     load_tracker_workcell_mapping,
 )
+from wujihand.adapters.observability import (
+    DurationRecorder,
+    TimedHandObservationInputAdapter,
+    TimedRetargetAdapter,
+)
 from wujihand.domain import HandSide
 from wujihand.domain.pose import (
     quaternion_geodesic_distance_rad,
@@ -672,21 +677,23 @@ def _run_glove_live(
     side = HandSide(ARGS.glove_side)
     side_name = side.value
     other_side = "right" if side is HandSide.LEFT else "left"
-    input_adapter = WujiGloveHandSkeletonAdapter(
-        side,
-        source_id=f"wuji_glove.{side_name}.isaac_live",
-        calibration_id=ARGS.glove_calibration_id,
-        transform_id="wuji_glove.hand_skeleton.v1",
-        serial_number=ARGS.glove_serial,
-        address=ARGS.glove_address,
-        device_name=f"nv2_glove_{side_name}",
+    input_adapter = TimedHandObservationInputAdapter(
+        WujiGloveHandSkeletonAdapter(
+            side,
+            source_id=f"wuji_glove.{side_name}.isaac_live",
+            calibration_id=ARGS.glove_calibration_id,
+            transform_id="wuji_glove.hand_skeleton.v1",
+            serial_number=ARGS.glove_serial,
+            address=ARGS.glove_address,
+            device_name=f"nv2_glove_{side_name}",
+        )
     )
-    retargeter = WujiHand2RetargetAdapter(side)
+    retargeter = TimedRetargetAdapter(WujiHand2RetargetAdapter(side))
     supervisor = JointCommandSupervisor(
         hand_profiles[side_name].layout,
         hand_targets[side_name].tolist(),
         stale_after_s=0.25,
-        velocity_scale=0.20,
+        velocity_scale=1.0,
     )
     controller = GloveHand2SimulationController(
         side,
@@ -729,7 +736,13 @@ def _run_glove_live(
     rate_limited_commands = 0
     supervision_reasons: dict[str, int] = {}
     rejection_reasons: dict[str, int] = {}
+    minimum_landmark_confidences: list[float] = []
     last_retarget_model_id: str | None = None
+    last_retarget_config_id: str | None = None
+    command_apply_timing = DurationRecorder()
+    simulation_step_timing = DurationRecorder()
+    feedback_read_timing = DurationRecorder()
+    frame_processing_timing = DurationRecorder()
     frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
     started_ns = time.monotonic_ns()
     last_tick_ns = started_ns
@@ -738,6 +751,7 @@ def _run_glove_live(
         controller.start(now_ns=started_ns)
         for _ in range(ARGS.glove_frames):
             deadline_ns += frame_period_ns
+            frame_started_ns = time.monotonic_ns()
             tick_ns = max(time.monotonic_ns(), last_tick_ns + 1)
             try:
                 step = controller.poll(now_ns=tick_ns)
@@ -752,6 +766,8 @@ def _run_glove_live(
             if step.intent is not None:
                 accepted_frames += 1
                 last_retarget_model_id = step.intent.retarget_model_id
+                last_retarget_config_id = step.intent.retarget_config_id
+                minimum_landmark_confidences.append(step.intent.retarget_confidence)
                 if step.intent.retarget_status.value == "degraded":
                     degraded_intents += 1
             elif step.rejection_reason is not None:
@@ -769,10 +785,16 @@ def _run_glove_live(
                 float(np.max(np.abs(decision.command - initial_hand_target))),
             )
             hand_targets[side_name] = decision.command.copy()
+            stage_started_ns = time.monotonic_ns()
             apply_targets()
+            command_apply_timing.observe_ns(time.monotonic_ns() - stage_started_ns)
+            stage_started_ns = time.monotonic_ns()
             world.step(render=ARGS.gui)
+            simulation_step_timing.observe_ns(time.monotonic_ns() - stage_started_ns)
+            stage_started_ns = time.monotonic_ns()
             selected_feedback = _positions(articulations[side_name])
             other_feedback = _positions(articulations[other_side])
+            feedback_read_timing.observe_ns(time.monotonic_ns() - stage_started_ns)
             max_selected_hand_feedback_delta_rad = max(
                 max_selected_hand_feedback_delta_rad,
                 float(
@@ -799,6 +821,7 @@ def _run_glove_live(
                 max_other_side_feedback_delta_rad,
                 float(np.max(np.abs(other_feedback - initial_other_feedback))),
             )
+            frame_processing_timing.observe_ns(time.monotonic_ns() - frame_started_ns)
             last_tick_ns = tick_ns
             remaining_s = (deadline_ns - time.monotonic_ns()) / 1_000_000_000
             if remaining_s > 0.0:
@@ -829,9 +852,19 @@ def _run_glove_live(
         "side": side_name,
         "calibration_id": ARGS.glove_calibration_id,
         "degraded_intent_policy": (
-            "minimum landmark confidence 0.90; [0.90,0.95) is accepted only "
-            "through JointCommandSupervisor; >=0.95 is success"
+            "complete finite skeletons are admitted; minimum landmark "
+            "confidence <0.90 is DEGRADED and >=0.90 is SUCCESS"
         ),
+        "confidence_policy": {
+            "aggregation": "minimum_of_21_landmarks",
+            "hard_rejection_floor": 0.0,
+            "success_threshold": 0.9,
+            "low_confidence_action": "admit_as_degraded_intent",
+        },
+        "supervisor_policy": {
+            "stale_after_s": 0.25,
+            "velocity_scale": 1.0,
+        },
         "selector": {
             "kind": selector_kind,
             "value": selector_value,
@@ -841,6 +874,18 @@ def _run_glove_live(
         "empty_polls": empty_polls,
         "rejected_skeleton_frames": rejected_frames,
         "degraded_intents": degraded_intents,
+        "accepted_minimum_landmark_confidence": (
+            {
+                "minimum": min(minimum_landmark_confidences),
+                "mean": (
+                    sum(minimum_landmark_confidences)
+                    / len(minimum_landmark_confidences)
+                ),
+                "maximum": max(minimum_landmark_confidences),
+            }
+            if minimum_landmark_confidences
+            else None
+        ),
         "rejection_reasons": rejection_reasons,
         "supervision_reasons": supervision_reasons,
         "position_clamped_commands": clamped_commands,
@@ -849,7 +894,25 @@ def _run_glove_live(
         "selected_hand_max_feedback_delta_rad": (max_selected_hand_feedback_delta_rad),
         "selected_arm_max_feedback_delta_rad": (max_selected_arm_feedback_delta_rad),
         "last_retarget_model_id": last_retarget_model_id,
+        "last_retarget_config_id": last_retarget_config_id,
         "wall_duration_s": (finished_ns - started_ns) / 1_000_000_000,
+        "effective_loop_rate_hz": (
+            ARGS.glove_frames
+            / max((finished_ns - started_ns) / 1_000_000_000, 1e-9)
+        ),
+        "host_stage_timing": {
+            "clock_domain": "host_monotonic",
+            "input_poll": input_adapter.recorder.summary().to_report(),
+            "retarget": retargeter.recorder.summary().to_report(),
+            "command_apply": command_apply_timing.summary().to_report(),
+            "simulation_step_render": simulation_step_timing.summary().to_report(),
+            "feedback_read": feedback_read_timing.summary().to_report(),
+            "frame_processing": frame_processing_timing.summary().to_report(),
+            "scope_note": (
+                "host call durations only; Wuji device timestamps are not "
+                "host-comparable, so sensor acquisition latency is excluded"
+            ),
+        },
         "other_side_max_feedback_delta_rad": max_other_side_feedback_delta_rad,
     }
     return report, feedback

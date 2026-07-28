@@ -120,9 +120,10 @@ def _positive_seconds(value: object, *, field: str) -> float:
 class WujiHand2RetargetAdapter:
     """Retarget canonical landmarks into one explicit Hand 2 q20 intent.
 
-    The default 0.9 confidence floor follows the Wuji Glove documentation's
-    unreliable-below-0.9 guidance.  Values in ``[minimum, success)`` are
-    represented as degraded intent; values below the minimum fail closed.
+    Complete, finite skeletons are admitted by default even when individual
+    landmark confidence is low.  Confidence remains provenance and determines
+    whether the resulting intent is ``SUCCESS`` or ``DEGRADED``; callers may
+    opt into a non-zero hard floor for stricter deployments.
     """
 
     def __init__(
@@ -130,8 +131,8 @@ class WujiHand2RetargetAdapter:
         side: HandSide,
         *,
         max_observation_age_s: float = 0.25,
-        minimum_landmark_confidence: float = 0.9,
-        success_landmark_confidence: float = 0.95,
+        minimum_landmark_confidence: float = 0.0,
+        success_landmark_confidence: float = 0.9,
         session_factory: SessionFactory | None = None,
         sdk_version: str | None = None,
     ) -> None:
@@ -276,7 +277,11 @@ class WujiHand2RetargetAdapter:
             retarget_status=status,
             retarget_confidence=minimum_confidence,
             retarget_model_id=f"wuji_sdk.WujiHand2.{sdk_version}",
-            retarget_config_id=(f"wuji_sdk.builtin.WujiHand2.{self.side.value}.{sdk_version}"),
+            retarget_config_id=(
+                f"wuji_sdk.builtin.WujiHand2.{self.side.value}.{sdk_version}."
+                f"confidence_floor_{self.minimum_landmark_confidence:.3f}."
+                f"success_{self.success_landmark_confidence:.3f}"
+            ),
         )
         self._source_key = source_key
         self._last_observation_sequence = observation.sequence
