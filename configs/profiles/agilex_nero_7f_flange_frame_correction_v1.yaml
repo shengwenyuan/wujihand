@@ -1,0 +1,26 @@
+schema: wujihand.nero_flange_frame_correction.v1
+correction_id: agilex_nero_7f_flange_frame_correction_v1
+status: simulation_binding_correction_owner_confirmed_pending_device_readback
+source:
+  urdf_path: third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf
+  urdf_sha256: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
+  joint_name: joint7
+  parent_link: link6
+  child_link: link7
+  origin_xyz_m: [0.0, -0.0235, 0.0]
+  origin_quat_wxyz: [0.7071067811865476, 0.7071067811865475, 0.0, 0.0]
+correction:
+  origin_post_rotation_quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
+  corrected_origin_quat_wxyz: [0.5, 0.5, 0.5, 0.5]
+  corrected_origin_rpy_rad: [1.5707963267948966, 0.0, 1.5707963267948966]
+frames:
+  flange_normal_axis_local_xyz: [0.0, 0.0, 1.0]
+  flange_clocking_axis_local_xyz: [1.0, 0.0, 0.0]
+assembly_contract:
+  position_m: [0.0, 0.0, 0.0]
+  quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+assumptions:
+  - current_q7_zero_hand_world_pose_is_preserved
+  - no_right_angle_adapter_is_present
+  - correction_is_limited_to_the_current_qr_labelled_nero_7f_simulation
+  - real_device_joint7_axis_zero_and_sign_readback_remain_required_before_motion

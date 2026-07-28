@@ -6,6 +6,7 @@ import pytest
 
 from wujihand.adapters.simulation import (
     load_nero_dual_tabletop_qualification_profile,
+    load_nero_flange_frame_correction,
 )
 from wujihand.adapters.simulation.nero_model import load_nero_model_profile
 from wujihand.runtime import SessionResolver
@@ -138,6 +139,15 @@ def test_physical_dual_session_uses_pinned_physical_usd_bindings() -> None:
         and nero_left.binding.artifact.source_revision
         == "sha256:07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0"
     )
+    assert nero_left.binding.compatibility_profile == (
+        nero_right.binding.compatibility_profile
+    ) == "configs/profiles/agilex_nero_7f_flange_frame_correction_v1.yaml"
+    flange = load_nero_flange_frame_correction(
+        ROOT / nero_left.binding.compatibility_profile
+    )
+    assert flange.joint_name == "joint7"
+    assert flange.assembly_position_m == (0.0, 0.0, 0.0)
+    assert flange.assembly_quat_wxyz == (1.0, 0.0, 0.0, 0.0)
 
     for side, hand in (("left", hand_left), ("right", hand_right)):
         assert hand.binding.namespace_policy == "prefix"
@@ -216,11 +226,9 @@ def test_physical_dual_attachments_and_nominal_workcell_are_explicit() -> None:
             "hand_base",
         )
         assert attachment.transform.position_m == (0.0, 0.0, 0.0)
-        assert attachment.transform.quat_wxyz == pytest.approx(
-            (2.0**-0.5, 0.0, 2.0**-0.5, 0.0)
-        )
+        assert attachment.transform.quat_wxyz == (1.0, 0.0, 0.0, 0.0)
         assert attachment.assumption == (
-            "simulation_nominal_pitch_plus_90_pending_adapter_cad_measurement"
+            "direct_flange_to_hand2_identity_after_nero_j7_frame_correction"
         )
 
     assert "simulation_nominal" in resolved.workcell.workcell_id

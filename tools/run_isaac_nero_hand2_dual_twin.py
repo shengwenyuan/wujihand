@@ -289,10 +289,13 @@ from wujihand.adapters.simulation import (
     NeroHand2AttachmentConfig,
     NeroHand2AttachmentHandles,
     NeroHand2DofPartition,
+    apply_isaac_nero_flange_frame_correction,
     author_nero_hand2_attachment,
     discover_nero_hand2_dofs,
-    load_nero_dual_tabletop_qualification_profile,
     load_hand2_model_profile,
+    load_nero_dual_tabletop_qualification_profile,
+    load_nero_flange_frame_correction,
+    materialize_corrected_nero_urdf,
 )
 from wujihand.adapters.simulation.nero_model import (
     NERO_JOINT_NAMES,
@@ -326,8 +329,9 @@ TRACKER_HAND_FEEDBACK_TOLERANCE_RAD = 0.10
 TRACKER_STREAM_ID = "vive.right"
 TRACKER_LOGICAL_ROLE = "operator_right"
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
-NERO_LULA_URDF = ROOT / "third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf"
-NERO_LULA_URDF_SHA256 = "c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278"
+NERO_LULA_CORRECTED_URDF = (
+    ROOT / "artifacts/generated/nero/nero_description_flange_corrected_v1.urdf"
+)
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
@@ -497,6 +501,31 @@ def _side_runtimes() -> tuple[SideRuntime, SideRuntime]:
 
 
 SIDES = _side_runtimes()
+flange_profile_references = {
+    RESOLVED.instance(runtime.arm_instance_id).binding.compatibility_profile
+    for runtime in SIDES
+}
+if None in flange_profile_references or len(flange_profile_references) != 1:
+    raise RuntimeError(
+        "both NERO Binding instances must reference one flange correction profile"
+    )
+FLANGE_PROFILE_REFERENCE = cast(str, next(iter(flange_profile_references)))
+FLANGE_PROFILE_PATH = ROOT / FLANGE_PROFILE_REFERENCE
+FLANGE_PROFILE = load_nero_flange_frame_correction(FLANGE_PROFILE_PATH)
+NERO_LULA_SOURCE_URDF = (ROOT / FLANGE_PROFILE.source_urdf_path).resolve()
+for runtime in SIDES:
+    if not np.allclose(
+        runtime.attachment.transform.position_m,
+        FLANGE_PROFILE.assembly_position_m,
+        atol=1e-12,
+    ) or not np.allclose(
+        runtime.attachment.transform.quat_wxyz,
+        FLANGE_PROFILE.assembly_quat_wxyz,
+        atol=1e-12,
+    ):
+        raise RuntimeError(
+            f"{runtime.side} Assembly transform differs from flange correction contract"
+        )
 if RESOLVED.session.runtime.compatibility_profile is None:
     raise RuntimeError("NV-2 tabletop qualification requires a Session compatibility profile")
 TABLETOP_PROFILE_PATH = ROOT / RESOLVED.session.runtime.compatibility_profile
@@ -939,15 +968,17 @@ def _run_tracker_live(
         or TRACKER_MAX_ROTATION_DELTA_RAD is None
     ):
         raise RuntimeError("Tracker mapping was not resolved before Isaac startup")
-    if sha256_file(NERO_LULA_URDF) != NERO_LULA_URDF_SHA256:
+    if sha256_file(NERO_LULA_SOURCE_URDF) != FLANGE_PROFILE.source_urdf_sha256:
         raise RuntimeError("source-locked NERO URDF hash drifted")
+    if not NERO_LULA_CORRECTED_URDF.is_file():
+        raise RuntimeError("corrected NERO Lula URDF was not materialized")
     if not NERO_LULA_DESCRIPTION.is_file():
         raise RuntimeError(f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}")
 
     right_runtime = next(runtime for runtime in SIDES if runtime.side == "right")
     solver = LulaKinematicsSolver(
         str(NERO_LULA_DESCRIPTION),
-        str(NERO_LULA_URDF),
+        str(NERO_LULA_CORRECTED_URDF),
     )
     if tuple(solver.get_joint_names()) != NERO_JOINT_NAMES:
         raise RuntimeError(
@@ -1351,8 +1382,12 @@ def _run_tracker_live(
             "kinematics": {
                 "solver": "Isaac Sim 6.0.1 LulaKinematicsSolver",
                 "descriptor": NERO_LULA_DESCRIPTION.relative_to(ROOT).as_posix(),
-                "urdf": NERO_LULA_URDF.relative_to(ROOT).as_posix(),
-                "urdf_sha256": NERO_LULA_URDF_SHA256,
+                "source_urdf": NERO_LULA_SOURCE_URDF.relative_to(ROOT).as_posix(),
+                "source_urdf_sha256": FLANGE_PROFILE.source_urdf_sha256,
+                "corrected_urdf": (
+                    NERO_LULA_CORRECTED_URDF.relative_to(ROOT).as_posix()
+                ),
+                "corrected_urdf_sha256": sha256_file(NERO_LULA_CORRECTED_URDF),
                 "end_effector_frame": "link7",
                 "ik_successes": ik_successes,
                 "ik_failures": ik_failures,
@@ -1403,6 +1438,11 @@ def _run_tracker_live(
 
 
 def main() -> int:
+    materialize_corrected_nero_urdf(
+        NERO_LULA_SOURCE_URDF,
+        NERO_LULA_CORRECTED_URDF,
+        FLANGE_PROFILE,
+    )
     world = World(
         stage_units_in_meters=1.0,
         physics_dt=1.0 / PHYSICS_HZ,
@@ -1452,13 +1492,6 @@ def main() -> int:
         add_reference_to_stage(str(runtime.arm_asset), runtime.arm_prim_path)
         arm_root = stage.GetPrimAtPath(runtime.arm_prim_path)
         _set_world_pose(arm_root, runtime.mount_pose)
-        add_reference_to_stage(str(runtime.hand_asset), runtime.hand_prim_path)
-
-        arm_articulation_root = _one_prim(
-            stage,
-            prefix=runtime.arm_prim_path,
-            articulation_root=True,
-        )
         parent_backend_name = RESOLVED.instance(runtime.arm_instance_id).binding.backend_frame(
             runtime.attachment.parent.frame
         )
@@ -1470,6 +1503,24 @@ def main() -> int:
             prefix=runtime.arm_prim_path,
             name=parent_backend_name,
             rigid_body=True,
+        )
+        joint7 = _one_prim(
+            stage,
+            prefix=runtime.arm_prim_path,
+            name=FLANGE_PROFILE.joint_name,
+        )
+        apply_isaac_nero_flange_frame_correction(
+            stage,
+            link7_path=str(parent_link.GetPath()),
+            joint7_path=str(joint7.GetPath()),
+            profile=FLANGE_PROFILE,
+        )
+        add_reference_to_stage(str(runtime.hand_asset), runtime.hand_prim_path)
+
+        arm_articulation_root = _one_prim(
+            stage,
+            prefix=runtime.arm_prim_path,
+            articulation_root=True,
         )
         child_base = _one_prim(
             stage,
@@ -2209,10 +2260,15 @@ def main() -> int:
         if not np.isfinite(forearm_length_m) or forearm_length_m <= 0.0:
             raise RuntimeError(f"{side} forearm measurement is degenerate")
         forearm_axis_world = forearm_delta_world / forearm_length_m
-        flange_axis_world = _world_axis(
+        flange_normal_world = _world_axis(
             stage,
             attachment.parent_link_path,
-            geometry.flange_forearm_axis_local_xyz,
+            FLANGE_PROFILE.flange_normal_axis_local_xyz,
+        )
+        flange_clocking_world = _world_axis(
+            stage,
+            attachment.parent_link_path,
+            FLANGE_PROFILE.flange_clocking_axis_local_xyz,
         )
         hand_axis_world = _world_axis(
             stage,
@@ -2228,7 +2284,18 @@ def main() -> int:
             geometry.base_port_axis_local_xyz,
             dtype=np.float64,
         )
-        attachment_axis_dot = float(np.dot(hand_axis_world, flange_axis_world))
+        attachment_normal_dot = float(
+            np.dot(hand_axis_world, flange_normal_world)
+        )
+        attachment_clocking_dot = float(
+            np.dot(palm_normal_world, flange_clocking_world)
+        )
+        attachment_origin_error_m = float(
+            np.linalg.norm(
+                _world_position(stage, attachment.parent_link_path)
+                - _world_position(stage, attachment.child_base_link_path)
+            )
+        )
         base_port_outward_dot = float(
             np.dot(
                 port_axis_world,
@@ -2250,21 +2317,31 @@ def main() -> int:
             )
         )
         geometry_measurements[side] = {
-            "flange_forearm_axis_world_xyz": flange_axis_world.tolist(),
+            "flange_normal_axis_world_xyz": flange_normal_world.tolist(),
+            "flange_clocking_axis_world_xyz": flange_clocking_world.tolist(),
             "hand_longitudinal_axis_world_xyz": hand_axis_world.tolist(),
             "hand_palm_normal_axis_world_xyz": palm_normal_world.tolist(),
             "base_port_axis_world_xyz": port_axis_world.tolist(),
             "forearm_axis_world_xyz": forearm_axis_world.tolist(),
             "forearm_length_m": forearm_length_m,
-            "attachment_axis_dot": attachment_axis_dot,
+            "attachment_normal_dot": attachment_normal_dot,
+            "attachment_clocking_dot": attachment_clocking_dot,
+            "attachment_origin_error_m": attachment_origin_error_m,
             "base_port_outward_dot": base_port_outward_dot,
             "hand_world_inward_dot": hand_world_inward_dot,
             "hand_world_vertical_abs": hand_world_vertical_abs,
             "forearm_world_vertical_abs": forearm_world_vertical_abs,
             "hand_palm_down_dot": hand_palm_down_dot,
         }
-        checks[f"{side}_attachment_axis_aligned"] = bool(
-            attachment_axis_dot >= thresholds.attachment_axis_min_dot
+        checks[f"{side}_attachment_normal_aligned"] = bool(
+            attachment_normal_dot >= thresholds.attachment_normal_min_dot
+        )
+        checks[f"{side}_attachment_clocking_aligned"] = bool(
+            attachment_clocking_dot >= thresholds.attachment_clocking_min_dot
+        )
+        checks[f"{side}_attachment_origins_coincident"] = bool(
+            attachment_origin_error_m
+            <= thresholds.attachment_origin_max_error_m
         )
         checks[f"{side}_base_port_axis_outward"] = bool(
             base_port_outward_dot >= thresholds.base_port_outward_min_dot
@@ -2354,6 +2431,29 @@ def main() -> int:
                 "post_reset_runtime": arm_drive_after_reset,
             },
             "geometry_measurements": geometry_measurements,
+        },
+        "nero_flange_frame_correction": {
+            "binding_profile": FLANGE_PROFILE_REFERENCE,
+            "correction_id": FLANGE_PROFILE.correction_id,
+            "status": FLANGE_PROFILE.status,
+            "sha256": sha256_file(FLANGE_PROFILE_PATH),
+            "source_urdf": NERO_LULA_SOURCE_URDF.relative_to(ROOT).as_posix(),
+            "source_urdf_sha256": FLANGE_PROFILE.source_urdf_sha256,
+            "corrected_lula_urdf": (
+                NERO_LULA_CORRECTED_URDF.relative_to(ROOT).as_posix()
+            ),
+            "corrected_lula_urdf_sha256": sha256_file(
+                NERO_LULA_CORRECTED_URDF
+            ),
+            "origin_post_rotation_quat_wxyz": list(
+                FLANGE_PROFILE.origin_post_rotation_quat_wxyz
+            ),
+            "corrected_origin_quat_wxyz": list(
+                FLANGE_PROFILE.corrected_origin_quat_wxyz
+            ),
+            "assembly_position_m": list(FLANGE_PROFILE.assembly_position_m),
+            "assembly_quat_wxyz": list(FLANGE_PROFILE.assembly_quat_wxyz),
+            "assumptions": list(FLANGE_PROFILE.assumptions),
         },
         "targets": {
             "arm": {

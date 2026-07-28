@@ -32,4 +32,4 @@ group_bindings:
       - joint7
     actuators: []
 builder: null
-compatibility_profile: null
+compatibility_profile: configs/profiles/agilex_nero_7f_flange_frame_correction_v1.yaml

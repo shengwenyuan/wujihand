@@ -46,14 +46,15 @@ _GEOMETRY_KEYS = frozenset(
         "table_outward_axis_world_xyz",
         "hand_longitudinal_axis_local_xyz",
         "hand_palm_normal_axis_local_xyz",
-        "flange_forearm_axis_local_xyz",
         "table_inward_axis_world_xyz",
         "table_down_axis_world_xyz",
     }
 )
 _THRESHOLD_KEYS = frozenset(
     {
-        "attachment_axis_min_dot",
+        "attachment_normal_min_dot",
+        "attachment_clocking_min_dot",
+        "attachment_origin_max_error_m",
         "base_port_outward_min_dot",
         "hand_world_inward_min_dot",
         "hand_world_vertical_abs_max",
@@ -150,7 +151,6 @@ class NeroTabletopGeometryContract:
     table_outward_axis_world_xyz: tuple[float, float, float]
     hand_longitudinal_axis_local_xyz: tuple[float, float, float]
     hand_palm_normal_axis_local_xyz: tuple[float, float, float]
-    flange_forearm_axis_local_xyz: tuple[float, float, float]
     table_inward_axis_world_xyz: tuple[float, float, float]
     table_down_axis_world_xyz: tuple[float, float, float]
 
@@ -159,7 +159,9 @@ class NeroTabletopGeometryContract:
 class NeroTabletopThresholds:
     """Finite qualification thresholds with explicit dimensions."""
 
-    attachment_axis_min_dot: float
+    attachment_normal_min_dot: float
+    attachment_clocking_min_dot: float
+    attachment_origin_max_error_m: float
     base_port_outward_min_dot: float
     hand_world_inward_min_dot: float
     hand_world_vertical_abs_max: float
@@ -329,10 +331,6 @@ def load_nero_dual_tabletop_qualification_profile(
             geometry_data["hand_palm_normal_axis_local_xyz"],
             field="geometry_contract.hand_palm_normal_axis_local_xyz",
         ),
-        flange_forearm_axis_local_xyz=_unit_axis(
-            geometry_data["flange_forearm_axis_local_xyz"],
-            field="geometry_contract.flange_forearm_axis_local_xyz",
-        ),
         table_inward_axis_world_xyz=_unit_axis(
             geometry_data["table_inward_axis_world_xyz"],
             field="geometry_contract.table_inward_axis_world_xyz",
@@ -356,11 +354,24 @@ def load_nero_dual_tabletop_qualification_profile(
         raise ValueError(
             "thresholds.initial_q7_max_error_rad must be non-negative"
         )
+    attachment_origin_max_error_m = _finite_float(
+        threshold_data["attachment_origin_max_error_m"],
+        field="thresholds.attachment_origin_max_error_m",
+    )
+    if attachment_origin_max_error_m < 0.0:
+        raise ValueError(
+            "thresholds.attachment_origin_max_error_m must be non-negative"
+        )
     thresholds = NeroTabletopThresholds(
-        attachment_axis_min_dot=_unit_interval(
-            threshold_data["attachment_axis_min_dot"],
-            field="thresholds.attachment_axis_min_dot",
+        attachment_normal_min_dot=_unit_interval(
+            threshold_data["attachment_normal_min_dot"],
+            field="thresholds.attachment_normal_min_dot",
         ),
+        attachment_clocking_min_dot=_unit_interval(
+            threshold_data["attachment_clocking_min_dot"],
+            field="thresholds.attachment_clocking_min_dot",
+        ),
+        attachment_origin_max_error_m=attachment_origin_max_error_m,
         base_port_outward_min_dot=_unit_interval(
             threshold_data["base_port_outward_min_dot"],
             field="thresholds.base_port_outward_min_dot",
