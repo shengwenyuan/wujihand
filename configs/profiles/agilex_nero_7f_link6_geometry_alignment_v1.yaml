@@ -1,0 +1,27 @@
+schema: wujihand.nero_link_geometry_alignment.v1
+alignment_id: agilex_nero_7f_link6_geometry_alignment_v1
+status: simulation_binding_geometry_alignment_approved_pending_cad
+source:
+  urdf_path: third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf
+  urdf_sha256: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
+  link_name: link6
+  cylinder_axis_local_xyz: [0.0, 1.0, 0.0]
+isaac_representation:
+  visual_child_name: link6
+  collision_child_name: link6_1
+  source_child_quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  source_mass_kg: 0.3140406012535095
+  source_center_of_mass_m: [0.00009501505, 0.0010783117, -0.0001911099]
+  source_diagonal_inertia_kg_m2: [0.000046990386, 0.00005755893, 0.00006028567]
+  source_principal_axes_quat_wxyz: [0.5199201, -0.48886225, -0.48199835, -0.5083054]
+correction:
+  geometry_post_rotation_quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
+  corrected_cylinder_axis_local_xyz: [1.0, 0.0, 0.0]
+  corrected_center_of_mass_m: [0.0010783117, -0.00009501505, -0.0001911099]
+  corrected_principal_axes_quat_wxyz: [0.008212833135837372, -0.6865021142137911, 0.004853510237980641, -0.7270652240275612]
+assumptions:
+  - pinned_isaac_link6_positive_y_is_the_visible_cylinder_axis
+  - link6_positive_x_is_the_forearm_axis_in_the_selected_nero_asset
+  - link6_geometry_alignment_preserves_all_joint_frames_and_hand_world_pose
+  - source_urdf_and_derived_usd_remain_immutable
+  - physical_link6_clocking_and_cad_remain_unverified

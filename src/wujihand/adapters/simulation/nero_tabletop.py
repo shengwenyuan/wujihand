@@ -52,9 +52,8 @@ _GEOMETRY_KEYS = frozenset(
 )
 _THRESHOLD_KEYS = frozenset(
     {
-        "attachment_normal_min_dot",
-        "attachment_clocking_min_dot",
         "attachment_origin_max_error_m",
+        "link6_cylinder_forearm_min_dot",
         "base_port_outward_min_dot",
         "hand_world_inward_min_dot",
         "hand_world_vertical_abs_max",
@@ -159,9 +158,8 @@ class NeroTabletopGeometryContract:
 class NeroTabletopThresholds:
     """Finite qualification thresholds with explicit dimensions."""
 
-    attachment_normal_min_dot: float
-    attachment_clocking_min_dot: float
     attachment_origin_max_error_m: float
+    link6_cylinder_forearm_min_dot: float
     base_port_outward_min_dot: float
     hand_world_inward_min_dot: float
     hand_world_vertical_abs_max: float
@@ -363,15 +361,11 @@ def load_nero_dual_tabletop_qualification_profile(
             "thresholds.attachment_origin_max_error_m must be non-negative"
         )
     thresholds = NeroTabletopThresholds(
-        attachment_normal_min_dot=_unit_interval(
-            threshold_data["attachment_normal_min_dot"],
-            field="thresholds.attachment_normal_min_dot",
-        ),
-        attachment_clocking_min_dot=_unit_interval(
-            threshold_data["attachment_clocking_min_dot"],
-            field="thresholds.attachment_clocking_min_dot",
-        ),
         attachment_origin_max_error_m=attachment_origin_max_error_m,
+        link6_cylinder_forearm_min_dot=_unit_interval(
+            threshold_data["link6_cylinder_forearm_min_dot"],
+            field="thresholds.link6_cylinder_forearm_min_dot",
+        ),
         base_port_outward_min_dot=_unit_interval(
             threshold_data["base_port_outward_min_dot"],
             field="thresholds.base_port_outward_min_dot",

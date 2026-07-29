@@ -301,13 +301,13 @@ from wujihand.adapters.simulation import (
     NeroHand2AttachmentConfig,
     NeroHand2AttachmentHandles,
     NeroHand2DofPartition,
-    apply_isaac_nero_flange_frame_correction,
+    NeroLinkGeometryAlignmentHandles,
+    apply_isaac_nero_link_geometry_alignment,
     author_nero_hand2_attachment,
     discover_nero_hand2_dofs,
     load_hand2_model_profile,
     load_nero_dual_tabletop_qualification_profile,
-    load_nero_flange_frame_correction,
-    materialize_corrected_nero_urdf,
+    load_nero_link_geometry_alignment,
 )
 from wujihand.adapters.simulation.nero_model import (
     NERO_JOINT_NAMES,
@@ -338,9 +338,6 @@ TRACKER_HAND_FEEDBACK_TOLERANCE_RAD = 0.10
 TRACKER_STREAM_ID = "vive.right"
 TRACKER_LOGICAL_ROLE = "operator_right"
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
-NERO_LULA_CORRECTED_URDF = (
-    ROOT / "artifacts/generated/nero/nero_description_flange_corrected_v1.urdf"
-)
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
@@ -514,31 +511,18 @@ def _side_runtimes() -> tuple[SideRuntime, SideRuntime]:
 
 
 SIDES = _side_runtimes()
-flange_profile_references = {
+alignment_profile_references = {
     RESOLVED.instance(runtime.arm_instance_id).binding.compatibility_profile
     for runtime in SIDES
 }
-if None in flange_profile_references or len(flange_profile_references) != 1:
+if None in alignment_profile_references or len(alignment_profile_references) != 1:
     raise RuntimeError(
-        "both NERO Binding instances must reference one flange correction profile"
+        "both NERO Binding instances must reference one link geometry alignment profile"
     )
-FLANGE_PROFILE_REFERENCE = cast(str, next(iter(flange_profile_references)))
-FLANGE_PROFILE_PATH = ROOT / FLANGE_PROFILE_REFERENCE
-FLANGE_PROFILE = load_nero_flange_frame_correction(FLANGE_PROFILE_PATH)
-NERO_LULA_SOURCE_URDF = (ROOT / FLANGE_PROFILE.source_urdf_path).resolve()
-for runtime in SIDES:
-    if not np.allclose(
-        runtime.attachment.transform.position_m,
-        FLANGE_PROFILE.assembly_position_m,
-        atol=1e-12,
-    ) or not np.allclose(
-        runtime.attachment.transform.quat_wxyz,
-        FLANGE_PROFILE.assembly_quat_wxyz,
-        atol=1e-12,
-    ):
-        raise RuntimeError(
-            f"{runtime.side} Assembly transform differs from flange correction contract"
-        )
+ALIGNMENT_PROFILE_REFERENCE = cast(str, next(iter(alignment_profile_references)))
+ALIGNMENT_PROFILE_PATH = ROOT / ALIGNMENT_PROFILE_REFERENCE
+ALIGNMENT_PROFILE = load_nero_link_geometry_alignment(ALIGNMENT_PROFILE_PATH)
+NERO_LULA_SOURCE_URDF = (ROOT / ALIGNMENT_PROFILE.source_urdf_path).resolve()
 if RESOLVED.session.runtime.compatibility_profile is None:
     raise RuntimeError("NV-2 tabletop qualification requires a Session compatibility profile")
 TABLETOP_PROFILE_PATH = ROOT / RESOLVED.session.runtime.compatibility_profile
@@ -1201,17 +1185,15 @@ def _run_tracker_live(
         or TRACKER_MAX_ROTATION_DELTA_RAD is None
     ):
         raise RuntimeError("Tracker mapping was not resolved before Isaac startup")
-    if sha256_file(NERO_LULA_SOURCE_URDF) != FLANGE_PROFILE.source_urdf_sha256:
+    if sha256_file(NERO_LULA_SOURCE_URDF) != ALIGNMENT_PROFILE.source_urdf_sha256:
         raise RuntimeError("source-locked NERO URDF hash drifted")
-    if not NERO_LULA_CORRECTED_URDF.is_file():
-        raise RuntimeError("corrected NERO Lula URDF was not materialized")
     if not NERO_LULA_DESCRIPTION.is_file():
         raise RuntimeError(f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}")
 
     right_runtime = next(runtime for runtime in SIDES if runtime.side == "right")
     solver = LulaKinematicsSolver(
         str(NERO_LULA_DESCRIPTION),
-        str(NERO_LULA_CORRECTED_URDF),
+        str(NERO_LULA_SOURCE_URDF),
     )
     if tuple(solver.get_joint_names()) != NERO_JOINT_NAMES:
         raise RuntimeError(
@@ -1615,12 +1597,8 @@ def _run_tracker_live(
             "kinematics": {
                 "solver": "Isaac Sim 6.0.1 LulaKinematicsSolver",
                 "descriptor": NERO_LULA_DESCRIPTION.relative_to(ROOT).as_posix(),
-                "source_urdf": NERO_LULA_SOURCE_URDF.relative_to(ROOT).as_posix(),
-                "source_urdf_sha256": FLANGE_PROFILE.source_urdf_sha256,
-                "corrected_urdf": (
-                    NERO_LULA_CORRECTED_URDF.relative_to(ROOT).as_posix()
-                ),
-                "corrected_urdf_sha256": sha256_file(NERO_LULA_CORRECTED_URDF),
+                "urdf": NERO_LULA_SOURCE_URDF.relative_to(ROOT).as_posix(),
+                "urdf_sha256": ALIGNMENT_PROFILE.source_urdf_sha256,
                 "end_effector_frame": "link7",
                 "ik_successes": ik_successes,
                 "ik_failures": ik_failures,
@@ -1671,11 +1649,6 @@ def _run_tracker_live(
 
 
 def main() -> int:
-    materialize_corrected_nero_urdf(
-        NERO_LULA_SOURCE_URDF,
-        NERO_LULA_CORRECTED_URDF,
-        FLANGE_PROFILE,
-    )
     world = World(
         stage_units_in_meters=1.0,
         physics_dt=1.0 / PHYSICS_HZ,
@@ -1716,6 +1689,7 @@ def main() -> int:
     dome.CreateIntensityAttr(1000.0)
 
     authored: dict[str, NeroHand2AttachmentHandles] = {}
+    geometry_alignments: dict[str, NeroLinkGeometryAlignmentHandles] = {}
     articulations: dict[str, Articulation] = {}
     partitions: dict[str, NeroHand2DofPartition] = {}
     arm_profiles: dict[str, NeroModelProfile] = {}
@@ -1737,16 +1711,20 @@ def main() -> int:
             name=parent_backend_name,
             rigid_body=True,
         )
-        joint7 = _one_prim(
+        arm_asset = RESOLVED.instance(runtime.arm_instance_id).asset
+        wrist_housing_backend_name = RESOLVED.instance(
+            runtime.arm_instance_id
+        ).binding.backend_frame(arm_asset.frame_name("wrist_housing"))
+        wrist_housing = _one_prim(
             stage,
             prefix=runtime.arm_prim_path,
-            name=FLANGE_PROFILE.joint_name,
+            name=wrist_housing_backend_name,
+            rigid_body=True,
         )
-        apply_isaac_nero_flange_frame_correction(
+        geometry_alignments[runtime.side] = apply_isaac_nero_link_geometry_alignment(
             stage,
-            link7_path=str(parent_link.GetPath()),
-            joint7_path=str(joint7.GetPath()),
-            profile=FLANGE_PROFILE,
+            link_path=str(wrist_housing.GetPath()),
+            profile=ALIGNMENT_PROFILE,
         )
         add_reference_to_stage(str(runtime.hand_asset), runtime.hand_prim_path)
 
@@ -2512,15 +2490,10 @@ def main() -> int:
         if not np.isfinite(forearm_length_m) or forearm_length_m <= 0.0:
             raise RuntimeError(f"{side} forearm measurement is degenerate")
         forearm_axis_world = forearm_delta_world / forearm_length_m
-        flange_normal_world = _world_axis(
+        link6_cylinder_axis_world = _world_axis(
             stage,
-            attachment.parent_link_path,
-            FLANGE_PROFILE.flange_normal_axis_local_xyz,
-        )
-        flange_clocking_world = _world_axis(
-            stage,
-            attachment.parent_link_path,
-            FLANGE_PROFILE.flange_clocking_axis_local_xyz,
+            geometry_alignments[side].link_path,
+            ALIGNMENT_PROFILE.corrected_cylinder_axis_local_xyz,
         )
         hand_axis_world = _world_axis(
             stage,
@@ -2536,11 +2509,8 @@ def main() -> int:
             geometry.base_port_axis_local_xyz,
             dtype=np.float64,
         )
-        attachment_normal_dot = float(
-            np.dot(hand_axis_world, flange_normal_world)
-        )
-        attachment_clocking_dot = float(
-            np.dot(palm_normal_world, flange_clocking_world)
+        link6_cylinder_forearm_dot = float(
+            np.dot(link6_cylinder_axis_world, forearm_axis_world)
         )
         attachment_origin_error_m = float(
             np.linalg.norm(
@@ -2575,15 +2545,15 @@ def main() -> int:
             )
         )
         geometry_measurements[side] = {
-            "flange_normal_axis_world_xyz": flange_normal_world.tolist(),
-            "flange_clocking_axis_world_xyz": flange_clocking_world.tolist(),
+            "link6_cylinder_axis_world_xyz": (
+                link6_cylinder_axis_world.tolist()
+            ),
             "hand_longitudinal_axis_world_xyz": hand_axis_world.tolist(),
             "hand_palm_normal_axis_world_xyz": palm_normal_world.tolist(),
             "base_port_axis_world_xyz": port_axis_world.tolist(),
             "forearm_axis_world_xyz": forearm_axis_world.tolist(),
             "forearm_length_m": forearm_length_m,
-            "attachment_normal_dot": attachment_normal_dot,
-            "attachment_clocking_dot": attachment_clocking_dot,
+            "link6_cylinder_forearm_dot": link6_cylinder_forearm_dot,
             "attachment_origin_error_m": attachment_origin_error_m,
             "flange_origin_world_m": flange_origin_world_m.tolist(),
             "hand_base_origin_world_m": hand_base_origin_world_m.tolist(),
@@ -2593,11 +2563,9 @@ def main() -> int:
             "forearm_world_vertical_abs": forearm_world_vertical_abs,
             "hand_palm_down_dot": hand_palm_down_dot,
         }
-        checks[f"{side}_attachment_normal_aligned"] = bool(
-            attachment_normal_dot >= thresholds.attachment_normal_min_dot
-        )
-        checks[f"{side}_attachment_clocking_aligned"] = bool(
-            attachment_clocking_dot >= thresholds.attachment_clocking_min_dot
+        checks[f"{side}_link6_cylinder_follows_forearm"] = bool(
+            link6_cylinder_forearm_dot
+            >= thresholds.link6_cylinder_forearm_min_dot
         )
         checks[f"{side}_attachment_origins_coincident"] = bool(
             attachment_origin_error_m
@@ -2704,28 +2672,34 @@ def main() -> int:
             },
             "geometry_measurements": geometry_measurements,
         },
-        "nero_flange_frame_correction": {
-            "binding_profile": FLANGE_PROFILE_REFERENCE,
-            "correction_id": FLANGE_PROFILE.correction_id,
-            "status": FLANGE_PROFILE.status,
-            "sha256": sha256_file(FLANGE_PROFILE_PATH),
+        "nero_link_geometry_alignment": {
+            "binding_profile": ALIGNMENT_PROFILE_REFERENCE,
+            "alignment_id": ALIGNMENT_PROFILE.alignment_id,
+            "status": ALIGNMENT_PROFILE.status,
+            "sha256": sha256_file(ALIGNMENT_PROFILE_PATH),
             "source_urdf": NERO_LULA_SOURCE_URDF.relative_to(ROOT).as_posix(),
-            "source_urdf_sha256": FLANGE_PROFILE.source_urdf_sha256,
-            "corrected_lula_urdf": (
-                NERO_LULA_CORRECTED_URDF.relative_to(ROOT).as_posix()
+            "source_urdf_sha256": ALIGNMENT_PROFILE.source_urdf_sha256,
+            "link_name": ALIGNMENT_PROFILE.link_name,
+            "geometry_post_rotation_quat_wxyz": list(
+                ALIGNMENT_PROFILE.geometry_post_rotation_quat_wxyz
             ),
-            "corrected_lula_urdf_sha256": sha256_file(
-                NERO_LULA_CORRECTED_URDF
+            "source_cylinder_axis_local_xyz": list(
+                ALIGNMENT_PROFILE.source_cylinder_axis_local_xyz
             ),
-            "origin_post_rotation_quat_wxyz": list(
-                FLANGE_PROFILE.origin_post_rotation_quat_wxyz
+            "corrected_cylinder_axis_local_xyz": list(
+                ALIGNMENT_PROFILE.corrected_cylinder_axis_local_xyz
             ),
-            "corrected_origin_quat_wxyz": list(
-                FLANGE_PROFILE.corrected_origin_quat_wxyz
-            ),
-            "assembly_position_m": list(FLANGE_PROFILE.assembly_position_m),
-            "assembly_quat_wxyz": list(FLANGE_PROFILE.assembly_quat_wxyz),
-            "assumptions": list(FLANGE_PROFILE.assumptions),
+            "stage_paths": {
+                side: {
+                    "link": geometry_alignments[side].link_path,
+                    "visual": geometry_alignments[side].visual_path,
+                    "collision": geometry_alignments[side].collision_path,
+                }
+                for side in ("left", "right")
+            },
+            "kinematics_modified": False,
+            "lula_uses_pinned_source_urdf": True,
+            "assumptions": list(ALIGNMENT_PROFILE.assumptions),
         },
         "targets": {
             "arm": {

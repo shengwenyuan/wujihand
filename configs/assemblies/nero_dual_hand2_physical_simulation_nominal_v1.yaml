@@ -38,8 +38,8 @@ attachments:
       frame: hand_base
     transform:
       position_m: [0.0, 0.0, 0.0]
-      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-    assumption: direct_flange_to_hand2_identity_after_nero_j7_frame_correction
+      quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
+    assumption: direct_mount_pitch_plus_90_maps_pinned_nero_and_hand2_interface_frames
   - attachment_id: nero_right_link7_to_hand2_right_base
     parent:
       instance: nero_right
@@ -49,5 +49,5 @@ attachments:
       frame: hand_base
     transform:
       position_m: [0.0, 0.0, 0.0]
-      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-    assumption: direct_flange_to_hand2_identity_after_nero_j7_frame_correction
+      quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
+    assumption: direct_mount_pitch_plus_90_maps_pinned_nero_and_hand2_interface_frames

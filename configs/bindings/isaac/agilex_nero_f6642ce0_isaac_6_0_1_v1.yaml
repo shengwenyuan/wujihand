@@ -19,6 +19,7 @@ frame_map:
   base_link: base_link
   link4: link4
   link5: link5
+  link6: link6
   link7: link7
 group_bindings:
   - group_id: arm_joints
@@ -32,4 +33,4 @@ group_bindings:
       - joint7
     actuators: []
 builder: null
-compatibility_profile: configs/profiles/agilex_nero_7f_flange_frame_correction_v1.yaml
+compatibility_profile: configs/profiles/agilex_nero_7f_link6_geometry_alignment_v1.yaml

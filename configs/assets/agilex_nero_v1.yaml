@@ -9,6 +9,7 @@ frames:
   base: base_link
   forearm_proximal: link4
   forearm_distal: link5
+  wrist_housing: link6
   tool_flange: link7
 control_groups:
   - group_id: arm_joints

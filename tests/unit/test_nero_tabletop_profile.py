@@ -76,8 +76,9 @@ def test_loads_route_qualified_initial_q7_and_geometry_contract() -> None:
         -1.0,
     )
     assert profile.thresholds.hand_world_vertical_abs_max == pytest.approx(0.10)
-    assert profile.thresholds.attachment_normal_min_dot == pytest.approx(0.999)
-    assert profile.thresholds.attachment_clocking_min_dot == pytest.approx(0.999)
+    assert profile.thresholds.link6_cylinder_forearm_min_dot == pytest.approx(
+        0.999
+    )
     assert profile.thresholds.attachment_origin_max_error_m == pytest.approx(1e-6)
     assert profile.thresholds.hand_palm_down_min_dot == pytest.approx(0.99)
     assert profile.thresholds.forearm_world_vertical_abs_max == pytest.approx(0.02)
