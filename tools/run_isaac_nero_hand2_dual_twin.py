@@ -85,6 +85,14 @@ def parse_args() -> argparse.Namespace:
         help="Optional second screenshot using the Workcell top camera frames.",
     )
     parser.add_argument(
+        "--interface-screenshot",
+        type=Path,
+        help=(
+            "Optional close-up using the Workcell right flange-to-Hand2 "
+            "interface camera frames."
+        ),
+    )
+    parser.add_argument(
         "--glove-live",
         action="store_true",
         help="Opt in to bounded Wuji Glove control of one simulated Hand 2.",
@@ -338,6 +346,10 @@ OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
 TOP_CAMERA_EYE_FRAME = "simulation_nominal_camera_top_eye"
 TOP_CAMERA_TARGET_FRAME = "simulation_nominal_camera_top_target"
+INTERFACE_CAMERA_EYE_FRAME = "simulation_nominal_camera_right_interface_eye"
+INTERFACE_CAMERA_TARGET_FRAME = (
+    "simulation_nominal_camera_right_interface_target"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -2536,6 +2548,12 @@ def main() -> int:
                 - _world_position(stage, attachment.child_base_link_path)
             )
         )
+        flange_origin_world_m = _world_position(
+            stage, attachment.parent_link_path
+        )
+        hand_base_origin_world_m = _world_position(
+            stage, attachment.child_base_link_path
+        )
         base_port_outward_dot = float(
             np.dot(
                 port_axis_world,
@@ -2567,6 +2585,8 @@ def main() -> int:
             "attachment_normal_dot": attachment_normal_dot,
             "attachment_clocking_dot": attachment_clocking_dot,
             "attachment_origin_error_m": attachment_origin_error_m,
+            "flange_origin_world_m": flange_origin_world_m.tolist(),
+            "hand_base_origin_world_m": hand_base_origin_world_m.tolist(),
             "base_port_outward_dot": base_port_outward_dot,
             "hand_world_inward_dot": hand_world_inward_dot,
             "hand_world_vertical_abs": hand_world_vertical_abs,
@@ -2618,6 +2638,18 @@ def main() -> int:
             ARGS.top_screenshot,
             eye_m=top_camera_eye,
             target_m=top_camera_target,
+        )
+    interface_screenshot_runtime: dict[str, object] = {}
+    interface_camera_eye = _workcell_frame_position(INTERFACE_CAMERA_EYE_FRAME)
+    interface_camera_target = _workcell_frame_position(
+        INTERFACE_CAMERA_TARGET_FRAME
+    )
+    if ARGS.interface_screenshot is not None:
+        interface_screenshot_runtime = _capture_screenshot(
+            world,
+            ARGS.interface_screenshot,
+            eye_m=interface_camera_eye,
+            target_m=interface_camera_target,
         )
     passed = all(checks.values())
     report = {
@@ -2808,6 +2840,19 @@ def main() -> int:
             "camera_eye": list(top_camera_eye),
             "camera_target": list(top_camera_target),
             **top_screenshot_runtime,
+        },
+        "interface_screenshot": {
+            "path": (
+                None
+                if ARGS.interface_screenshot is None
+                else ARGS.interface_screenshot.resolve().as_posix()
+            ),
+            "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
+            "camera_eye_frame": INTERFACE_CAMERA_EYE_FRAME,
+            "camera_target_frame": INTERFACE_CAMERA_TARGET_FRAME,
+            "camera_eye": list(interface_camera_eye),
+            "camera_target": list(interface_camera_target),
+            **interface_screenshot_runtime,
         },
         "passed": passed,
     }

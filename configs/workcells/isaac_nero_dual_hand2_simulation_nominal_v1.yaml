@@ -29,6 +29,16 @@ frames:
     transform:
       position_m: [0.0, -0.05, 0.80]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_right_interface_eye
+    parent: world
+    transform:
+      position_m: [0.72, -0.035, 1.25]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_right_interface_target
+    parent: world
+    transform:
+      position_m: [0.234, -0.035, 1.174]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
 mounts:
   - mount_id: nero_left_simulation_nominal_mount
     frame: simulation_nominal_table_top

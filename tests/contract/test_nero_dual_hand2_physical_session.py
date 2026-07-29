@@ -264,6 +264,12 @@ def test_physical_dual_attachments_and_nominal_workcell_are_explicit() -> None:
         -0.05,
         0.80,
     )
+    assert frames[
+        "simulation_nominal_camera_right_interface_eye"
+    ].transform.position_m == (0.72, -0.035, 1.25)
+    assert frames[
+        "simulation_nominal_camera_right_interface_target"
+    ].transform.position_m == (0.234, -0.035, 1.174)
     left = resolved.workcell.mount("nero_left_simulation_nominal_mount")
     right = resolved.workcell.mount("nero_right_simulation_nominal_mount")
     assert left.frame == right.frame == "simulation_nominal_table_top"
