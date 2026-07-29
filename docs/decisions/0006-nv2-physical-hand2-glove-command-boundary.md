@@ -33,9 +33,10 @@ Hand 2 仍固定到 world；若把 Glove 的 21 DoF 人手角直接当成 q20，
 来源 USD 中的 rigid body、collision、drive 和 20 个 revolute joint 都保留。绑定名称
 使用 `physical`，不能用“twin”暗示同一物理 USD 已被剥除 physics。
 
-当前左右 attachment transform 均为 identity。原来的 local `Ry(+90°)` 已由
-ADR-0005 迁移到 NERO Backend Binding 的 J7/法兰机械帧；`J7=0` 时 Hand 2 世界位姿
-保持不变。Assembly 因而只表达项目负责人确认的直接装配，不表达直角转接结构。
+当前左右 attachment transform 均为零平移、`Ry(+90°)`。该旋转映射固定 NERO
+`link7` 与 Hand 2 `hand_base` 的接口坐标约定，不表示存在直角转接结构。经 prim
+隔离确认，待旋转圆柱属于 NERO `link6`；其 visual/collision/mass 表示对齐由 NERO
+Backend Binding 负责，不通过 Assembly 带动 Hand 2，也不改写 J7。
 
 ## 决策二：Session v1 中四组全部显式 commanded
 
@@ -93,8 +94,8 @@ right q27 = right NERO q7 + right Hand 2 q20
 
 simulation adapter 在 PhysX 初始化前：
 
-1. 从 NERO Binding profile 对 J7 joint frame 与 `link7` 应用同一修正；
-2. 从已解析 Assembly 读取 identity attachment transform；
+1. 从 NERO Binding profile 对齐 `link6` visual/collision/mass，不改 joint frame；
+2. 从已解析 Assembly 读取 `Ry(+90°)` attachment transform；
 3. 将 Hand 2 base 放置到 NERO 法兰；
 4. 禁用 Hand 2 USD 的 world-fixed `root_joint`；
 5. 移除该 prim 的 `ArticulationRootAPI`；
@@ -124,9 +125,9 @@ external collision shapes/contact = retained
 - 若改为 `true`，需先为 NERO 增加明确 collision filtering，再重跑结构、contact、
   GUI 和稳定性 Gate。
 
-在确认前，corrected-flange tabletop v11 的 88/88 证明当前 nominal 定义下双侧
+在确认前，link6-aligned tabletop v12 的 86/86 证明当前 nominal 定义下双侧
 q7/q20、五指/组合手型、隔离、reset/recovery、limits、有界静置收敛，以及
-attachment 法向/clocking/原点、mount/q7 准备位的几何方向；右侧 live Glove
+`link6` 圆柱—小臂轴、attachment 原点、mount/q7 准备位和手工作姿态；右侧 live Glove
 另有现场证据。它仍不证明 Hand 2 internal self-collision 或 deliberate
 contact/unknown penetration，因此不关闭完整 NV-2 Gate。
 
@@ -159,8 +160,8 @@ measured Binding/Assembly/Workcell revision，不得静默覆盖 nominal 文件�
 | 固定发送 neutral q20 | 隐藏实际 command ownership，无法表达 Glove 输入或失败语义 |
 | 将 `hand_joint_angles` 21 DoF 截断/重排为 q20 | 人手模型与 Hand 2 机器人布局语义不同 |
 | 在 domain/Session 保存 Wuji SDK 对象 | 破坏固定依赖方向和无硬件测试能力 |
-| 在 Assembly 保留 nominal `Ry(+90°)` | 会把 NERO 法兰 frame 问题描述成不存在的直角转接结构 |
-| 把端口轴或 corrected J7 frame 称为真机事实 | 尚无设备 J7 frame 只读回读、孔位接口图或现场测量 |
+| 把 Assembly `Ry(+90°)` 解释为实体直角转接件 | 当前只证明它是两个固定资产的接口坐标映射 |
+| 把端口轴或 link6 Binding 对齐称为真机事实 | 尚无设备 J7/link6 只读回读、孔位接口图或现场测量 |
 
 ## 后果
 
@@ -196,16 +197,17 @@ measured Binding/Assembly/Workcell revision，不得静默覆盖 nominal 文件�
   `hand_skeleton → canonical → retarget → Isaac` smoke；
 - self-collision policy 对应的 contact/GUI 资格证据。
 
-corrected-flange tabletop v11 报告的 88 项检查全部通过：保留 scripted physical
+link6-aligned tabletop v12 报告的 86 项检查全部通过：保留 scripted physical
 v2 的双侧 q7、五指/组合手型、隔离、finite/limits、命令后 topology reset、回到
-批准初态及 post-reset recovery，并增加分侧 q7 初态、手—法兰法向/clocking/原点、
+批准初态及 post-reset recovery，并增加分侧 q7 初态、`link6` 圆柱—小臂轴和
+attachment 原点、
 `link4 → link5` 小臂近水平、桌内方向、掌面向下和端口假设轴朝外检查；
 controller/supervisor/composer 的无硬件测试也已覆盖 composition-level invalid
 fail-closed。报告只证明 fixed external collider 保留和 bounded rest settling，
 且明确 `deliberate_unknown_penetration_probe=false`。右侧实际 Glove live 已完成，
 最近一次 2400 帧接收 2399 帧、拒绝 0 帧；稳定 identity、正式 calibration revision
-和脱敏 replay 尚未冻结。法兰接口近景已完成，但 deliberate contact/异常穿透与最终
-self-collision 验证责任仍未闭合。历史 v6 只保留为旧 J7/Assembly 定义证据。
+和脱敏 replay 尚未冻结。接口近景已完成，但 deliberate contact/异常穿透与最终
+self-collision 验证责任仍未闭合。历史 v6/v11 只保留为旧 J7/Assembly 定义证据。
 
 ## 重验触发器
 

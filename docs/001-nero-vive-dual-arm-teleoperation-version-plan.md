@@ -151,12 +151,13 @@
   Python 3.12 的固定 Hand 2 Session 最小兼容证据。
 - NV-1 已建立 VIVE input adapter；NV-2 已建立 NERO/Hand 2 Asset 与 Binding、固定导入
   recipe、双根 Assembly、`simulation_nominal` Workcell、Session v1、canonical
-  Glove/retarget/supervision 链和双 q27 runner。corrected-flange tabletop v11 已在
-  Workstation2 通过 88/88，覆盖原 68 项 scripted physical Gate，以及桌沿安装、
-  左右分侧 q7 准备位、手—法兰法向/clocking/原点、`link4 → link5` 小臂近水平、
-  掌面向下和端口假设轴朝外；纯旋转和有界 relative SE(3) 均通过 240/240，右侧
-  实际 Glove live 已打通。仍需关闭 Glove 可复现实验材料、deliberate contact/
-  异常穿透、合并 q27 self-collision 最终决策，以及后续 measured Workcell/attachment。
+  Glove/retarget/supervision 链和双 q27 runner。link6-aligned tabletop v12 已在
+  Workstation2 通过 86/86，覆盖原 68 项 scripted physical Gate，以及桌沿安装、
+  左右分侧 q7 准备位、`link6` 圆柱—小臂轴、attachment 原点、`link4 → link5`
+  小臂近水平、掌面向下和端口假设轴朝外；右侧实际 Glove live 已打通。旧
+  corrected-J7 rotation/SE(3) 报告已降为历史证据。仍需关闭当前定义的 Tracker
+  rotation 人工复验、Glove 可复现实验材料、deliberate contact/异常穿透、合并 q27
+  self-collision 最终决策，以及后续 measured Workcell/attachment。
 - 当前仍没有 ROS 2 package、真机 robot adapter、通用 recorder、延迟分解或独立
   精度评估。
 
@@ -614,25 +615,28 @@ observation 与 Hand 2 retargeting 驱动。
   表示，不再等待 visual-only 资产。
 - 双根 Assembly、nominal Workcell、Session v1 四个 logical route、canonical Glove
   observation/HandIntent 契约、supervision composition 及 q27 simulation adapter 已建立。
-- Workstation2 / Isaac Sim 6.0.1 上的 corrected-flange tabletop v11 已通过 88/88：
+- Workstation2 / Isaac Sim 6.0.1 上的 link6-aligned tabletop v12 已通过 86/86：
   保留 scripted
   physical v2 的左右 q7、双侧五指/组合手型、隔离、finite/limits、reset/recovery
-  68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、手—法兰法向、
-  clocking 与原点对齐、
+  68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、`link6` 圆柱—小臂轴
+  与 attachment 原点对齐、
   `link4 → link5` 小臂近水平、手向桌内、掌面向下和端口假设轴朝外等 Gate。
-- 项目负责人确认当前 Hand 2 世界位姿正确、没有直角转接结构。NERO Binding profile
-  将旧 Assembly `Ry(+90°)` 迁移为 source-locked J7/法兰 frame correction；Isaac
-  live stage 与 Tracker Lula URDF 共用该 profile，Assembly 改为 identity。
+- prim 隔离确认目标圆柱属于 NERO `link6`，不是 Hand 2 根刚体或直角转接结构。
+  NERO Binding profile 只在 live stage 中将 `link6` visual/collision/mass 由局部
+  `+Y` 轴以 `Rz(-90°)` 对齐到小臂 local `+X`；J7/`link7` 与 Tracker Lula 均恢复
+  固定来源定义。Assembly 使用 `Ry(+90°)` 映射 NERO 与 Hand 2 的接口坐标约定，
+  不表示物理转接件。
   Workcell 将两底座放到同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为 `+90°`。
   Session 引用的 typed
   qualification profile 保存左右 q7
   `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]` 及 Isaac-only q7 drive gain
   `stiffness=6000, damping=212.13203435596427`，没有修改通用 NERO profile 的全零机械初态或固定
   来源 URDF/USD。
-- v11 运行测得左右 `link4 → link5` 小臂轴竖直分量绝对值为
-  `0.01807/0.01780`，左右手纵轴朝桌内点积约 `0.98329/0.98346`、竖直分量
-  绝对值约 `0.05834/0.05631`、掌面朝下点积约 `0.99815/0.99811`。法兰法向与
-  clocking 点积均约 `1.0`，连接原点误差最大 `1.207e-7 m`。端口轴
+- v12 运行测得左右 `link6` 圆柱轴与小臂轴点积为
+  `0.999182/0.999247`，`link4 → link5` 小臂轴竖直分量绝对值为
+  `0.01809/0.01778`，左右手纵轴朝桌内点积约 `0.98369/0.98378`、竖直分量
+  绝对值约 `0.05849/0.05656`、掌面朝下点积约 `0.99828/0.99837`，连接原点误差
+  最大 `1.192e-7 m`。端口轴
   `base local -X` 来源于固定 mesh 外凸特征推断，朝桌外
   点积为 `1.0`，仍等待实物确认，不能写成现场实测。
 - 固定外部工作台 collider 已保留；每个 scripted hand baseline 与 reset 后均在
@@ -642,11 +646,12 @@ observation 与 Hand 2 retargeting 驱动。
   `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，右侧 live Glove→Isaac 已现场执行，
   最近一次 2400 帧中接收 2399 帧、拒绝 0 帧；identity、正式 calibration revision
   与脱敏 replay 仍待冻结。
-- 当前法兰修正已通过 profile、URDF materialization、五层 Session、全仓测试与
-  Workstation2 Isaac tabletop v11；Workcell-owned 法兰接口近景已冻结。corrected
-  Lula 上纯旋转与有界 relative SE(3) 均通过 240/240，较强的
-  `0.05591 m + 15°` 组合输入则在连续 5 次 IK 失败后按门禁中止。
-- 真机对应仍需法兰螺孔 clocking 近景/接口图和两台设备 J7 轴、零位、符号只读回读；
+- 当前 link6 Binding 表示对齐已通过 profile、五层 Session、全仓测试与
+  Workstation2 Isaac tabletop v12；Workcell-owned 接口近景已冻结。旧
+  corrected-J7 Lula 上的 rotation/SE(3) 结果不再代表当前定义，需使用固定来源
+  Lula 重新人工验证 Tracker rotation。
+- 真机对应仍需 `link6`/法兰螺孔 clocking 近景或接口图，以及两台设备 J7 轴、零位、
+  符号只读回读；
   不要求本轮提供不存在的直角转接件 CAD。
 
 **本阶段冻结的两点架构决策**
@@ -670,9 +675,9 @@ observation 与 Hand 2 retargeting 驱动。
 4. 新增 NERO Asset、Isaac Binding；同一 Asset 复用为左右两个实例。
 5. 新增 Hand 2 left Asset/Binding，并复用现有 right Asset/Binding。
 6. 建立双根 Assembly：左右 NERO 为 root，对应完整物理 Hand 2 为 child；Assembly
-   使用 identity 直连。NERO Binding profile 统一修正 J7/法兰 frame，Isaac stage 与
-   Lula IK 使用同一修正；adapter 在初始化前将每个 NERO+Hand 2 组合为一棵 q27
-   articulation，且不修改来源 URDF/USD。
+   用 `Ry(+90°)` 映射两个固定资产的接口坐标。NERO Binding profile 只对齐 `link6`
+   visual/collision/mass 表示；J7 frame 与 Lula IK 保持固定来源定义。adapter 在
+   初始化前将每个 NERO+Hand 2 组合为一棵 q27 articulation，且不修改来源 URDF/USD。
 7. NV-2 功能仿真使用明确标记的 `simulation_nominal` Workcell/mount；它可关闭
    软件装配与运动 Gate，但不得升级为现场机械事实。当前 nominal mount 位于同一
    桌沿并使 mesh 推断的端口轴朝外；精确 Workcell revision 留待实物端口朝向确认和
@@ -707,18 +712,18 @@ observation 与 Hand 2 retargeting 驱动。
 
 - Session 恰好解析四个显式 control group：`2 × q7` NERO 与 `2 × q20` Hand 2，
   共 54 logical DoF；左右命名、layout 和 command route 无碰撞。历史 scripted
-  physical v2 与 tabletop v6 只作为历史基线；当前以 corrected-flange tabletop
-  v11 的 88/88 为准。
+  physical v2、tabletop v6 与 corrected-J7 tabletop v11 只作为历史基线；当前以
+  link6-aligned tabletop v12 的 86/86 为准。
 - Isaac stage 恰好形成两棵 q27 articulation；Hand 2 world root 不再生效，
   FixedJoint body targets 正确，且每侧 q7/q20 分区完整、互斥。命令后 reset 已重验
   两棵 q27 与稳定分区。
 - 两只 Hand 2 可见、侧别正确、随对应法兰运动；20 个主动关节、drive、collision、
   rigid body 与 articulation 在 Isaac 6.0.1 中可解释。
-- 两臂可分别执行小幅 scripted q7，另一臂不受影响；corrected-flange tabletop v11
+- 两臂可分别执行小幅 scripted q7，另一臂不受影响；link6-aligned tabletop v12
   已通过。
 - 左右 q20 fixture 可分别完成逐指/手型小幅运动，另一只手与两臂 q7 不受影响；
   feedback finite 且在 Hand 2 canonical limits 内。历史 scripted physical v2 已覆盖
-  双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v11 重验。
+  双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v12 重验。
 - 可用 Wuji Glove 的 `hand_skeleton` live 流至少完成一侧
   `Glove → canonical 21×3 → Hand2 retarget q20 → Isaac` 自由空间 smoke；
   另一侧路径用相同 contract/fixture 验证。若现场有双侧 Glove，则补双侧 live smoke。
@@ -728,20 +733,21 @@ observation 与 Hand 2 retargeting 驱动。
   无硬件 controller/composition 测试已证明这些输入不会创建新的 input-derived
   `HandIntent`；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回
   rest。真人 live failure injection 随 live Gate 补验。
-- 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v11 已通过。
-- 两底座位于同一桌沿，左右 Hand 2 主轴与 `link7` 法兰轴对齐、指向桌内且掌面朝下；
+- 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v12 已通过。
+- 两底座位于同一桌沿，左右 `link6` 圆柱轴沿 `link4 → link5` 小臂方向，Hand 2
+  指向桌内且掌面朝下；
   `link4 → link5` 小臂近水平，显式 q7 初态与 reset 后反馈分别满足 qualification
-  threshold。tabletop v11 的 88/88 已通过，包含法向、clocking 和原点三类
-  attachment Gate。
+  threshold。tabletop v12 的 86/86 已通过，包含圆柱—小臂轴和 attachment 原点
+  Gate。
 - nominal 工作台的固定外部 collider 存在，初始状态、各 scripted baseline 与 reset 后
-  均有界静置收敛；该部分已通过。法兰接口近景已执行，但 deliberate
+  均有界静置收敛；该部分已通过。接口近景已执行，但 deliberate
   contact/unknown penetration 与异常穿透量化尚未执行。最终结果只关闭功能仿真
   Gate，不形成现场 clearance 或物理精度结论。
 - Session/source/artifact hash 和 Isaac 版本进入报告。
 
 **材料与工具评审**
 
-优先请求：二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景/接口图、两台
+优先请求：二维码对应 NERO `link6`/末端法兰在已知 q7/零位下的 clocking 近景或接口图、两台
 设备 J7 轴/零位/符号/限位只读回读、
 底座端口方向照片/图纸、精确底座/工作台测量、固件限位表、左右
 Hand 2 装配示意、Glove side/序列号、Wuji SDK 版本和有效标定产物。若 NERO 多源核对

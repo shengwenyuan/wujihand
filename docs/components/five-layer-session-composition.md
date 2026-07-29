@@ -99,8 +99,9 @@ Session 是每个进程的 composition root，不是新的 launch graph 或消�
   并引用 typed compatibility profile。
 - `configs/workcells/isaac_nero_dual_hand2_simulation_nominal_v1.yaml` 直接声明 NV-2
   bring-up 桌面、table top、两台位于同一近侧桌沿的 NERO mount，以及斜视/俯视
-  camera frame。NERO Binding compatibility profile 拥有 J7/法兰 frame correction，
-  Assembly 单独拥有 identity `link7 → hand_base` 直连关系；Session runtime
+  camera frame。NERO Binding compatibility profile 拥有 `link6` 的
+  visual/collision/mass 表示对齐，Assembly 单独拥有 `link7 → hand_base` 的接口坐标
+  映射；Session runtime
   唯一引用 typed tabletop qualification profile，保存左右分侧 q7 初态、Isaac-only
   q7 drive gain 和几何阈值。文件名与 assumptions 明确这些值不是现场测量或真机
   controller 参数；它可用于功能仿真，不能形成真实 clearance、精度或安全包络结论。
@@ -174,8 +175,8 @@ source-lock gate。后续提升 leaf 时应删除这些镜像，而不是让它�
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png
 ```
 
 省略 `--session` 时，runner 按上表和 `--command-source`/publish 参数选择兼容默认值，
@@ -249,12 +250,13 @@ Isaac authored-stage、PhysX 和真人输入回归不能由普通 fast suite 代
 场景仍有其固定 Isaac 环境；NV-2 dual q27 以 Isaac Sim 6.0.1 单独做阶段验证。真人
 MediaPipe 需要相机/模型，真人 Glove 需要实际设备、Wuji SDK、side/serial 与有效
 calibration。缺少对应环境时必须记录为“未执行”，不能由 fake SDK 或 fixture 替代。
-corrected-flange tabletop v11 已通过 88/88：保留 scripted physical v2 的双侧 q7、
+link6-aligned tabletop v12 已通过 86/86：保留 scripted physical v2 的双侧 q7、
 五指/组合手型、隔离、reset/topology/recovery 与 bounded rest settling，并增加
-分侧 q7 初态、手—法兰法向/clocking/原点、`link4 → link5` 小臂近水平、桌内方向、
-掌面朝下和端口假设轴朝外检查。法兰接口近景由 Workcell camera frame 所有；纯旋转
-与有界 relative SE(3) 均在 corrected Lula 上通过 240/240。历史 v6 只作为旧
-J7/Assembly 定义证据。上述结果不包括 deliberate contact/unknown penetration；
+分侧 q7 初态、`link6` 圆柱—小臂轴对齐、attachment 原点、`link4 → link5`
+小臂近水平、桌内方向、掌面朝下和端口假设轴朝外检查。接口近景由 Workcell camera
+frame 所有。J7 运动学和 Lula 已恢复固定来源 URDF；旧 corrected-J7
+rotation/SE(3) 报告不再代表当前定义。上述结果不包括 deliberate
+contact/unknown penetration；
 端口轴由固定 mesh 推断，仍待实物确认。
 右侧真实 Glove live 已执行；当前轻量 live-only 分支仍需在目标机复验启动时序。
 因此五层与 scripted physical 子 Gate 的成功不等于完整 NV-2 完成；NV-2 状态仍为

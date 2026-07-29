@@ -59,21 +59,19 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
 10. qualification profile 的 Isaac-only q7 drive gain 采用
     `stiffness=6000`、`damping=212.13203435596427`，用于抵消组合 Hand 2 重力负载下
     约一度的静态下垂并满足 `|forearm_axis.z| <= 0.02`。该数值不是硬件控制器参数。
-11. 项目负责人确认当前 `J7=0` 时 Hand 2 相对机械臂的世界位姿正确、没有直角转接
-    结构，并接受“Assembly 不应拥有 `+90°`”的边界。固定来源 URDF/USD 继续只读；
-    NERO Isaac Binding 引用
-    `agilex_nero_7f_flange_frame_correction_v1`，把原来 Assembly 的
-    `Ry(+90°)` 后乘到 J7 origin/`link7` 法兰机械帧。修正后的 J7 origin 为
-    `quat_wxyz=[0.5, 0.5, 0.5, 0.5]`，等价 RPY 为
-    `[π/2, 0, π/2]`。
-12. Assembly 的左右 `link7 → hand_base` 均改为零平移、单位四元数。按
-    `old_link7_world × Ry(+90°) = corrected_link7_world × I`，`J7=0` 时已确认正确的
-    Hand 2 世界位姿保持不变；法兰圆柱、J7 轴和 Hand 2 则共享同一修正坐标。
-    Tracker 使用的 Lula URDF 从固定来源生成同一 J7 修正，不允许 Isaac 与 IK 使用
-    两套末端定义。
-13. attachment Gate 同时验证法兰法向、孔位 clocking 轴与连接原点，不再用
-    `link7 +X` 伪装“法兰轴”的单点积通过。该修正仅批准用于当前二维码标识的 NERO
-    7F 仿真；真机运动前仍需只读核对 J7 轴、零位和符号。
+11. 逐 prim 隐藏检查确认截图中待旋转的近端圆柱属于 NERO `link6`，不是
+    Hand 2 根刚体、`link7` 或一个未建模的直角转接件。固定 URDF/USD 的所有 joint
+    origin、axis 和拓扑保持不变；撤销原先将 `Ry(+90°)` 写入 J7/`link7` 机械帧的
+    方案，Tracker Lula 继续直接使用固定来源 URDF。
+12. NERO Isaac Binding 引用
+    `agilex_nero_7f_link6_geometry_alignment_v1`，只在 live stage 中把 `link6`
+    visual/collision 表示由局部 `+Y` 轴后旋 `Rz(-90°)` 到局部 `+X` 轴，并同步旋转
+    center of mass 与 principal inertia axes。该 overlay 不改变 q7 运动学、关节限位、
+    `link7` 世界位姿或 Hand 2 世界位姿；物理 link6 clocking/CAD 仍未核验。
+13. Assembly 的左右 `link7 → hand_base` 恢复为零平移、
+    `Ry(+90°)`。这里的旋转只映射两个固定资产的接口坐标约定，不表示存在直角转接
+    结构。qualification Gate 验证 `link6` 圆柱轴与 `link4 → link5` 小臂轴同向、
+    attachment 原点重合，以及既有的手朝桌内、掌面朝下要求。
 
 ## 结果
 
@@ -84,18 +82,18 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   真机型号、零位或限位验证。
 - 通用 q7 profile 与 tabletop qualification 姿态分离；后者不会污染可复用的机械臂
   模型事实。
-- J7/法兰固定修正归 Backend Binding，Hand 2 直连关系归 Assembly；Assembly 不再
-  表达一个不存在的直角转接结构。
+- `link6` 表示修正归 Backend Binding，NERO—Hand 2 接口坐标映射归 Assembly；
+  两者都不表达一个不存在的直角转接结构，也不改写 J7 运动学。
 - tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过，但只保留为修正前历史
   组合的准备位和 drive qualification 证据。
-- corrected-flange tabletop v11 已在 Workstation2 以 88/88 checks 通过；左右
-  `link4 → link5` 竖直分量绝对值分别为 `0.01807` 与 `0.01780`，法兰法向、
-  clocking 和连接原点三类 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
-- corrected Lula 上的纯旋转与有界 relative SE(3) 均完成 240/240、0 次 IK 失败。
-  同时施加 `0.05591 m + 15°` 的较强组合量会在连续 5 次 IK 失败后中止；该负例
-  保留为可达工作区边界证据，不作为放宽固定 URDF 限位的理由。
-- 物理对应仍需要两台设备 J7 轴/零位/符号只读回读，以及可明确螺孔 clocking 的
-  末端近景或接口图；不再假设存在直角转接件，也不把缺失 CAD 写成当前实现阻塞项。
+- link6-aligned tabletop v12 已在 Workstation2 以 86/86 checks 通过；左右圆柱轴与
+  小臂轴点积分别为 `0.999182` 与 `0.999247`，掌面朝下、手朝桌内、连接原点以及
+  双 q27 功能 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
+- 先前 corrected-J7 Lula 的旋转/SE(3) 报告只保留为已撤销定义下的历史证据，不再
+  支持当前 Tracker rotation 结论；当前定义须使用固定来源 URDF 重新做 Tracker
+  rotation 人工验证。
+- 物理对应仍需要两台设备 J7 轴/零位/符号只读回读，以及能确认 `link6` clocking
+  和法兰螺孔方向的实物近景或接口图；不再假设存在直角转接件。
 
 ## 依据
 

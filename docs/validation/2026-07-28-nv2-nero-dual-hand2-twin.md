@@ -1,7 +1,6 @@
 # 2026-07-28 NV-2 NERO 双实例、物理 Hand 2 与 Glove 链路阶段验证
 
-状态：**PARTIAL / corrected-flange tabletop v11 已在 Workstation2 通过 88/88；
-纯旋转与有界 relative SE(3) 均通过 240/240**。
+状态：**PARTIAL / link6-aligned tabletop v12 已在 Workstation2 通过 86/86**。
 
 已通过的范围是：
 
@@ -9,17 +8,19 @@
 - NERO-only 双实例 pre-composition q7 smoke；
 - 双 NERO + 双侧完整物理 Hand 2 + nominal Workcell + Session v1 的五层闭合；
 - Isaac 中两棵同侧 q27 articulation；
-- corrected-flange tabletop v11 的 88 项检查：保留 scripted physical v2 的左右
+- link6-aligned tabletop v12 的 86 项检查：保留 scripted physical v2 的左右
   q7、双侧五指逐指、
   双侧组合手型、另一手/两臂隔离、有限值与限位、命令后 topology reset、回到批准
   初态和 post-reset recovery 等 68 项检查，并增加 20 项 tabletop 几何、准备位和
-  法兰接口检查；
-- 历史 v6 的 Assembly 拥有 Hand 2 local `Ry(+90°)` attachment；v11 已把该旋转
-  迁移到 NERO Binding 的 J7/法兰 frame correction，并将 Assembly 改为 identity；
+  `link6` 圆柱—小臂轴与 attachment 原点检查；
+- prim 隔离证明目标圆柱属于 NERO `link6`。v12 撤销 v11 的 J7 frame correction，
+  恢复固定 URDF/Lula joint 定义；Binding 只对齐 `link6` visual/collision/mass，
+  Assembly 以 `Ry(+90°)` 映射 NERO 与 Hand 2 的接口坐标约定；
   Workcell 继续拥有桌面、同一近侧桌沿双 mount 和相机 frame；
 - fixed external Workcell collider 存在，初始、每个 scripted hand baseline 与 reset
   后的双 q27 静置均有界收敛；
-- corrected Lula 上的纯旋转和有界 relative SE(3) 均完成 240 帧、0 次 IK 失败；
+- 旧 corrected-J7 Lula 上的 rotation/SE(3) 报告已降为历史证据，当前 Tracker
+  rotation 仍待按固定来源 URDF 人工复验；
 - 右侧实际 Glove live 已完成；最近一次 2400 帧运行接收 2399 帧、拒绝 0 帧。
 
 尚未通过的范围是：
@@ -29,7 +30,7 @@
 - merged q27 的最终 self-collision policy 尚待项目负责人确认；
 - 实际 Glove 的稳定 identity、正式 handedness calibration revision 和脱敏 replay
   尚未冻结为可复现实验材料；
-- measured Workcell 和设备 J7/法兰 frame 回读尚未建立。
+- measured Workcell、设备 J7 frame、`link6` clocking 和法兰回读尚未建立。
 
 因此本报告不能将 NV-2 标为完整完成。以下全部仿真均未启动或控制真实 NERO、
 真实 Hand 2、CAN 或 ROS 2 command。
@@ -183,8 +184,8 @@ Session 的 `runtime.compatibility_profile` 引用
 
 `src/wujihand/adapters/simulation/nero_hand2_twin.py` 在 PhysX 初始化前：
 
-1. 根据 NERO Binding profile 修正 J7 joint frame 与 `link7`；
-2. 根据 identity Assembly transform 放置 Hand 2；
+1. 根据 NERO Binding profile 对齐 `link6` visual/collision/mass 表示，不改 joint；
+2. 根据 Assembly `Ry(+90°)` 接口映射放置 Hand 2；
 3. 禁用 Hand 2 world `root_joint`；
 4. 移除该 prim 的 `ArticulationRootAPI`；
 5. author `NERO link7 → Hand 2 base` FixedJoint；
@@ -200,45 +201,42 @@ right q27 = NERO right q7 + Hand 2 right q20
 
 四条 logical command route 与两棵 physical articulation 是不同层次的事实。
 
-## 当前 J7/法兰统一修正（Isaac 已回归）
+## 当前 link6 表示对齐（Isaac 已回归）
 
-项目负责人确认 `J7=0` 时当前 Hand 2 相对机械臂的世界位姿正确、没有直角转接结构，
-并采用“Assembly 不应拥有 `+90°`”的边界。当前五层表达为：
+逐 prim 隐藏诊断分别隐藏 NERO `link7`、Hand 2 `r_base_link`、Hand 2 `r_wrist`
+和 NERO `link6`：前三次目标圆柱仍存在，只有隐藏 NERO `link6` 时目标消失。因此，
+待调整圆柱属于 NERO `link6`，不是 Hand 2 根刚体或直角转接件。
 
-```text
-immutable NERO URDF/USD
-  -> NERO Binding correction: J7/link7 origin post-multiply Ry(+90°)
-  -> Assembly: link7 -> hand_base identity
-```
-
-来源 J7 origin quaternion 为
-`[0.70710678, 0.70710678, 0, 0]`；Binding correction 后为
-`[0.5, 0.5, 0.5, 0.5]`。因此：
+当前五层表达为：
 
 ```text
-old_link7_world × Ry(+90°) = corrected_link7_world × identity
+immutable NERO URDF/USD joint tree
+  -> NERO Binding overlay: link6 visual/collision/mass Rz(-90°)
+  -> Assembly: link7 -> hand_base Ry(+90°) interface-frame mapping
 ```
 
-Hand 2 的既有世界位姿保持不变，同时法兰圆柱、J7 轴和 Hand 2 使用统一坐标。固定
-来源文件不被覆盖；Tracker Lula 使用从同一 profile 生成的 corrected URDF。
+固定资产中圆柱轴是 `link6` local `+Y`，小臂轴是 local `+X`；`Rz(-90°)` 将前者
+映射到后者。Binding 同步旋转 visual、collision、center of mass 与 principal inertia
+axes，但不改 J7 origin/axis、`link7`、q7 limit 或 Lula URDF。Assembly 的
+`Ry(+90°)` 只映射两个固定资产的接口坐标，不表示存在物理直角转接结构。这样既保持
+已确认的 Hand 2 手掌/手指工作姿态，也只旋转实际归属 NERO `link6` 的圆柱表示。
 
 固定配置证据：
 
 | 对象 | SHA-256 / 结果 |
 |---|---|
-| flange correction profile | `56581f483267761308ecd88ecaba158155bf2e50c6ab937d2157626a872356df` |
-| Assembly identity revision | `ebfa932c78bcca16fc30cdebcf3f963dacab0ed5a61915c3c4f9f1e86755c867` |
-| NERO Binding revision | `c991e15b2d5082463527692abb5e8a69b98aed731b1111e60db6ba5b0c4bcaee` |
-| tabletop qualification profile | `f95d0bd34ac592619111112adb851364ac76788f6b14f175a25c49baea22b18c` |
-| resolved Session hash（v11） | `5d52774611677a7b4be2b67eaa4462f647b1ee5896c96b045d97adcaadd60bda` |
-| generated corrected Lula URDF（本机） | `aba11058236393943abb9f0a37b32a3d19008436dddf1276d6150bacb22bcd4b` |
-| `pytest -q` | `517 passed, 4 skipped, 9 deselected` |
+| link6 geometry alignment profile | `5fa87dce8c4ae90f716223b314ccf3229a794d8c24139ed1884fd0d25ae7c51a` |
+| Assembly interface revision | `03d5073c5e874632d39a38126b91f717b3e2e0906a85c75ab8aa3dc3786b3dcd` |
+| NERO Binding revision | `f35e6fdd5ec60e1608df9ff51d7dbba5115f2e619bad7f0ed0130e088c9f8878` |
+| tabletop qualification profile | `c9d1164fa781555cf1ab508eaa239d1f06fd7354fd8251b13a6c39b717f4e7bd` |
+| resolved Session hash（v12） | `4b9f97fb1c946f92918bcb7f8ecffde68f859a6b511dc24914afb694f827578d` |
+| Lula URDF | 固定来源：`c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278` |
+| `pytest -q` | `527 passed, 4 skipped, 9 deselected` |
 | Ruff / `mypy src` / `git diff --check` | 通过 |
 
 新 qualification Gate 分别检查：
 
-- Hand 2 local `+Z` 与 corrected flange normal local `+Z`；
-- Hand 2 palm-normal local `+X` 与 corrected flange clocking local `+X`；
+- `link6` corrected local `+X` 圆柱轴与 `link4 → link5` 世界小臂轴；
 - `link7` 与 `hand_base` 连接原点距离不超过 `1 µm`。
 
 Workstation2 上的最终回归入口：
@@ -248,18 +246,17 @@ Workstation2 上的最终回归入口：
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png
 ```
 
-结果为 `88/88 checks true`、`passed=true`。新增的法兰接口 Gate 实测为：
+结果为 `86/86 checks true`、`passed=true`。新增的 link6/接口 Gate 实测为：
 
 | Gate | left | right | threshold |
 |---|---:|---:|---:|
-| 法兰法向对齐点积 | `0.9999999999999866` | `0.9999999999999943` | `>=0.999` |
-| 法兰 clocking 轴对齐点积 | `0.9999999999999913` | `0.9999999999999771` | `>=0.999` |
-| `link7`—`hand_base` 原点误差 | `1.207e-7 m` | `4.480e-16 m` | `<=1e-6 m` |
-| `link4 → link5` 竖直分量 | `0.01807` | `0.01780` | `<=0.02` |
+| `link6` 圆柱—小臂轴点积 | `0.9991824540` | `0.9992465536` | `>=0.999` |
+| `link7`—`hand_base` 原点误差 | `1.077e-16 m` | `1.192e-7 m` | `<=1e-6 m` |
+| `link4 → link5` 竖直分量 | `0.01809` | `0.01778` | `<=0.02` |
 
 右侧接口近景由 Workcell frame
 `simulation_nominal_camera_right_interface_eye/target` 定义，不是 runner 临时坐标。
@@ -268,8 +265,8 @@ Workstation2 上的最终回归入口：
 
 | Artifact | SHA-256 |
 |---|---|
-| `artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json` | `550b0e2bcbde225b75de77be77cd852913ba057a98600496001903e8c4bceb85` |
-| `artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png` | `0321edea66c3ec3b8ca836db808a4b2fcaebdb6082a694d335c97e08ad61c866` |
+| `artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json` | `2255dcf1fff63ecbcffdbeb88665a411b8d5169c0d7f74af5013e6caec57d062` |
+| `artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png` | `d64cb06c8c54853bd797daf31ef0a1521698b8b5c541a768e991c8ad4f8e767e` |
 
 这张图是仿真装配状态证据；它不能替代实体 NERO 法兰螺孔 clocking 照片或 J7
 轴/零位/符号回读。
@@ -439,7 +436,7 @@ invalid input 派生的新 q20 intent。
 稳定设备 identity、正式 handedness calibration revision、脱敏 canonical replay
 以及 live fault injection；这些不能由 fake SDK/composition test 代替。
 
-## Tracker → 右 NERO relative SE(3)
+## Tracker → 右 NERO relative SE(3)（rotation 结果为历史定义）
 
 Workstation2 真人 Tracker 的左右、前后、上下三方向已经由操作者在 Isaac GUI 中确认。
 轴映射已从 runner 移到五层之外的 simulation-only calibration：
@@ -455,7 +452,11 @@ configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
 但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
 
-最终代码上的纯 rotation 合成流已在 Isaac Sim 6.0.1 headless 执行 240 frames：
+以下 rotation/SE(3) 数据来自已经撤销的 corrected-J7 Lula 定义，只用于说明当时
+测试发生过，不能作为当前 fixed-source Lula 的通过证据。XYZ 人工方向结论不依赖
+该 J7 修正，仍然有效；rotation 必须按当前定义重新人工验证。
+
+历史纯 rotation 合成流曾在 Isaac Sim 6.0.1 headless 执行 240 frames：
 
 | 项目 | 结果 |
 |---|---:|
@@ -498,30 +499,31 @@ SHA-256
 | 左右完整物理 Hand 2 来源与 q20 layout | 通过 | source lock、Binding、USD hash |
 | stage 恰好两棵 q27 articulation | 通过 | runner 启动前结构检查与报告 |
 | Hand world root 禁用、FixedJoint attachment、q7/q20 分区 | 通过 | adapter fail-closed 检查 |
-| corrected J7 frame + identity Assembly | 通过（nominal） | tabletop v11 88/88；法向、clocking、原点三类 Gate 全通过 |
+| link6 Binding 表示对齐 + Assembly 接口映射 | 通过（nominal） | tabletop v12 86/86；圆柱—小臂轴、原点及手姿态 Gate 通过 |
 | 同侧桌沿 mount、端口假设轴朝外 | 通过（nominal） | `x=±0.32, y=-0.52, yaw=+90°`；port-axis dot=`1.0`，轴向为 mesh 推断待实物确认 |
-| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-45,0,-45,-90,0,0]°`；v11 初始/post-reset checks |
-| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01807/0.01780 <= 0.02` |
+| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-45,0,-45,-90,0,0]°`；v12 初始/post-reset checks |
+| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01809/0.01778 <= 0.02` |
 | 手朝桌内、近水平且掌面向下 | 通过（nominal） | inward、vertical 与 palm-down 五项 stage 几何测量均过 threshold |
-| q7 响应与双实例隔离 | 通过 | tabletop v11 88/88，包含历史 v2 相关 Gate |
+| q7 响应与双实例隔离 | 通过 | tabletop v12 86/86，包含历史 v2 相关 Gate |
 | Tracker → 右 NERO XYZ 方向 | 通过（人工 GUI） | Workstation2 三方向核对；simulation-only calibration |
-| Tracker → 右 NERO roll/pitch/yaw | 合成通过、待人工 GUI | pure-rotation 240/240，报告 `passed=true`；真人方向待核对 |
+| Tracker → 右 NERO roll/pitch/yaw | **待按当前定义复验** | 旧 corrected-J7 240/240 报告仅为历史证据 |
 | 左右逐指与组合手型 fixture | 通过 | 双侧五指单指 phase + 双侧 15-joint 组合 phase |
-| sampled feedback finite 且在 canonical limits 内 | 通过 | v11 全局、左右及 post-reset checks |
+| sampled feedback finite 且在 canonical limits 内 | 通过 | v12 全局、左右及 post-reset checks |
 | 命令后 reset/topology/recovery | 通过 | 两根 q27 重验、partition stable、回到初态并恢复命令 |
 | fixed external collider 与 bounded rest settling | 通过 | table collider + 每个 baseline/reset 后 `0.005 rad` 容差 |
 | deliberate contact/unknown penetration | **未执行** | `deliberate_unknown_penetration_probe=false` |
-| nominal 法兰接口近景 | 通过 | v11 Workcell-owned camera frame、PNG 与 SHA-256 已冻结 |
+| nominal 接口近景 | 通过 | v12 Workcell-owned camera frame、PNG 与 SHA-256 已冻结 |
 | 实际 Glove `hand_skeleton` live smoke | 右侧通过 | 2399/2400 接收、0 拒绝；identity/calibration/replay 待冻结 |
 | composition-level invalid fail-closed | 通过（无硬件） | controller/supervisor/composer 测试；live fault injection 随 live 补验 |
 | merged q27 最终 self-collision policy | **待确认** | 当前仅验证 disabled policy |
 | measured Workcell / 实物 attachment | 后续阶段 | 不阻塞 nominal 功能联调，不构成现场几何事实 |
 
-结论：**NV-2 的五层配置、adapter/controller 边界、双 q27 拓扑和 corrected
-J7/identity Assembly 仿真 Gate 已闭合；tabletop v11 为 88/88，纯旋转与有界
-relative SE(3) 均为 240/240。历史 v6 84/84 与 scripted physical v2 68/68 只作
-旧定义基线。完整 NV-2 仍缺 Glove 可复现实验材料、deliberate contact/异常穿透、
-self-collision 最终决策和 measured Workcell/设备 J7 回读。**
+结论：**NV-2 的五层配置、adapter/controller 边界、双 q27 拓扑和 link6 Binding
+表示对齐已闭合；tabletop v12 为 86/86。历史 v6 84/84、v11 88/88 与 scripted
+physical v2 68/68 只作旧定义基线，其中 corrected-J7 rotation/SE(3) 结果不能代表
+当前定义。完整 NV-2 仍缺 Tracker rotation 人工复验、Glove 可复现实验材料、
+deliberate contact/异常穿透、self-collision 最终决策和 measured
+Workcell/设备 J7/link6 回读。**
 
 ## 明确未执行
 
@@ -542,8 +544,8 @@ self-collision 最终决策和 measured Workcell/设备 J7 回读。**
 4. deliberate contact/unknown penetration 与异常穿透量化证据；
 5. 真人 live failure injection 与监督日志；
 6. 项目负责人对 merged q27 self-collision policy 的确认；
-7. 二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景/接口图，以及
-   两台设备 J7 轴、零位、符号和限位只读回读；
+7. 二维码对应 NERO `link6`/末端法兰在已知 q7/零位下的 clocking 近景/接口图，
+   以及两台设备 J7 轴、零位、符号和限位只读回读；
 8. 后续物理对应阶段的桌面和底座 mount 实测。
 
 第 7～8 项不阻塞 nominal 仿真功能联调，但在做真实几何、clearance 或真机结论前
