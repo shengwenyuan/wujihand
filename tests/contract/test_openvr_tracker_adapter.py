@@ -328,6 +328,36 @@ def test_invalid_pose_never_reuses_last_pose_and_resets_hemisphere(
     )
 
 
+@pytest.mark.parametrize(
+    "tracking_result",
+    (
+        _FakeOpenVr.TrackingResult_Calibrating_InProgress,
+        _FakeOpenVr.TrackingResult_Calibrating_OutOfRange,
+    ),
+)
+def test_calibrating_pose_is_canonicalized_but_never_actionable(
+    fake_openvr: _FakeOpenVr,
+    tracking_result: int,
+) -> None:
+    adapter = _adapter(clutch_button_id=None)
+    adapter.start()
+    fake_openvr.system.poses[2] = _z_pose(
+        15.0,
+        valid=True,
+        tracking_result=tracking_result,
+        position=(1.0, 2.0, 3.0),
+    )
+
+    calibrating = adapter.poll(host_time_ns=100).sample
+
+    assert calibrating.connected
+    assert calibrating.tracking_state is TrackingState.CALIBRATING
+    assert not calibrating.pose_valid
+    assert calibrating.position_m is None
+    assert calibrating.quat_wxyz is None
+    assert calibrating.quality is None
+
+
 def test_quaternion_hemisphere_is_continuous_without_loss(
     fake_openvr: _FakeOpenVr,
 ) -> None:

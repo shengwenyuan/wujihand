@@ -6,6 +6,7 @@ import pytest
 from wujihand.application.teleoperation import (
     RelativeTrackerPoseMapper,
     RelativeTrackerTranslationMapper,
+    TrackerReferenceReadinessGate,
 )
 from wujihand.domain import TrackedRigidBodySample, TrackingState
 from wujihand.domain.pose import (
@@ -77,6 +78,110 @@ def pose_mapper(
         stale_after_s=0.25,
         translation_enabled=translation_enabled,
     )
+
+
+def reference_gate(
+    *,
+    stable_after_s: float = 0.25,
+) -> TrackerReferenceReadinessGate:
+    return TrackerReferenceReadinessGate(
+        stream_id="vive.right",
+        device_serial="LHR-24B6E288",
+        logical_role="operator_right",
+        tracking_frame="vive_tracking",
+        stable_after_s=stable_after_s,
+        max_sample_gap_s=0.25,
+    )
+
+
+def test_reference_gate_requires_a_continuous_running_window() -> None:
+    subject = reference_gate(stable_after_s=0.25)
+
+    first = subject.observe(
+        sample(sequence=0, host_time_ns=1_000_000_000)
+    )
+    almost_ready = subject.observe(
+        sample(sequence=1, host_time_ns=1_249_999_999)
+    )
+    ready = subject.observe(
+        sample(sequence=2, host_time_ns=1_250_000_000)
+    )
+
+    assert first.reason == "stabilizing_running"
+    assert first.consecutive_running_samples == 1
+    assert not almost_ready.ready
+    assert ready.ready
+    assert ready.reason == "stable_running"
+    assert ready.consecutive_running_samples == 3
+    assert ready.stable_duration_s == pytest.approx(0.25)
+
+
+def test_reference_gate_resets_on_every_observed_calibrating_sample() -> None:
+    subject = reference_gate(stable_after_s=0.20)
+
+    subject.observe(sample(sequence=0, host_time_ns=1_000_000_000))
+    subject.observe(sample(sequence=1, host_time_ns=1_150_000_000))
+    calibrating = subject.observe(
+        sample(
+            sequence=2,
+            host_time_ns=1_190_000_000,
+            state=TrackingState.CALIBRATING,
+        )
+    )
+    restarted = subject.observe(
+        sample(sequence=3, host_time_ns=1_300_000_000)
+    )
+    ready = subject.observe(
+        sample(sequence=4, host_time_ns=1_500_000_000)
+    )
+
+    assert calibrating.reason == "tracking_calibrating"
+    assert calibrating.consecutive_running_samples == 0
+    assert not calibrating.ready
+    assert restarted.consecutive_running_samples == 1
+    assert not restarted.ready
+    assert ready.ready
+    assert ready.consecutive_running_samples == 2
+
+
+def test_reference_gate_restarts_after_a_stale_sample_gap() -> None:
+    subject = reference_gate(stable_after_s=0.20)
+
+    subject.observe(sample(sequence=0, host_time_ns=1_000_000_000))
+    subject.observe(sample(sequence=1, host_time_ns=1_150_000_000))
+    restarted = subject.observe(
+        sample(sequence=2, host_time_ns=1_500_000_001)
+    )
+    ready = subject.observe(
+        sample(sequence=3, host_time_ns=1_700_000_001)
+    )
+
+    assert restarted.reason == "stabilizing_running_after_gap"
+    assert restarted.consecutive_running_samples == 1
+    assert restarted.stable_duration_s == 0.0
+    assert ready.ready
+    assert ready.consecutive_running_samples == 2
+
+
+def test_reference_gate_rejects_invalid_configuration_and_ordering() -> None:
+    with pytest.raises(ValueError, match="stable_after_s"):
+        reference_gate(stable_after_s=0.0)
+    with pytest.raises(ValueError, match="max_sample_gap_s"):
+        TrackerReferenceReadinessGate(
+            stream_id="vive.right",
+            device_serial="LHR-24B6E288",
+            logical_role="operator_right",
+            tracking_frame="vive_tracking",
+            stable_after_s=0.25,
+            max_sample_gap_s=0.0,
+        )
+
+    subject = reference_gate()
+    subject.observe(sample(sequence=2, host_time_ns=200))
+    decision = subject.observe(sample(sequence=2, host_time_ns=201))
+
+    assert decision.reason == "non_monotonic_sequence"
+    assert not decision.ready
 
 
 def test_translation_compatibility_mapper_freezes_orientation_and_maps_xyz() -> None:

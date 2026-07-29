@@ -65,7 +65,7 @@ class UdpTrackingSampleSender:
 
 
 class UdpTrackingSampleReceiver:
-    """Drain loopback input and expose only the newest monotonic sample."""
+    """Drain loopback input and expose monotonic canonical samples."""
 
     def __init__(
         self,
@@ -109,6 +109,21 @@ class UdpTrackingSampleReceiver:
     ) -> TrackedRigidBodySample | None:
         """Return the newest valid datagram after draining the socket."""
 
+        samples = self.receive_available(now_ns=now_ns)
+        return samples[-1] if samples else None
+
+    def receive_available(
+        self,
+        *,
+        now_ns: int | None = None,
+    ) -> tuple[TrackedRigidBodySample, ...]:
+        """Drain and return every new monotonic canonical sample in order.
+
+        Reference-readiness logic uses this batch form so a transient degraded
+        state cannot be hidden by a newer packet from the same socket drain.
+        Steady-state consumers may continue to use :meth:`receive_latest`.
+        """
+
         now = time.monotonic_ns() if now_ns is None else now_ns
         if type(now) is not int or now < 0:
             raise ValueError("now_ns must be a non-negative integer")
@@ -139,7 +154,7 @@ class UdpTrackingSampleReceiver:
                 continue
             candidates.append(sample)
 
-        selected: TrackedRigidBodySample | None = None
+        selected: list[TrackedRigidBodySample] = []
         previous_host_time_ns = self.last_host_time_ns
         previous_sequence = self.last_sequence
         for sample in sorted(
@@ -152,15 +167,15 @@ class UdpTrackingSampleReceiver:
             ):
                 self.rejected += 1
                 continue
-            selected = sample
+            selected.append(sample)
             previous_host_time_ns = sample.host_time_ns
             previous_sequence = sample.sequence
 
-        if selected is not None:
-            self.last_host_time_ns = selected.host_time_ns
-            self.last_sequence = selected.sequence
+        if selected:
+            self.last_host_time_ns = selected[-1].host_time_ns
+            self.last_sequence = selected[-1].sequence
             self.accepted += 1
-        return selected
+        return tuple(selected)
 
     def close(self) -> None:
         self._socket.close()

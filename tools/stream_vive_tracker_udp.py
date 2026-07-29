@@ -135,9 +135,11 @@ def main() -> int:
             state = poll.sample.tracking_state.value
             sample_counts[state] = sample_counts.get(state, 0) + 1
             if state != last_state:
+                actionable = str(poll.sample.pose_valid).lower()
                 print(
                     f"tracker_state={state} connected={poll.sample.connected} "
-                    f"pose_valid={poll.sample.pose_valid}",
+                    f"pose_valid={poll.sample.pose_valid} udp=sent "
+                    f"actionable={actionable}",
                     file=sys.stderr,
                     flush=True,
                 )

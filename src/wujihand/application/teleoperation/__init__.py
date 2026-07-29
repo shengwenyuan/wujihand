@@ -11,6 +11,8 @@ from .tracker_arm import (
     RelativeTrackerPoseMapper,
     RelativeTrackerTranslationMapper,
     TrackerPoseDecision,
+    TrackerReferenceReadiness,
+    TrackerReferenceReadinessGate,
     TrackerTranslationDecision,
     Vector3,
 )
@@ -23,6 +25,8 @@ __all__ = [
     "RelativeTrackerPoseMapper",
     "RelativeTrackerTranslationMapper",
     "TrackerPoseDecision",
+    "TrackerReferenceReadiness",
+    "TrackerReferenceReadinessGate",
     "TrackerTranslationDecision",
     "Vector3",
     "compose_q27_hand_target",

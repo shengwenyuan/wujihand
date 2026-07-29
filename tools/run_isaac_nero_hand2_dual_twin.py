@@ -44,6 +44,8 @@ from wujihand.application.qualification import (
 from wujihand.application.teleoperation import (
     GloveHand2SimulationController,
     RelativeTrackerPoseMapper,
+    TrackerReferenceReadiness,
+    TrackerReferenceReadinessGate,
     compose_q27_hand_target,
 )
 from wujihand.adapters.storage import (
@@ -162,6 +164,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--tracker-stale-s", type=float, default=0.25)
     parser.add_argument(
+        "--tracker-reference-stable-s",
+        type=float,
+        default=0.25,
+        help=(
+            "Continuous canonical RUNNING duration required before the "
+            "Tracker reference may be established."
+        ),
+    )
+    parser.add_argument(
         "--tracker-auto-reference",
         action="store_true",
         help="Establish the reference without waiting for Enter (CI/HIL only).",
@@ -220,6 +231,10 @@ if ARGS.tracker_max_rotation_deg is not None and not 0.0 < ARGS.tracker_max_rota
     raise SystemExit("--tracker-max-rotation-deg must be in (0, 45]")
 if not 0.05 <= ARGS.tracker_stale_s <= 1.0:
     raise SystemExit("--tracker-stale-s must be in [0.05, 1.0]")
+if not 0.10 <= ARGS.tracker_reference_stable_s <= 2.0:
+    raise SystemExit(
+        "--tracker-reference-stable-s must be in [0.10, 2.0]"
+    )
 
 RESOLVED = SessionResolver(ROOT).resolve(
     ARGS.session,
@@ -1270,6 +1285,14 @@ def _run_tracker_live(
         translation_enabled=not ARGS.tracker_freeze_translation,
         rotation_enabled=ARGS.tracker_rotation,
     )
+    reference_readiness_gate = TrackerReferenceReadinessGate(
+        stream_id=TRACKER_STREAM_ID,
+        device_serial=ARGS.tracker_serial,
+        logical_role=TRACKER_LOGICAL_ROLE,
+        tracking_frame=TRACKER_MAPPING.tracking_frame,
+        stable_after_s=ARGS.tracker_reference_stable_s,
+        max_sample_gap_s=ARGS.tracker_stale_s,
+    )
     supervisor = JointCommandSupervisor(
         arm_profiles["right"].layout,
         initial_q7,
@@ -1312,11 +1335,23 @@ def _run_tracker_live(
             TRACKER_REFERENCE_WAIT_S * 1_000_000_000
         )
         reference_sample = None
+        reference_readiness: TrackerReferenceReadiness | None = None
         last_reference_error = "no canonical sample received"
         while time.monotonic_ns() < reference_deadline_ns:
             now_ns = time.monotonic_ns()
-            candidate = receiver.receive_latest(now_ns=now_ns)
-            if candidate is not None and candidate.host_time_ns >= reference_requested_ns:
+            candidates = receiver.receive_available(now_ns=now_ns)
+            for candidate in candidates:
+                if candidate.host_time_ns < reference_requested_ns:
+                    continue
+                reference_readiness = reference_readiness_gate.observe(candidate)
+                last_reference_error = (
+                    f"{reference_readiness.reason}; "
+                    "continuous_running="
+                    f"{reference_readiness.stable_duration_s:.3f}s/"
+                    f"{ARGS.tracker_reference_stable_s:.3f}s"
+                )
+                if not reference_readiness.ready:
+                    continue
                 try:
                     mapper.arm(
                         candidate,
@@ -1329,6 +1364,8 @@ def _run_tracker_live(
                 else:
                     reference_sample = candidate
                     break
+            if reference_sample is not None:
+                break
             world.step(render=ARGS.gui)
             time.sleep(1.0 / PHYSICS_HZ)
         if reference_sample is None:
@@ -1336,6 +1373,8 @@ def _run_tracker_live(
                 "no fresh actionable Tracker sample arrived within "
                 f"{TRACKER_REFERENCE_WAIT_S:g}s: {last_reference_error}"
             )
+        assert reference_readiness is not None
+        assert reference_readiness.ready
 
         armed_ns = max(time.monotonic_ns(), reference_requested_ns + 1)
         supervisor.arm(armed_ns)
@@ -1344,6 +1383,10 @@ def _run_tracker_live(
             f"serial={reference_sample.device_serial} "
             f"position_m={list(reference_sample.position_m or ())} "
             f"mapping_id={TRACKER_MAPPING.mapping_id} "
+            "continuous_running="
+            f"{reference_readiness.stable_duration_s:.3f}s "
+            "running_samples="
+            f"{reference_readiness.consecutive_running_samples} "
             f"tracker_to_workcell={TRACKER_MAPPING.tracker_to_workcell} "
             "translation="
             f"{'frozen' if ARGS.tracker_freeze_translation else 'enabled'} "
@@ -1586,6 +1629,18 @@ def _run_tracker_live(
                 "accepted_samples": accepted_samples,
                 "receiver_accepted_drains": receiver.accepted,
                 "receiver_rejected_datagrams": receiver.rejected,
+                "reference_stability": {
+                    "required_continuous_running_s": (
+                        ARGS.tracker_reference_stable_s
+                    ),
+                    "maximum_sample_gap_s": ARGS.tracker_stale_s,
+                    "observed_continuous_running_s": (
+                        reference_readiness.stable_duration_s
+                    ),
+                    "consecutive_running_samples": (
+                        reference_readiness.consecutive_running_samples
+                    ),
+                },
             },
             "mapping": {
                 "mode": (

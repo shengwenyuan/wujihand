@@ -117,6 +117,161 @@ class TrackerPoseDecision:
 TrackerTranslationDecision = TrackerPoseDecision
 
 
+@dataclass(frozen=True, slots=True)
+class TrackerReferenceReadiness:
+    """Result of qualifying a continuous canonical ``RUNNING`` window."""
+
+    ready: bool
+    consecutive_running_samples: int
+    stable_duration_s: float
+    reason: str
+
+
+class TrackerReferenceReadinessGate:
+    """Require stable tracking before a teleoperation reference may be armed.
+
+    The gate consumes canonical observations only. It never rewrites an
+    OpenVR state, suppresses transport, or reuses a non-actionable pose.
+    Any observed non-``RUNNING`` sample resets the continuous readiness
+    window, as does a sample gap beyond the configured freshness bound,
+    while the producer remains free to transmit every state.
+    """
+
+    def __init__(
+        self,
+        *,
+        stream_id: str,
+        device_serial: str,
+        logical_role: str,
+        tracking_frame: str,
+        stable_after_s: float,
+        max_sample_gap_s: float,
+    ) -> None:
+        for field, value in (
+            ("stream_id", stream_id),
+            ("device_serial", device_serial),
+            ("logical_role", logical_role),
+            ("tracking_frame", tracking_frame),
+        ):
+            if not isinstance(value, str) or not value or len(value) > 128:
+                raise ValueError(f"{field} must be a bounded non-empty string")
+        if (
+            not math.isfinite(stable_after_s)
+            or not 0.0 < stable_after_s <= 5.0
+        ):
+            raise ValueError("stable_after_s must be finite and in (0, 5]")
+        if (
+            not math.isfinite(max_sample_gap_s)
+            or not 0.0 < max_sample_gap_s <= 5.0
+        ):
+            raise ValueError(
+                "max_sample_gap_s must be finite and in (0, 5]"
+            )
+
+        self.stream_id = stream_id
+        self.device_serial = device_serial
+        self.logical_role = logical_role
+        self.tracking_frame = tracking_frame
+        self.stable_after_ns = round(stable_after_s * 1_000_000_000)
+        self.max_sample_gap_ns = round(
+            max_sample_gap_s * 1_000_000_000
+        )
+        self._first_running_time_ns: int | None = None
+        self._consecutive_running_samples = 0
+        self._last_sequence: int | None = None
+        self._last_host_time_ns: int | None = None
+
+    def observe(
+        self,
+        sample: TrackedRigidBodySample,
+    ) -> TrackerReferenceReadiness:
+        """Observe one transmitted sample without hiding degraded states."""
+
+        if type(sample) is not TrackedRigidBodySample:
+            self._reset_running_window()
+            return self._decision(reason="non_canonical_sample")
+        if (
+            sample.stream_id != self.stream_id
+            or sample.device_serial != self.device_serial
+            or sample.logical_role != self.logical_role
+            or sample.tracking_frame != self.tracking_frame
+        ):
+            self._reset_running_window()
+            return self._decision(reason="identity_or_frame_mismatch")
+        if (
+            self._last_sequence is not None
+            and sample.sequence <= self._last_sequence
+        ):
+            self._reset_running_window()
+            return self._decision(reason="non_monotonic_sequence")
+        if (
+            self._last_host_time_ns is not None
+            and sample.host_time_ns <= self._last_host_time_ns
+        ):
+            self._reset_running_window()
+            return self._decision(reason="non_monotonic_timestamp")
+
+        sample_gap_exceeded = (
+            self._last_host_time_ns is not None
+            and sample.host_time_ns - self._last_host_time_ns
+            > self.max_sample_gap_ns
+        )
+        self._last_sequence = sample.sequence
+        self._last_host_time_ns = sample.host_time_ns
+        if (
+            not sample.connected
+            or not sample.pose_valid
+            or sample.tracking_state is not TrackingState.RUNNING
+        ):
+            self._reset_running_window()
+            return self._decision(
+                reason=f"tracking_{sample.tracking_state.value}"
+            )
+
+        if sample_gap_exceeded:
+            self._reset_running_window()
+        if self._first_running_time_ns is None:
+            self._first_running_time_ns = sample.host_time_ns
+        self._consecutive_running_samples += 1
+        stable_duration_ns = (
+            sample.host_time_ns - self._first_running_time_ns
+        )
+        ready = stable_duration_ns >= self.stable_after_ns
+        return TrackerReferenceReadiness(
+            ready=ready,
+            consecutive_running_samples=self._consecutive_running_samples,
+            stable_duration_s=stable_duration_ns / 1_000_000_000,
+            reason=(
+                "stable_running"
+                if ready
+                else (
+                    "stabilizing_running_after_gap"
+                    if sample_gap_exceeded
+                    else "stabilizing_running"
+                )
+            ),
+        )
+
+    def reset(self) -> None:
+        """Forget both transport ordering and the current running window."""
+
+        self._reset_running_window()
+        self._last_sequence = None
+        self._last_host_time_ns = None
+
+    def _reset_running_window(self) -> None:
+        self._first_running_time_ns = None
+        self._consecutive_running_samples = 0
+
+    def _decision(self, *, reason: str) -> TrackerReferenceReadiness:
+        return TrackerReferenceReadiness(
+            ready=False,
+            consecutive_running_samples=self._consecutive_running_samples,
+            stable_duration_s=0.0,
+            reason=reason,
+        )
+
+
 class RelativeTrackerPoseMapper:
     """Map one Tracker reference epoch into a bounded workcell-frame pose."""
 
@@ -559,6 +714,8 @@ __all__ = [
     "RelativeTrackerPoseMapper",
     "RelativeTrackerTranslationMapper",
     "TrackerPoseDecision",
+    "TrackerReferenceReadiness",
+    "TrackerReferenceReadinessGate",
     "TrackerTranslationDecision",
     "Vector3",
 ]
