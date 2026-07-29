@@ -19,6 +19,13 @@ from .tracker_arm import (
     TrackerTranslationDecision,
     Vector3,
 )
+from .tracker_diagnostics import (
+    JointLimitMargin,
+    TrackerTargetMotion,
+    joint_limit_margins,
+    nearest_joint_limit_margin,
+    tracker_target_motion,
+)
 
 __all__ = [
     "GloveHand2SimulationController",
@@ -26,6 +33,7 @@ __all__ = [
     "InteractiveTrackerArmController",
     "InteractiveTrackerArmState",
     "InteractiveTrackerArmStep",
+    "JointLimitMargin",
     "Matrix3",
     "QuaternionWxyz",
     "RelativeTrackerPoseMapper",
@@ -33,7 +41,11 @@ __all__ = [
     "TrackerPoseDecision",
     "TrackerReferenceReadiness",
     "TrackerReferenceReadinessGate",
+    "TrackerTargetMotion",
     "TrackerTranslationDecision",
     "Vector3",
     "compose_q27_hand_target",
+    "joint_limit_margins",
+    "nearest_joint_limit_margin",
+    "tracker_target_motion",
 ]

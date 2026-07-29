@@ -15,6 +15,8 @@ for headless qualification.
 from __future__ import annotations
 
 import argparse
+from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import version
 import json
@@ -22,7 +24,6 @@ import math
 from pathlib import Path
 import sys
 import time
-from collections.abc import Callable
 from typing import Any, cast
 
 import numpy as np
@@ -47,10 +48,15 @@ from wujihand.application.teleoperation import (
     GloveHand2SimulationController,
     InteractiveTrackerArmController,
     InteractiveTrackerArmState,
+    JointLimitMargin,
     RelativeTrackerPoseMapper,
     TrackerReferenceReadiness,
     TrackerReferenceReadinessGate,
+    TrackerTargetMotion,
     compose_q27_hand_target,
+    joint_limit_margins,
+    nearest_joint_limit_margin,
+    tracker_target_motion,
 )
 from wujihand.adapters.storage import (
     TrackerWorkcellMapping,
@@ -62,6 +68,7 @@ from wujihand.adapters.observability import (
     TimedRetargetAdapter,
 )
 from wujihand.domain import HandSide
+from wujihand.domain.joints import JointLayout
 from wujihand.domain.pose import (
     quaternion_geodesic_distance_rad,
     rotation_matrix_to_quaternion_wxyz,
@@ -73,7 +80,7 @@ from wujihand.specs import AttachmentSpec, PoseSpec
 DEFAULT_SESSION = (
     ROOT / "configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
 )
-DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml"
+DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,8 +101,7 @@ def parse_args() -> argparse.Namespace:
         "--interface-screenshot",
         type=Path,
         help=(
-            "Optional close-up using the Workcell right flange-to-Hand2 "
-            "interface camera frames."
+            "Optional close-up using the Workcell right flange-to-Hand2 interface camera frames."
         ),
     )
     parser.add_argument(
@@ -184,10 +190,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tracker-auto-reference",
         action="store_true",
-        help=(
-            "Compatibility option; Tracker reference acquisition is now "
-            "always automatic."
-        ),
+        help=("Compatibility option; Tracker reference acquisition is now always automatic."),
     )
     return parser.parse_args()
 
@@ -244,9 +247,7 @@ if ARGS.tracker_max_rotation_deg is not None and not 0.0 < ARGS.tracker_max_rota
 if not 0.05 <= ARGS.tracker_stale_s <= 1.0:
     raise SystemExit("--tracker-stale-s must be in [0.05, 1.0]")
 if not 0.10 <= ARGS.tracker_reference_stable_s <= 2.0:
-    raise SystemExit(
-        "--tracker-reference-stable-s must be in [0.10, 2.0]"
-    )
+    raise SystemExit("--tracker-reference-stable-s must be in [0.10, 2.0]")
 
 RESOLVED = SessionResolver(ROOT).resolve(
     ARGS.session,
@@ -364,6 +365,8 @@ TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD = 0.03
 TRACKER_HAND_FEEDBACK_TOLERANCE_RAD = 0.10
 TRACKER_STREAM_ID = "vive.right"
 TRACKER_LOGICAL_ROLE = "operator_right"
+TRACKER_MAX_CONSECUTIVE_IK_FAILURES = 5
+TRACKER_DIAGNOSTIC_HISTORY_LIMIT = 64
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
@@ -371,9 +374,7 @@ OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
 TOP_CAMERA_EYE_FRAME = "simulation_nominal_camera_top_eye"
 TOP_CAMERA_TARGET_FRAME = "simulation_nominal_camera_top_target"
 INTERFACE_CAMERA_EYE_FRAME = "simulation_nominal_camera_right_interface_eye"
-INTERFACE_CAMERA_TARGET_FRAME = (
-    "simulation_nominal_camera_right_interface_target"
-)
+INTERFACE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_right_interface_target"
 
 
 @dataclass(frozen=True, slots=True)
@@ -539,8 +540,7 @@ def _side_runtimes() -> tuple[SideRuntime, SideRuntime]:
 
 SIDES = _side_runtimes()
 alignment_profile_references = {
-    RESOLVED.instance(runtime.arm_instance_id).binding.compatibility_profile
-    for runtime in SIDES
+    RESOLVED.instance(runtime.arm_instance_id).binding.compatibility_profile for runtime in SIDES
 }
 if None in alignment_profile_references or len(alignment_profile_references) != 1:
     raise RuntimeError(
@@ -655,15 +655,12 @@ def _world_point(
     prim = stage.GetPrimAtPath(prim_path)
     if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
         raise RuntimeError(f"point measurement prim is invalid: {prim_path}")
-    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()
-    )
+    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(Usd.TimeCode.Default())
     point = matrix.Transform(Gf.Vec3d(*local_point_xyz))
     result = np.asarray(tuple(point), dtype=np.float64)
     if result.shape != (3,) or not np.isfinite(result).all():
         raise RuntimeError(
-            f"point measurement is not a finite vector for {prim_path}: "
-            f"{result.tolist()}"
+            f"point measurement is not a finite vector for {prim_path}: {result.tolist()}"
         )
     return result
 
@@ -972,10 +969,7 @@ def _run_glove_live(
         "accepted_minimum_landmark_confidence": (
             {
                 "minimum": min(minimum_landmark_confidences),
-                "mean": (
-                    sum(minimum_landmark_confidences)
-                    / len(minimum_landmark_confidences)
-                ),
+                "mean": (sum(minimum_landmark_confidences) / len(minimum_landmark_confidences)),
                 "maximum": max(minimum_landmark_confidences),
             }
             if minimum_landmark_confidences
@@ -1009,8 +1003,7 @@ def _run_glove_live(
             ),
         },
         "effective_loop_rate_hz": (
-            ARGS.glove_frames
-            / max((finished_ns - started_ns) / 1_000_000_000, 1e-9)
+            ARGS.glove_frames / max((finished_ns - started_ns) / 1_000_000_000, 1e-9)
         ),
         "host_stage_timing": {
             "clock_domain": "host_monotonic",
@@ -1049,9 +1042,7 @@ def _run_glove_live_qualification(
 
     side_name = cast(str, ARGS.glove_side)
     other_side = "left" if side_name == "right" else "right"
-    initial_arm_commands = {
-        side: arm_targets[side].copy() for side in ("left", "right")
-    }
+    initial_arm_commands = {side: arm_targets[side].copy() for side in ("left", "right")}
     initial_other_hand_command = hand_targets[other_side].copy()
     glove_report, live_feedback = _run_glove_live(
         world,
@@ -1068,8 +1059,7 @@ def _run_glove_live_qualification(
         + cast(int, glove_report["rejected_skeleton_frames"])
     )
     arm_commands_held = all(
-        np.array_equal(arm_targets[side], initial_arm_commands[side])
-        for side in ("left", "right")
+        np.array_equal(arm_targets[side], initial_arm_commands[side]) for side in ("left", "right")
     )
     other_hand_command_held = bool(
         np.array_equal(hand_targets[other_side], initial_other_hand_command)
@@ -1084,9 +1074,7 @@ def _run_glove_live_qualification(
     )
     checks = {
         "bounded_run_completed": accounted_frames == ARGS.glove_frames,
-        "fresh_skeleton_received": (
-            cast(int, glove_report["accepted_skeleton_frames"]) > 0
-        ),
+        "fresh_skeleton_received": (cast(int, glove_report["accepted_skeleton_frames"]) > 0),
         "supervised_command_changed": (
             cast(float, glove_report["max_supervised_command_delta_rad"])
             >= LIVE_HAND_RESPONSE_MIN_RAD
@@ -1161,13 +1149,9 @@ def _run_glove_live_qualification(
         },
         "qualification_runtime": {
             "arm_drive_gains": arm_drive_runtime,
-            "selected_arm_feedback_tolerance_rad": (
-                GLOVE_LIVE_ARM_FEEDBACK_TOLERANCE_RAD
-            ),
+            "selected_arm_feedback_tolerance_rad": (GLOVE_LIVE_ARM_FEEDBACK_TOLERANCE_RAD),
             "other_side_feedback_tolerance_rad": MOTION_ISOLATION_TOLERANCE_RAD,
-            "arm_layout_ids": {
-                side: arm_profiles[side].layout_id for side in ("left", "right")
-            },
+            "arm_layout_ids": {side: arm_profiles[side].layout_id for side in ("left", "right")},
         },
         "command_ownership": {
             "selected_hand": side_name,
@@ -1181,11 +1165,7 @@ def _run_glove_live_qualification(
         },
         "checks": checks,
         "screenshot": {
-            "path": (
-                None
-                if ARGS.screenshot is None
-                else ARGS.screenshot.resolve().as_posix()
-            ),
+            "path": (None if ARGS.screenshot is None else ARGS.screenshot.resolve().as_posix()),
             "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
             "camera_eye_frame": OBLIQUE_CAMERA_EYE_FRAME,
             "camera_target_frame": OBLIQUE_CAMERA_TARGET_FRAME,
@@ -1193,9 +1173,7 @@ def _run_glove_live_qualification(
         },
         "top_screenshot": {
             "path": (
-                None
-                if ARGS.top_screenshot is None
-                else ARGS.top_screenshot.resolve().as_posix()
+                None if ARGS.top_screenshot is None else ARGS.top_screenshot.resolve().as_posix()
             ),
             "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
             "camera_eye_frame": TOP_CAMERA_EYE_FRAME,
@@ -1229,6 +1207,58 @@ def _nero_link7_pose(
     return position, rotation_matrix_to_quaternion_wxyz(rotation_matrix)
 
 
+def _target_motion_diagnostic(
+    motion: TrackerTargetMotion | None,
+) -> dict[str, float] | None:
+    if motion is None:
+        return None
+    return {
+        "sample_interval_s": motion.sample_interval_s,
+        "translation_step_m": motion.translation_step_m,
+        "translation_speed_m_s": motion.translation_speed_m_s,
+        "rotation_step_rad": motion.rotation_step_rad,
+        "rotation_step_deg": math.degrees(motion.rotation_step_rad),
+        "rotation_speed_rad_s": motion.rotation_speed_rad_s,
+        "rotation_speed_deg_s": math.degrees(motion.rotation_speed_rad_s),
+    }
+
+
+def _joint_limit_margin_diagnostic(
+    margin: JointLimitMargin,
+) -> dict[str, object]:
+    return {
+        "joint_name": margin.joint_name,
+        "position_rad": margin.position_rad,
+        "position_deg": math.degrees(margin.position_rad),
+        "lower_limit_rad": margin.lower_limit_rad,
+        "lower_limit_deg": math.degrees(margin.lower_limit_rad),
+        "upper_limit_rad": margin.upper_limit_rad,
+        "upper_limit_deg": math.degrees(margin.upper_limit_rad),
+        "nearest_limit": margin.nearest_limit,
+        "margin_to_nearest_limit_rad": margin.margin_to_nearest_limit_rad,
+        "margin_to_nearest_limit_deg": math.degrees(margin.margin_to_nearest_limit_rad),
+        "within_limits": margin.within_limits,
+    }
+
+
+def _q7_limit_diagnostic(
+    layout: JointLayout,
+    q7: npt.NDArray[np.float64],
+) -> dict[str, object]:
+    margins = joint_limit_margins(layout, q7)
+    nearest = min(
+        margins,
+        key=lambda item: item.margin_to_nearest_limit_rad,
+    )
+    return {
+        "q7_rad": [float(value) for value in q7],
+        "q7_deg": [math.degrees(float(value)) for value in q7],
+        "all_within_limits": all(item.within_limits for item in margins),
+        "nearest": _joint_limit_margin_diagnostic(nearest),
+        "per_joint": [_joint_limit_margin_diagnostic(item) for item in margins],
+    }
+
+
 def _print_tracker_operator_instruction() -> None:
     if ARGS.tracker_freeze_translation:
         print(
@@ -1238,8 +1268,7 @@ def _print_tracker_operator_instruction() -> None:
         )
     elif ARGS.tracker_rotation:
         print(
-            "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴"
-            "旋转。仅右 NERO 应响应。",
+            "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴旋转。仅右 NERO 应响应。",
             flush=True,
         )
     else:
@@ -1275,7 +1304,7 @@ def _run_tracker_interactive(
     )
     controller = InteractiveTrackerArmController(
         mapper,
-        max_consecutive_ik_failures=5,
+        max_consecutive_ik_failures=(TRACKER_MAX_CONSECUTIVE_IK_FAILURES),
     )
     frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
     started_ns = time.monotonic_ns()
@@ -1291,6 +1320,24 @@ def _run_tracker_interactive(
     rotation_clamped_samples = 0
     max_world_delta_m = 0.0
     max_target_rotation_delta_rad = 0.0
+    max_target_translation_step_m = 0.0
+    max_target_translation_speed_m_s = 0.0
+    max_target_rotation_step_rad = 0.0
+    max_target_rotation_speed_rad_s = 0.0
+    supervisor_position_clamped_frames = 0
+    supervisor_rate_limited_frames = 0
+    supervision_reasons: dict[str, int] = {}
+    reset_event_count = 0
+    reset_cause_counts: dict[str, int] = {}
+    reset_events: deque[dict[str, object]] = deque(maxlen=TRACKER_DIAGNOSTIC_HISTORY_LIMIT)
+    reference_events: deque[dict[str, object]] = deque(maxlen=TRACKER_DIAGNOSTIC_HISTORY_LIMIT)
+    ik_failure_events: deque[dict[str, object]] = deque(maxlen=TRACKER_DIAGNOSTIC_HISTORY_LIMIT)
+    closest_successful_limit_margin: JointLimitMargin | None = None
+    previous_target_position_m: npt.NDArray[np.float64] | None = None
+    previous_target_orientation_wxyz: npt.NDArray[np.float64] | None = None
+    previous_target_time_ns: int | None = None
+    pending_reference_cause = "startup"
+    pending_reference_reason = "initial_reference"
     supervisor_armed = False
     last_mapping_reason: str | None = None
     last_logged_state: InteractiveTrackerArmState | None = None
@@ -1333,6 +1380,50 @@ def _run_tracker_interactive(
                         mapping = reference_step.mapping
                         last_mapping_reason = reference_step.reason
                         if mapping is not None:
+                            assert mapping.target_position_m is not None
+                            assert mapping.target_orientation_wxyz is not None
+                            assert mapping.input_host_time_ns is not None
+                            previous_target_position_m = np.asarray(
+                                mapping.target_position_m,
+                                dtype=np.float64,
+                            )
+                            previous_target_orientation_wxyz = np.asarray(
+                                mapping.target_orientation_wxyz,
+                                dtype=np.float64,
+                            )
+                            previous_target_time_ns = mapping.input_host_time_ns
+                            reference_events.append(
+                                {
+                                    "frame": completed_frames,
+                                    "reference_epoch": (reference_step.reference_epoch),
+                                    "trigger_cause": (pending_reference_cause),
+                                    "trigger_reason": (pending_reference_reason),
+                                    "tracker_sequence": sample.sequence,
+                                    "tracker_host_time_ns": (sample.host_time_ns),
+                                    "tracker_reference_position_m": (
+                                        None
+                                        if sample.position_m is None
+                                        else list(sample.position_m)
+                                    ),
+                                    "tracker_reference_orientation_wxyz": (
+                                        None
+                                        if sample.quat_wxyz is None
+                                        else list(sample.quat_wxyz)
+                                    ),
+                                    "tracker_tracking_state": sample.tracking_state.value,
+                                    "tracker_quality": sample.quality,
+                                    "reference_target_position_m": list(mapping.target_position_m),
+                                    "reference_target_orientation_wxyz": (
+                                        list(mapping.target_orientation_wxyz)
+                                    ),
+                                    "current_q7": _q7_limit_diagnostic(
+                                        supervisor.layout,
+                                        current_q7,
+                                    ),
+                                }
+                            )
+                            pending_reference_cause = "tracking"
+                            pending_reference_reason = "reference_active"
                             if not supervisor_armed:
                                 supervisor.arm(tick_ns)
                                 supervisor_armed = True
@@ -1356,15 +1447,84 @@ def _run_tracker_interactive(
                     )
                     mapping = control_step.mapping
                     last_mapping_reason = control_step.reason
+                    if mapping is not None and mapping.requires_reference:
+                        reset_event_count += 1
+                        reset_cause = "tracker_reference_loss"
+                        reset_cause_counts[reset_cause] = reset_cause_counts.get(reset_cause, 0) + 1
+                        reset_events.append(
+                            {
+                                "frame": completed_frames,
+                                "reference_epoch": (control_step.reference_epoch),
+                                "cause": reset_cause,
+                                "reason": mapping.reason,
+                                "tracker_sample": (
+                                    None
+                                    if sample is None
+                                    else {
+                                        "sequence": sample.sequence,
+                                        "host_time_ns": (sample.host_time_ns),
+                                        "connected": sample.connected,
+                                        "pose_valid": sample.pose_valid,
+                                        "tracking_state": (sample.tracking_state.value),
+                                        "quality": sample.quality,
+                                    }
+                                ),
+                            }
+                        )
+                        pending_reference_cause = reset_cause
+                        pending_reference_reason = mapping.reason
+                        previous_target_position_m = None
+                        previous_target_orientation_wxyz = None
+                        previous_target_time_ns = None
                     if mapping is not None and not mapping.requires_reference:
+                        target_motion: TrackerTargetMotion | None = None
                         if mapping.accepted:
                             accepted_samples += 1
-                            translation_clamped_samples += int(
-                                mapping.translation_clamped
+                            translation_clamped_samples += int(mapping.translation_clamped)
+                            rotation_clamped_samples += int(mapping.rotation_clamped)
+                            assert mapping.target_position_m is not None
+                            assert mapping.target_orientation_wxyz is not None
+                            assert mapping.input_host_time_ns is not None
+                            target_position_m = np.asarray(
+                                mapping.target_position_m,
+                                dtype=np.float64,
                             )
-                            rotation_clamped_samples += int(
-                                mapping.rotation_clamped
+                            target_orientation_wxyz = np.asarray(
+                                mapping.target_orientation_wxyz,
+                                dtype=np.float64,
                             )
+                            if (
+                                previous_target_position_m is not None
+                                and previous_target_orientation_wxyz is not None
+                                and previous_target_time_ns is not None
+                            ):
+                                target_motion = tracker_target_motion(
+                                    previous_target_position_m,
+                                    previous_target_orientation_wxyz,
+                                    previous_target_time_ns,
+                                    target_position_m,
+                                    target_orientation_wxyz,
+                                    mapping.input_host_time_ns,
+                                )
+                                max_target_translation_step_m = max(
+                                    max_target_translation_step_m,
+                                    target_motion.translation_step_m,
+                                )
+                                max_target_translation_speed_m_s = max(
+                                    max_target_translation_speed_m_s,
+                                    target_motion.translation_speed_m_s,
+                                )
+                                max_target_rotation_step_rad = max(
+                                    max_target_rotation_step_rad,
+                                    target_motion.rotation_step_rad,
+                                )
+                                max_target_rotation_speed_rad_s = max(
+                                    max_target_rotation_speed_rad_s,
+                                    target_motion.rotation_speed_rad_s,
+                                )
+                            previous_target_position_m = target_position_m
+                            previous_target_orientation_wxyz = target_orientation_wxyz
+                            previous_target_time_ns = mapping.input_host_time_ns
                         else:
                             held_frames += 1
                         if mapping.world_delta_m is not None:
@@ -1381,25 +1541,27 @@ def _run_tracker_interactive(
                         assert mapping.target_position_m is not None
                         assert mapping.target_orientation_wxyz is not None
                         assert mapping.input_host_time_ns is not None
-                        solution, ik_success = (
-                            solver.compute_inverse_kinematics(
-                                "link7",
-                                np.asarray(
-                                    mapping.target_position_m,
-                                    dtype=np.float64,
-                                ),
-                                np.asarray(
-                                    mapping.target_orientation_wxyz,
-                                    dtype=np.float64,
-                                ),
-                                warm_start=supervisor.last_command,
-                                position_tolerance=0.002,
-                                orientation_tolerance=0.02,
-                            )
+                        solution, solver_reported_success = solver.compute_inverse_kinematics(
+                            "link7",
+                            np.asarray(
+                                mapping.target_position_m,
+                                dtype=np.float64,
+                            ),
+                            np.asarray(
+                                mapping.target_orientation_wxyz,
+                                dtype=np.float64,
+                            ),
+                            warm_start=supervisor.last_command,
+                            position_tolerance=0.002,
+                            orientation_tolerance=0.02,
                         )
+                        solver_candidate_q7: npt.NDArray[np.float64] | None
                         try:
-                            candidate_q7 = supervisor.layout.validate_vector(
-                                np.asarray(solution, dtype=np.float64)
+                            solver_candidate_q7 = supervisor.layout.validate_vector(
+                                np.asarray(
+                                    solution,
+                                    dtype=np.float64,
+                                )
                             )
                         except (
                             TypeError,
@@ -1407,24 +1569,144 @@ def _run_tracker_interactive(
                             OverflowError,
                         ):
                             ik_success = False
+                            solver_candidate_q7 = None
                             candidate_q7 = supervisor.last_command.copy()
+                        else:
+                            ik_success = bool(solver_reported_success)
+                            candidate_q7 = solver_candidate_q7
 
                         if ik_success:
                             ik_successes += 1
                             controller.record_ik_result(True)
+                            nearest_margin = nearest_joint_limit_margin(
+                                supervisor.layout,
+                                candidate_q7,
+                            )
+                            if (
+                                closest_successful_limit_margin is None
+                                or nearest_margin.margin_to_nearest_limit_rad
+                                < closest_successful_limit_margin.margin_to_nearest_limit_rad
+                            ):
+                                closest_successful_limit_margin = nearest_margin
                             supervision = supervisor.step(
                                 candidate_q7,
                                 now_ns=tick_ns,
                                 input_time_ns=mapping.input_host_time_ns,
                             )
+                            supervisor_position_clamped_frames += int(supervision.position_clamped)
+                            supervisor_rate_limited_frames += int(supervision.rate_limited)
+                            supervision_reasons[supervision.reason] = (
+                                supervision_reasons.get(
+                                    supervision.reason,
+                                    0,
+                                )
+                                + 1
+                            )
                             arm_targets["right"] = supervision.command.copy()
                             apply_targets()
                         else:
                             ik_failures += 1
+                            current_right = _positions(articulations["right"])
+                            current_q7 = current_right[right_arm_indices]
+                            failure_event: dict[str, object] = {
+                                "frame": completed_frames,
+                                "reference_epoch": (controller.reference_epoch),
+                                "consecutive_failure": (controller.consecutive_ik_failures + 1),
+                                "mapping_reason": mapping.reason,
+                                "target_position_m": list(mapping.target_position_m),
+                                "target_orientation_wxyz": list(mapping.target_orientation_wxyz),
+                                "world_delta_m": (
+                                    None
+                                    if mapping.world_delta_m is None
+                                    else list(mapping.world_delta_m)
+                                ),
+                                "translation_clamped": (mapping.translation_clamped),
+                                "rotation_clamped": (mapping.rotation_clamped),
+                                "target_motion": (_target_motion_diagnostic(target_motion)),
+                                "solver_reported_success": bool(solver_reported_success),
+                                "solver_candidate_valid": (solver_candidate_q7 is not None),
+                                "current_feedback_q7": (
+                                    _q7_limit_diagnostic(
+                                        supervisor.layout,
+                                        current_q7,
+                                    )
+                                ),
+                                "last_command_q7": _q7_limit_diagnostic(
+                                    supervisor.layout,
+                                    supervisor.last_command,
+                                ),
+                            }
+                            if solver_candidate_q7 is not None:
+                                (
+                                    candidate_position_m,
+                                    candidate_orientation_wxyz,
+                                ) = _nero_link7_pose(
+                                    solver,
+                                    solver_candidate_q7,
+                                )
+                                failure_event["solver_candidate_q7"] = _q7_limit_diagnostic(
+                                    supervisor.layout,
+                                    solver_candidate_q7,
+                                )
+                                candidate_orientation_error_rad = (
+                                    quaternion_geodesic_distance_rad(
+                                        candidate_orientation_wxyz,
+                                        mapping.target_orientation_wxyz,
+                                    )
+                                )
+                                failure_event["solver_candidate_residual"] = {
+                                    "position_m": float(
+                                        np.linalg.norm(
+                                            candidate_position_m
+                                            - np.asarray(
+                                                mapping.target_position_m,
+                                                dtype=np.float64,
+                                            )
+                                        )
+                                    ),
+                                    "orientation_rad": candidate_orientation_error_rad,
+                                    "orientation_deg": math.degrees(
+                                        candidate_orientation_error_rad
+                                    ),
+                                }
+                            ik_failure_events.append(failure_event)
                             if controller.record_ik_result(False):
+                                reset_event_count += 1
+                                reset_cause = "five_consecutive_ik_failures"
+                                reset_cause_counts[reset_cause] = (
+                                    reset_cause_counts.get(
+                                        reset_cause,
+                                        0,
+                                    )
+                                    + 1
+                                )
+                                reset_events.append(
+                                    {
+                                        "frame": completed_frames,
+                                        "reference_epoch": (controller.reference_epoch),
+                                        "cause": reset_cause,
+                                        "reason": reset_cause,
+                                        "last_failure": failure_event,
+                                    }
+                                )
+                                pending_reference_cause = reset_cause
+                                pending_reference_reason = reset_cause
+                                previous_target_position_m = None
+                                previous_target_orientation_wxyz = None
+                                previous_target_time_ns = None
+                                nearest_current = nearest_joint_limit_margin(
+                                    supervisor.layout,
+                                    current_q7,
+                                )
                                 print(
                                     "TRACKER_CONTROL_WAITING_REFERENCE "
                                     "reason=five_consecutive_ik_failures "
+                                    "target_translation_speed_m_s="
+                                    f"{0.0 if target_motion is None else target_motion.translation_speed_m_s:.6f} "
+                                    "nearest_current_joint="
+                                    f"{nearest_current.joint_name} "
+                                    "nearest_current_margin_deg="
+                                    f"{math.degrees(nearest_current.margin_to_nearest_limit_rad):.3f} "
                                     "gui=running",
                                     flush=True,
                                 )
@@ -1455,16 +1737,14 @@ def _run_tracker_interactive(
                     )
 
                 last_tick_ns = tick_ns
-                remaining_s = (
-                    next_deadline_ns - time.monotonic_ns()
-                ) / 1_000_000_000
+                remaining_s = (next_deadline_ns - time.monotonic_ns()) / 1_000_000_000
                 if remaining_s > 0.0:
                     time.sleep(remaining_s)
         except KeyboardInterrupt:
             termination_reason = "operator_interrupt"
 
         report = {
-            "schema": "wujihand.isaac_tracker_right_nero_interactive.v1",
+            "schema": "wujihand.isaac_tracker_right_nero_interactive.v2",
             "scope": (
                 "simulation-only right NERO q7 interactive control; "
                 "no ROS, CAN, NERO hardware, or Hand 2 hardware"
@@ -1491,30 +1771,17 @@ def _run_tracker_interactive(
             "mapping": {
                 "profile": str(TRACKER_MAPPING_PATH),
                 "mapping_id": TRACKER_MAPPING.mapping_id,
-                "tracker_to_workcell": [
-                    list(row)
-                    for row in TRACKER_MAPPING.tracker_to_workcell
-                ],
+                "tracker_to_workcell": [list(row) for row in TRACKER_MAPPING.tracker_to_workcell],
                 "translation_scale": TRACKER_TRANSLATION_SCALE,
-                "translation_enabled": (
-                    not ARGS.tracker_freeze_translation
-                ),
-                "max_translation_delta_each_axis_m": (
-                    TRACKER_MAX_TRANSLATION_DELTA_M
-                ),
-                "translation_clamped_samples": (
-                    translation_clamped_samples
-                ),
+                "translation_enabled": (not ARGS.tracker_freeze_translation),
+                "max_translation_delta_each_axis_m": (TRACKER_MAX_TRANSLATION_DELTA_M),
+                "translation_clamped_samples": (translation_clamped_samples),
                 "max_world_delta_norm_m": max_world_delta_m,
                 "rotation_enabled": ARGS.tracker_rotation,
                 "rotation_scale": TRACKER_ROTATION_SCALE,
-                "max_rotation_delta_deg": math.degrees(
-                    TRACKER_MAX_ROTATION_DELTA_RAD
-                ),
+                "max_rotation_delta_deg": math.degrees(TRACKER_MAX_ROTATION_DELTA_RAD),
                 "rotation_clamped_samples": rotation_clamped_samples,
-                "max_target_rotation_delta_deg": math.degrees(
-                    max_target_rotation_delta_rad
-                ),
+                "max_target_rotation_delta_deg": math.degrees(max_target_rotation_delta_rad),
             },
             "kinematics": {
                 "solver": "Isaac Sim 6.0.1 LulaKinematicsSolver",
@@ -1523,23 +1790,53 @@ def _run_tracker_interactive(
                 "ik_failures": ik_failures,
                 "ik_reference_recoveries": controller.ik_recoveries,
             },
+            "diagnostics": {
+                "history_limit": TRACKER_DIAGNOSTIC_HISTORY_LIMIT,
+                "reset_semantics": (
+                    "relative Tracker reference epoch reset; this does "
+                    "not itself command the arm rest pose"
+                ),
+                "reset_event_count": reset_event_count,
+                "reset_cause_counts": reset_cause_counts,
+                "reset_events_retained": list(reset_events),
+                "reference_events_retained": list(reference_events),
+                "ik_failure_event_count": ik_failures,
+                "ik_failure_events_retained": list(ik_failure_events),
+                "target_motion_maxima": {
+                    "translation_step_m": (max_target_translation_step_m),
+                    "translation_speed_m_s": (max_target_translation_speed_m_s),
+                    "rotation_step_rad": (max_target_rotation_step_rad),
+                    "rotation_step_deg": math.degrees(max_target_rotation_step_rad),
+                    "rotation_speed_rad_s": (max_target_rotation_speed_rad_s),
+                    "rotation_speed_deg_s": math.degrees(max_target_rotation_speed_rad_s),
+                },
+                "closest_successful_solution_to_joint_limit": (
+                    None
+                    if closest_successful_limit_margin is None
+                    else _joint_limit_margin_diagnostic(closest_successful_limit_margin)
+                ),
+                "supervisor": {
+                    "position_clamped_frames": (supervisor_position_clamped_frames),
+                    "rate_limited_frames": (supervisor_rate_limited_frames),
+                    "reasons": supervision_reasons,
+                },
+                "joint_limit_source": (
+                    "canonical simulation JointLayout from the pinned "
+                    "NERO URDF profile; not physical-machine safety "
+                    "limits"
+                ),
+            },
             "runtime": {
                 "requested_frames": None,
                 "completed_frames": completed_frames,
                 "termination_reason": termination_reason,
                 "last_mapping_reason": last_mapping_reason,
-                "wall_duration_s": (
-                    time.monotonic_ns() - started_ns
-                )
-                / 1_000_000_000,
+                "wall_duration_s": (time.monotonic_ns() - started_ns) / 1_000_000_000,
             },
             "qualification_evaluated": False,
             "passed": None,
         }
-        encoded = (
-            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n"
-        )
+        encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         if ARGS.report is not None:
             ARGS.report.parent.mkdir(parents=True, exist_ok=True)
             ARGS.report.write_text(encoded, encoding="utf-8")
@@ -1952,13 +2249,9 @@ def _run_tracker_live(
                 "receiver_accepted_drains": receiver.accepted,
                 "receiver_rejected_datagrams": receiver.rejected,
                 "reference_stability": {
-                    "required_continuous_running_s": (
-                        ARGS.tracker_reference_stable_s
-                    ),
+                    "required_continuous_running_s": (ARGS.tracker_reference_stable_s),
                     "maximum_sample_gap_s": ARGS.tracker_stale_s,
-                    "observed_continuous_running_s": (
-                        reference_readiness.stable_duration_s
-                    ),
+                    "observed_continuous_running_s": (reference_readiness.stable_duration_s),
                     "consecutive_running_samples": (
                         reference_readiness.consecutive_running_samples
                     ),
@@ -2374,10 +2667,7 @@ def main() -> int:
                         "final_max_delta_rad": max_delta_rad,
                         "tolerance_rad": policy.max_window_delta_rad,
                         "measured_scope": "both q27 articulations",
-                        "wall_duration_s": (
-                            time.monotonic_ns() - started_ns
-                        )
-                        / 1_000_000_000,
+                        "wall_duration_s": (time.monotonic_ns() - started_ns) / 1_000_000_000,
                     }
                     return previous_key, current_key
             previous_key = current_key
@@ -2395,10 +2685,7 @@ def main() -> int:
             "final_max_delta_rad": max_delta_history_rad[-1],
             "tolerance_rad": policy.max_window_delta_rad,
             "measured_scope": "both q27 articulations",
-            "wall_duration_s": (
-                time.monotonic_ns() - started_ns
-            )
-            / 1_000_000_000,
+            "wall_duration_s": (time.monotonic_ns() - started_ns) / 1_000_000_000,
         }
         if policy.require_convergence:
             raise RuntimeError(
@@ -2428,8 +2715,7 @@ def main() -> int:
         )
         readiness_record = settling_records["glove_live_ready"]
         readiness_feedback = {
-            key: feedback[key]
-            for key in cast(list[str], readiness_record["window_keys"])
+            key: feedback[key] for key in cast(list[str], readiness_record["window_keys"])
         }
         print(
             "GLOVE LIVE READINESS COMPLETE: starting input connection.",
@@ -2907,24 +3193,16 @@ def main() -> int:
             geometry.base_port_axis_local_xyz,
             dtype=np.float64,
         )
-        link6_cylinder_forearm_dot = float(
-            np.dot(link6_cylinder_axis_world, forearm_axis_world)
-        )
-        hand_base_face_parallel_dot = float(
-            np.dot(hand_axis_world, link6_cylinder_axis_world)
-        )
+        link6_cylinder_forearm_dot = float(np.dot(link6_cylinder_axis_world, forearm_axis_world))
+        hand_base_face_parallel_dot = float(np.dot(hand_axis_world, link6_cylinder_axis_world))
         attachment_anchor_world_m = _world_point(
             stage,
             attachment.parent_link_path,
             attachment.position_m,
         )
-        hand_base_origin_world_m = _world_position(
-            stage, attachment.child_base_link_path
-        )
+        hand_base_origin_world_m = _world_position(stage, attachment.child_base_link_path)
         attachment_anchor_error_m = float(
-            np.linalg.norm(
-                attachment_anchor_world_m - hand_base_origin_world_m
-            )
+            np.linalg.norm(attachment_anchor_world_m - hand_base_origin_world_m)
         )
         link6_positive_face_center_world_m = _world_point(
             stage,
@@ -2932,14 +3210,9 @@ def main() -> int:
             ALIGNMENT_PROFILE.corrected_cylinder_positive_face_center_local_xyz,
         )
         hand_base_mount_center_error_m = float(
-            np.linalg.norm(
-                hand_base_origin_world_m
-                - link6_positive_face_center_world_m
-            )
+            np.linalg.norm(hand_base_origin_world_m - link6_positive_face_center_world_m)
         )
-        flange_origin_world_m = _world_position(
-            stage, attachment.parent_link_path
-        )
+        flange_origin_world_m = _world_position(stage, attachment.parent_link_path)
         base_port_outward_dot = float(
             np.dot(
                 port_axis_world,
@@ -2961,9 +3234,7 @@ def main() -> int:
             )
         )
         geometry_measurements[side] = {
-            "link6_cylinder_axis_world_xyz": (
-                link6_cylinder_axis_world.tolist()
-            ),
+            "link6_cylinder_axis_world_xyz": (link6_cylinder_axis_world.tolist()),
             "hand_longitudinal_axis_world_xyz": hand_axis_world.tolist(),
             "hand_palm_normal_axis_world_xyz": palm_normal_world.tolist(),
             "base_port_axis_world_xyz": port_axis_world.tolist(),
@@ -2972,15 +3243,9 @@ def main() -> int:
             "link6_cylinder_forearm_dot": link6_cylinder_forearm_dot,
             "hand_base_face_parallel_dot": hand_base_face_parallel_dot,
             "attachment_anchor_error_m": attachment_anchor_error_m,
-            "hand_base_mount_center_error_m": (
-                hand_base_mount_center_error_m
-            ),
-            "link6_positive_face_center_world_m": (
-                link6_positive_face_center_world_m.tolist()
-            ),
-            "attachment_anchor_world_m": (
-                attachment_anchor_world_m.tolist()
-            ),
+            "hand_base_mount_center_error_m": (hand_base_mount_center_error_m),
+            "link6_positive_face_center_world_m": (link6_positive_face_center_world_m.tolist()),
+            "attachment_anchor_world_m": (attachment_anchor_world_m.tolist()),
             "flange_origin_world_m": flange_origin_world_m.tolist(),
             "hand_base_origin_world_m": hand_base_origin_world_m.tolist(),
             "base_port_outward_dot": base_port_outward_dot,
@@ -2990,20 +3255,16 @@ def main() -> int:
             "hand_palm_down_dot": hand_palm_down_dot,
         }
         checks[f"{side}_link6_cylinder_follows_forearm"] = bool(
-            link6_cylinder_forearm_dot
-            >= thresholds.link6_cylinder_forearm_min_dot
+            link6_cylinder_forearm_dot >= thresholds.link6_cylinder_forearm_min_dot
         )
         checks[f"{side}_hand_base_face_parallel_to_link6_face"] = bool(
-            hand_base_face_parallel_dot
-            >= thresholds.hand_base_face_parallel_min_dot
+            hand_base_face_parallel_dot >= thresholds.hand_base_face_parallel_min_dot
         )
         checks[f"{side}_attachment_anchors_coincident"] = bool(
-            attachment_anchor_error_m
-            <= thresholds.attachment_anchor_max_error_m
+            attachment_anchor_error_m <= thresholds.attachment_anchor_max_error_m
         )
         checks[f"{side}_hand_base_centered_on_link6_face"] = bool(
-            hand_base_mount_center_error_m
-            <= thresholds.hand_base_mount_center_max_error_m
+            hand_base_mount_center_error_m <= thresholds.hand_base_mount_center_max_error_m
         )
         checks[f"{side}_base_port_axis_outward"] = bool(
             base_port_outward_dot >= thresholds.base_port_outward_min_dot
@@ -3043,9 +3304,7 @@ def main() -> int:
         )
     interface_screenshot_runtime: dict[str, object] = {}
     interface_camera_eye = _workcell_frame_position(INTERFACE_CAMERA_EYE_FRAME)
-    interface_camera_target = _workcell_frame_position(
-        INTERFACE_CAMERA_TARGET_FRAME
-    )
+    interface_camera_target = _workcell_frame_position(INTERFACE_CAMERA_TARGET_FRAME)
     if ARGS.interface_screenshot is not None:
         interface_screenshot_runtime = _capture_screenshot(
             world,
@@ -3085,12 +3344,8 @@ def main() -> int:
                 },
                 "attachment_assumption": runtime.attachment.assumption,
                 "attachment_transform": {
-                    "position_m": list(
-                        runtime.attachment.transform.position_m
-                    ),
-                    "quat_wxyz": list(
-                        runtime.attachment.transform.quat_wxyz
-                    ),
+                    "position_m": list(runtime.attachment.transform.position_m),
+                    "quat_wxyz": list(runtime.attachment.transform.quat_wxyz),
                 },
             }
             for runtime in SIDES
@@ -3207,18 +3462,10 @@ def main() -> int:
         "external_collision_settling": {
             "fixed_workcell_collider_paths": external_fixed_collider_paths,
             "settling_policy_id": FULL_SCRIPTED_Q27_SETTLING_POLICY.policy_id,
-            "settling_window_frames": (
-                FULL_SCRIPTED_Q27_SETTLING_POLICY.window_frames
-            ),
-            "settling_min_windows": (
-                FULL_SCRIPTED_Q27_SETTLING_POLICY.minimum_windows
-            ),
-            "settling_max_windows": (
-                FULL_SCRIPTED_Q27_SETTLING_POLICY.maximum_windows
-            ),
-            "settling_tolerance_rad": (
-                FULL_SCRIPTED_Q27_SETTLING_POLICY.max_window_delta_rad
-            ),
+            "settling_window_frames": (FULL_SCRIPTED_Q27_SETTLING_POLICY.window_frames),
+            "settling_min_windows": (FULL_SCRIPTED_Q27_SETTLING_POLICY.minimum_windows),
+            "settling_max_windows": (FULL_SCRIPTED_Q27_SETTLING_POLICY.maximum_windows),
+            "settling_tolerance_rad": (FULL_SCRIPTED_Q27_SETTLING_POLICY.max_window_delta_rad),
             "settling_records": settling_records,
             "initial_max_feedback_delta_rad": max_all_sides_delta(
                 "initial",

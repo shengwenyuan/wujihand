@@ -64,3 +64,40 @@ def test_tracker_gui_routes_to_persistent_interactive_loop() -> None:
 
     assert len(interactive_calls) == 1
     assert len(running_loops) == 1
+
+
+def test_tracker_interactive_report_retains_reset_evidence() -> None:
+    tree = _runner_tree()
+    interactive = _function(tree, "_run_tracker_interactive")
+    string_literals = {
+        node.value
+        for node in ast.walk(interactive)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    called_functions = {
+        node.func.id
+        for node in ast.walk(interactive)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+    }
+
+    assert "wujihand.isaac_tracker_right_nero_interactive.v2" in string_literals
+    assert "reset_cause_counts" in string_literals
+    assert "reset_events_retained" in string_literals
+    assert "ik_failure_events_retained" in string_literals
+    assert "tracker_target_motion" in called_functions
+    assert "nearest_joint_limit_margin" in called_functions
+
+
+def test_tracker_runner_defaults_to_workstation2_one_to_one_mapping() -> None:
+    tree = _runner_tree()
+    string_literals = {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+
+    assert (
+        "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
+        in string_literals
+    )
