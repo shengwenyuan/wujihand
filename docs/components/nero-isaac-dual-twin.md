@@ -273,7 +273,7 @@ Tracker 的现场轴映射不属于 Asset、Binding、Assembly、Workcell 或 Se
 因此存放在五层之外的 simulation-only calibration：
 
 ```text
-configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
+configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml
 ```
 
 其中 `tracker_to_workcell` 是唯一的 `3×3` 轴映射入口，同时用于平移和旋转。当前
@@ -284,6 +284,12 @@ Workcell +X = Tracker -Z
 Workcell +Y = Tracker -X
 Workcell +Z = Tracker +Y
 ```
+
+v2 将平移位移增益从历史 v1 的 `0.25` 提高为 `1.0`：在未触发限幅时，Tracker
+位移和 link7 target 位移为 1:1，因而平移速度增益也为 1:1。逐轴
+`±0.08 m` Workcell 限幅保持不变，所以最大 target 包络没有扩大；只是从参考点移动
+Tracker `8 cm` 即可能触发限幅，而 v1 需要 `32 cm`。v1 文件保留为历史实验来源，
+runner 默认使用 v2。
 
 rotation 使用 reference epoch 的空间相对量：
 
@@ -325,6 +331,16 @@ WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE
 失败也只撤销当前映射 epoch 并回到等待状态，不结束 GUI。`--tracker-frames` 在 GUI
 模式下忽略；交互报告不执行 Gate 判定，`passed` 为 `null`。
 
+交互报告 v2 将 reference epoch 重建与机械臂回到 rest 明确区分，并保留：
+
+- 每次 reference 重建的直接原因与 Tracker 状态；
+- 每个 IK 失败 target 的帧间位移/转速、当前 q7、solver candidate q7 及其关节限位
+  余量和 FK residual；
+- JointCommandSupervisor 的 position clamp、rate limit 与 reason 计数。
+
+其中关节余量来自固定 URDF 对应的 canonical 仿真 `JointLayout`，只用于区分仿真
+IK 失败机制，不是实机安全限位。
+
 headless 路径继续逐包检查启动稳定窗；任一 calibrating/out-of-range/lost sample
 或超过 freshness 阈值的空窗都会重置窗口，且不会被同一次 UDP drain 中较新的
 running 包遮蔽。旧 `--tracker-auto-reference` 只作为命令兼容选项保留，两个模式都
@@ -349,7 +365,8 @@ Lula `link7` frame 和 JointCommandSupervisor 边界保持不变。当前 UDP tr
 | `tests/unit/test_glove_hand2_simulation_controller.py` | input/retarget/supervisor composition、失败语义与 q27 partition |
 | `tests/unit/test_live_readiness.py` | 快速 live 与完整 scripted 的显式 q27 就绪策略 |
 | `tests/unit/test_tracker_arm_teleoperation.py` | relative SE(3)、短暂 HOLD、失联后当前 pose 重建 reference 与 IK 失败恢复 |
-| `tests/contract/test_tracker_interactive_runner.py` | GUI 路径无 stdin 阻塞并由 `SimulationApp.is_running()` 持续驱动 |
+| `tests/unit/test_tracker_diagnostics.py` | target 帧间运动量、速度和 canonical 仿真关节限位余量 |
+| `tests/contract/test_tracker_interactive_runner.py` | GUI 路径无 stdin 阻塞、由 `SimulationApp.is_running()` 持续驱动并输出 reset 诊断证据 |
 | `tests/contract/test_hand_observation_jsonl_fixture.py` | strict canonical JSONL contract |
 | `tests/unit/test_hand_observation_replay_adapter.py` | SDK-independent bounded replay 与时间重基准 |
 | `tests/integration/isaac_nero_dual_asset_smoke.py` | 历史 NERO-only pre-composition 双 q7 smoke |

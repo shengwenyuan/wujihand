@@ -172,6 +172,22 @@ WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE -> TRACKING
 Valve OpenVR 官方依据见
 [`Driver API Documentation` 的 “Poses / ETrackingResult”](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#poses)。
 
+### GUI reference 重建诊断
+
+GUI 交互报告 schema v2 把 reference epoch 重建记录在 `diagnostics`，排查时先按
+`reset_cause_counts` 分类：
+
+- `tracker_reference_loss`：查看 event 的 `reason` 和 `tracker_sample`，区分
+  calibrating、stale、identity/frame mismatch 等输入原因；
+- `five_consecutive_ik_failures`：查看最后失败 target 的帧间 step/rate、
+  current/last-command/solver-candidate q7 限位余量和 candidate FK residual；
+- 同时检查 `supervisor.reasons`、`position_clamped_frames` 与
+  `rate_limited_frames`，不要把 post-IK rate limit 误判成 IK solver failure。
+
+这里的 reset 只表示 relative Tracker reference epoch 被撤销；它本身不命令右臂
+回到 rest。报告中的 q7 余量采用固定 URDF 对应的 canonical 仿真 JointLayout，
+不能作为真机运动许可或硬件安全限位。
+
 ### 遮挡、失联与重捕获
 
 使用同一次 `occlusion-reacquisition` capture：

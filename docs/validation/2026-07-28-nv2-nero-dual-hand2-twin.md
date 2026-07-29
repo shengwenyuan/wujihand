@@ -451,7 +451,7 @@ Workstation2 真人 Tracker 的左右、前后、上下三方向已经由操作�
 轴映射已从 runner 移到五层之外的 simulation-only calibration：
 
 ```text
-configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
+configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml
 ```
 
 该 profile 的同一 proper rotation matrix 同时映射位移轴和相对旋转轴。rotation
@@ -460,6 +460,21 @@ configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
 纯旋转资格验证使用 `--tracker-freeze-translation`：输入仍含 `0.20 m` 合成平移，
 但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
+
+v2 只把平移位移增益从 `0.25` 改为 `1.0`，轴映射、rotation 参数和逐轴
+`±0.08 m` target 限幅不变。该修改使未限幅区间内的位移及速度响应为 1:1，但不扩大
+仿真工作空间；相对 reference 移动 Tracker `8 cm` 即可能到达限幅，而历史 v1
+需要 `32 cm`。
+
+同步到 Workstation2 后，以 `0.01 m` 合成 Tracker 平移执行固定来源 Lula headless
+回归：连续 running reference 窗为 `0.255538349 s / 24 samples`，完成
+`120/120` 帧、IK `120/120`、UDP reject `0`、translation clamp `0`，
+最大 Workcell 位移 `0.0140047 m`，`passed=true`。报告明确记录
+`mapping_id=vive_tracker_workcell_workstation2_v2`、`translation_scale=1.0` 和
+`five_layer_configuration_modified=false`。证据
+`artifacts/validation/input-smoke/tracker-right-nero/synthetic-translation-1to1-v2.json`
+的 SHA-256 为
+`232da109cf08e1f2e91d20f7c8b01a4be4d5cd31e27ecea275ec67244c859e6b`。
 
 2026-07-29 对现场 running/calibrating 交替现象复核后，输入状态语义保持严格：
 producer 每帧持续发送 canonical sample，但只有 OpenVR `Running_OK` 是 actionable；
@@ -504,6 +519,57 @@ running 输入无需回车即建立 `epoch=2`。对应 Kit 日志为
 `kit_20260729_150449.log`。该次会话最终由远端 SIGINT 终止，未把它包装成
 qualification artifact；结论只覆盖 GUI 生命周期和重捕获，不替代真人 RPY 方向
 复验。
+
+### 2026-07-29 真人 XYZ / RPY 重建 reference 原因
+
+随后两次固定来源 Lula GUI 会话均由操作者关闭，未退出或控制真机。“重置”在本节
+特指 relative Tracker reference epoch 被撤销并重建，不表示 supervisor 主动命令
+机械臂回到 rest。
+
+| 会话 | XYZ live | RPY live（translation frozen） |
+|---|---:|---:|
+| report schema | interactive v1 | interactive v1 |
+| wall time / frames | `71.008 s / 5065` | `91.328 s / 7948` |
+| initial + rebuilt reference epochs | `1 + 5` | `1 + 8` |
+| IK success / failure | `4394 / 22` | `4594 / 0` |
+| consecutive-IK-failure rebuilds | `4` | `0` |
+| calibrating reference-loss rebuilds | `1` | `8` |
+| UDP rejected datagrams | `0` | `0` |
+| mapping clamp | translation `715/4399` accepted samples | rotation `3442/4434` accepted samples |
+
+XYZ 的 22 次 IK failure 中，20 次组成四组连续 5 帧并触发四次 reference rebuild；
+其余 2 次为未连续到阈值的孤立 failure。第五次 rebuild 的 Kit 状态序列明确为
+`TRACKING → tracking_calibrating_hold → tracking_calibrating_reference_required`。
+因此这五次不能统一归因为 Tracker 丢失，也不能统一归因为 IK。
+
+最新 RPY 会话则相反：8 次 rebuild 全部紧随
+`tracking_calibrating_reference_required`，没有 IK failure 或 UDP reject。即使
+`77.63%` 的 accepted samples 到达 `15°` rotation clamp，Lula 仍为 `4594/4594`
+成功。因此该会话里看到的重新建参考由 Tracker 实际 tracking state 丢失引起，不是
+运动过快、IK 失败或仿真关节限位。
+
+历史 interactive v1 报告没有保存失败 target 的帧间速度、solver candidate、q7
+限位余量或 supervisor rate-limit 决策。XYZ 会话有 `16.25%` accepted samples 到达
+平移限幅，且当前准备位附近已有“组合位移 + rotation”不可达负例，所以四组 IK
+failure 更像 target 进入可达性、奇异性或受 URDF joint limits 约束的区域；但旧证据
+不足以确定具体机制或具体关节，也不能证明“手移动过快”是直接原因。
+
+交互报告已升级为 v2，后续会逐事件记录：
+
+- reset 的直接 cause/reason 和 Tracker sample state；
+- target translation/rotation step 与速度；
+- current/last-command/solver-candidate q7、每关节限位余量和 candidate FK residual；
+- supervisor position-clamp、rate-limit 与 reason 计数。
+
+诊断所用限位来自固定来源 URDF 对应的 canonical 仿真 `JointLayout`，不是实机安全
+限位。历史证据为：
+
+| Artifact / Kit log | SHA-256 / 用途 |
+|---|---|
+| `live-xyz-current-lula-v1.json` | `18cb44f7849a2949d1881e2fd75082e8a7130dea3aa75ff39bd4a10fdd3f5b6c` |
+| `kit_20260729_151914.log` | XYZ 四次 IK rebuild + 一次 calibrating rebuild |
+| `live-rpy-current-lula-v1.json` | `006b713d0d72efd42a66a08b8e948fe2ffa95f712604fc4e1e8e635dcb5ad4b6` |
+| `kit_20260729_152309.log` | RPY 八次 calibrating rebuild、零次 IK rebuild |
 
 同一代码的 headless 有界回归未携带旧 `--tracker-auto-reference`，在连续
 `0.255555395 s`、24 个 sample 后自动建立 reference，完成 `120/120` 帧、

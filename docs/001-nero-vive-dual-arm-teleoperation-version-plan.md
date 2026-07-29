@@ -769,6 +769,9 @@ consumer 右臂闭环，冻结 canonical Cartesian 语义。
 
 - 真人 Tracker → 右 NERO 的 x/y/z 方向已在 Workstation2 GUI 人工通过；roll/pitch/yaw
   仍待固定来源 Lula 下复验。
+- Workstation2 simulation-only calibration 已升级到
+  `vive_tracker_workcell_workstation2_v2`：平移增益为 `1.0`，轴映射、rotation
+  scale 和逐轴 `±0.08 m` target 限幅不变；旧 v1 作为 `0.25` 历史实验来源保留。
 - GUI consumer 已取消 stdin/回车阻塞，并把窗口生命周期与
   `WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE` 控制状态解耦。
   持续失联或连续 IK 失败只撤销当前 reference epoch；恢复时以右臂当前 link7 pose
@@ -776,6 +779,11 @@ consumer 右臂闭环，冻结 canonical Cartesian 语义。
 - headless 资格路径仍使用连续 running 稳定门、有限帧和明确退出码；本次拆分未修改
   五层 Session、simulation-only 坐标映射、rotation opt-in、link6 Binding 或 Lula
   frame。
+- 真人 XYZ 日志的 5 次 reference rebuild 已分解为 4 次连续 IK failure 和 1 次
+  Tracker calibrating；真人 RPY 日志的 8 次 rebuild 全部来自 calibrating，IK
+  failure 和 UDP reject 均为 0。interactive report v2 将继续记录 target step/rate、
+  solver candidate/FK residual、canonical 仿真 q7 限位余量和 supervisor
+  clamp/rate-limit，以关闭 XYZ 的 reachability/singularity/joint-limit 归因。
 - 当前 UDP receiver 在单次生命周期内仍要求 sequence 严格递增。producer restart
   后显式 transport epoch、完整 recorder/feedback contract、RPY 人工测试及其 fault
   matrix 尚未完成，因此 NV-3 不升级为通过。
