@@ -79,11 +79,20 @@ def test_loads_route_qualified_initial_q7_and_geometry_contract() -> None:
     assert profile.thresholds.link6_cylinder_forearm_min_dot == pytest.approx(
         0.999
     )
-    assert profile.thresholds.attachment_origin_max_error_m == pytest.approx(1e-6)
+    assert profile.thresholds.attachment_anchor_max_error_m == pytest.approx(
+        1e-6
+    )
+    assert (
+        profile.thresholds.hand_base_mount_center_max_error_m
+        == pytest.approx(1e-4)
+    )
+    assert profile.thresholds.hand_base_face_parallel_min_dot == pytest.approx(
+        0.999
+    )
     assert profile.thresholds.hand_palm_down_min_dot == pytest.approx(0.99)
     assert profile.thresholds.forearm_world_vertical_abs_max == pytest.approx(0.02)
-    assert profile.arm_drive_gains.stiffness == pytest.approx(6000.0)
-    assert profile.arm_drive_gains.damping == pytest.approx(212.13203435596427)
+    assert profile.arm_drive_gains.stiffness == pytest.approx(6500.0)
+    assert profile.arm_drive_gains.damping == pytest.approx(220.79402165819616)
     assert (
         "tabletop_q7_is_simulation_nominal_not_a_hardware_safe_pose"
         in profile.assumptions
@@ -177,7 +186,13 @@ def test_initial_position_is_an_isolated_copy_and_route_lookup_fails_closed() ->
         ),
         (
             lambda value: value["thresholds"].update(
-                {"attachment_origin_max_error_m": -0.01}
+                {"attachment_anchor_max_error_m": -0.01}
+            ),
+            "non-negative",
+        ),
+        (
+            lambda value: value["thresholds"].update(
+                {"hand_base_mount_center_max_error_m": -0.01}
             ),
             "non-negative",
         ),

@@ -52,7 +52,9 @@ _GEOMETRY_KEYS = frozenset(
 )
 _THRESHOLD_KEYS = frozenset(
     {
-        "attachment_origin_max_error_m",
+        "attachment_anchor_max_error_m",
+        "hand_base_mount_center_max_error_m",
+        "hand_base_face_parallel_min_dot",
         "link6_cylinder_forearm_min_dot",
         "base_port_outward_min_dot",
         "hand_world_inward_min_dot",
@@ -158,7 +160,9 @@ class NeroTabletopGeometryContract:
 class NeroTabletopThresholds:
     """Finite qualification thresholds with explicit dimensions."""
 
-    attachment_origin_max_error_m: float
+    attachment_anchor_max_error_m: float
+    hand_base_mount_center_max_error_m: float
+    hand_base_face_parallel_min_dot: float
     link6_cylinder_forearm_min_dot: float
     base_port_outward_min_dot: float
     hand_world_inward_min_dot: float
@@ -352,16 +356,31 @@ def load_nero_dual_tabletop_qualification_profile(
         raise ValueError(
             "thresholds.initial_q7_max_error_rad must be non-negative"
         )
-    attachment_origin_max_error_m = _finite_float(
-        threshold_data["attachment_origin_max_error_m"],
-        field="thresholds.attachment_origin_max_error_m",
+    attachment_anchor_max_error_m = _finite_float(
+        threshold_data["attachment_anchor_max_error_m"],
+        field="thresholds.attachment_anchor_max_error_m",
     )
-    if attachment_origin_max_error_m < 0.0:
+    if attachment_anchor_max_error_m < 0.0:
         raise ValueError(
-            "thresholds.attachment_origin_max_error_m must be non-negative"
+            "thresholds.attachment_anchor_max_error_m must be non-negative"
+        )
+    hand_base_mount_center_max_error_m = _finite_float(
+        threshold_data["hand_base_mount_center_max_error_m"],
+        field="thresholds.hand_base_mount_center_max_error_m",
+    )
+    if hand_base_mount_center_max_error_m < 0.0:
+        raise ValueError(
+            "thresholds.hand_base_mount_center_max_error_m must be non-negative"
         )
     thresholds = NeroTabletopThresholds(
-        attachment_origin_max_error_m=attachment_origin_max_error_m,
+        attachment_anchor_max_error_m=attachment_anchor_max_error_m,
+        hand_base_mount_center_max_error_m=(
+            hand_base_mount_center_max_error_m
+        ),
+        hand_base_face_parallel_min_dot=_unit_interval(
+            threshold_data["hand_base_face_parallel_min_dot"],
+            field="thresholds.hand_base_face_parallel_min_dot",
+        ),
         link6_cylinder_forearm_min_dot=_unit_interval(
             threshold_data["link6_cylinder_forearm_min_dot"],
             field="thresholds.link6_cylinder_forearm_min_dot",

@@ -113,8 +113,8 @@ def test_physical_dual_session_owns_per_instance_tabletop_q7_and_isaac_gains() -
         )
         assert model.layout.validate_vector(q7) == pytest.approx(q7)
 
-    assert tabletop.arm_drive_gains.stiffness == pytest.approx(6000.0)
-    assert tabletop.arm_drive_gains.damping == pytest.approx(212.13203435596427)
+    assert tabletop.arm_drive_gains.stiffness == pytest.approx(6500.0)
+    assert tabletop.arm_drive_gains.damping == pytest.approx(220.79402165819616)
     assert (
         "arm_drive_gains_are_isaac_qualification_values_not_hardware_controller_facts"
         in tabletop.assumptions
@@ -225,12 +225,12 @@ def test_physical_dual_attachments_and_nominal_workcell_are_explicit() -> None:
             f"hand_{side}",
             "hand_base",
         )
-        assert attachment.transform.position_m == (0.0, 0.0, 0.0)
+        assert attachment.transform.position_m == (0.023, 0.0, -0.0235)
         assert attachment.transform.quat_wxyz == pytest.approx(
             (2.0**-0.5, 0.0, 2.0**-0.5, 0.0)
         )
         assert attachment.assumption == (
-            "direct_mount_pitch_plus_90_maps_pinned_nero_and_hand2_interface_frames"
+            "mesh_nominal_mount_couples_hand_base_face_to_aligned_link6_positive_x_face"
         )
 
     assert "simulation_nominal" in resolved.workcell.workcell_id

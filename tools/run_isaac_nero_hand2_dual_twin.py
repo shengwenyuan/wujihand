@@ -620,6 +620,27 @@ def _world_position(stage: Any, prim_path: str) -> npt.NDArray[np.float64]:
     return result
 
 
+def _world_point(
+    stage: Any,
+    prim_path: str,
+    local_point_xyz: tuple[float, float, float],
+) -> npt.NDArray[np.float64]:
+    prim = stage.GetPrimAtPath(prim_path)
+    if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
+        raise RuntimeError(f"point measurement prim is invalid: {prim_path}")
+    matrix = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
+        Usd.TimeCode.Default()
+    )
+    point = matrix.Transform(Gf.Vec3d(*local_point_xyz))
+    result = np.asarray(tuple(point), dtype=np.float64)
+    if result.shape != (3,) or not np.isfinite(result).all():
+        raise RuntimeError(
+            f"point measurement is not a finite vector for {prim_path}: "
+            f"{result.tolist()}"
+        )
+    return result
+
+
 def _step(world: World, frames: int, *, render: bool) -> None:
     for _ in range(frames):
         world.step(render=render)
@@ -2512,17 +2533,35 @@ def main() -> int:
         link6_cylinder_forearm_dot = float(
             np.dot(link6_cylinder_axis_world, forearm_axis_world)
         )
-        attachment_origin_error_m = float(
+        hand_base_face_parallel_dot = float(
+            np.dot(hand_axis_world, link6_cylinder_axis_world)
+        )
+        attachment_anchor_world_m = _world_point(
+            stage,
+            attachment.parent_link_path,
+            attachment.position_m,
+        )
+        hand_base_origin_world_m = _world_position(
+            stage, attachment.child_base_link_path
+        )
+        attachment_anchor_error_m = float(
             np.linalg.norm(
-                _world_position(stage, attachment.parent_link_path)
-                - _world_position(stage, attachment.child_base_link_path)
+                attachment_anchor_world_m - hand_base_origin_world_m
+            )
+        )
+        link6_positive_face_center_world_m = _world_point(
+            stage,
+            geometry_alignments[side].link_path,
+            ALIGNMENT_PROFILE.corrected_cylinder_positive_face_center_local_xyz,
+        )
+        hand_base_mount_center_error_m = float(
+            np.linalg.norm(
+                hand_base_origin_world_m
+                - link6_positive_face_center_world_m
             )
         )
         flange_origin_world_m = _world_position(
             stage, attachment.parent_link_path
-        )
-        hand_base_origin_world_m = _world_position(
-            stage, attachment.child_base_link_path
         )
         base_port_outward_dot = float(
             np.dot(
@@ -2554,7 +2593,17 @@ def main() -> int:
             "forearm_axis_world_xyz": forearm_axis_world.tolist(),
             "forearm_length_m": forearm_length_m,
             "link6_cylinder_forearm_dot": link6_cylinder_forearm_dot,
-            "attachment_origin_error_m": attachment_origin_error_m,
+            "hand_base_face_parallel_dot": hand_base_face_parallel_dot,
+            "attachment_anchor_error_m": attachment_anchor_error_m,
+            "hand_base_mount_center_error_m": (
+                hand_base_mount_center_error_m
+            ),
+            "link6_positive_face_center_world_m": (
+                link6_positive_face_center_world_m.tolist()
+            ),
+            "attachment_anchor_world_m": (
+                attachment_anchor_world_m.tolist()
+            ),
             "flange_origin_world_m": flange_origin_world_m.tolist(),
             "hand_base_origin_world_m": hand_base_origin_world_m.tolist(),
             "base_port_outward_dot": base_port_outward_dot,
@@ -2567,9 +2616,17 @@ def main() -> int:
             link6_cylinder_forearm_dot
             >= thresholds.link6_cylinder_forearm_min_dot
         )
-        checks[f"{side}_attachment_origins_coincident"] = bool(
-            attachment_origin_error_m
-            <= thresholds.attachment_origin_max_error_m
+        checks[f"{side}_hand_base_face_parallel_to_link6_face"] = bool(
+            hand_base_face_parallel_dot
+            >= thresholds.hand_base_face_parallel_min_dot
+        )
+        checks[f"{side}_attachment_anchors_coincident"] = bool(
+            attachment_anchor_error_m
+            <= thresholds.attachment_anchor_max_error_m
+        )
+        checks[f"{side}_hand_base_centered_on_link6_face"] = bool(
+            hand_base_mount_center_error_m
+            <= thresholds.hand_base_mount_center_max_error_m
         )
         checks[f"{side}_base_port_axis_outward"] = bool(
             base_port_outward_dot >= thresholds.base_port_outward_min_dot
@@ -2650,6 +2707,14 @@ def main() -> int:
                     "quat_wxyz": list(runtime.mount_pose.quat_wxyz),
                 },
                 "attachment_assumption": runtime.attachment.assumption,
+                "attachment_transform": {
+                    "position_m": list(
+                        runtime.attachment.transform.position_m
+                    ),
+                    "quat_wxyz": list(
+                        runtime.attachment.transform.quat_wxyz
+                    ),
+                },
             }
             for runtime in SIDES
         },
@@ -2688,6 +2753,12 @@ def main() -> int:
             ),
             "corrected_cylinder_axis_local_xyz": list(
                 ALIGNMENT_PROFILE.corrected_cylinder_axis_local_xyz
+            ),
+            "source_cylinder_positive_face_center_local_xyz": list(
+                ALIGNMENT_PROFILE.source_cylinder_positive_face_center_local_xyz
+            ),
+            "corrected_cylinder_positive_face_center_local_xyz": list(
+                ALIGNMENT_PROFILE.corrected_cylinder_positive_face_center_local_xyz
             ),
             "stage_paths": {
                 side: {

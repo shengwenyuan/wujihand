@@ -185,6 +185,7 @@ class NeroLinkGeometryAlignment:
     source_urdf_sha256: str
     link_name: str
     source_cylinder_axis_local_xyz: Vector3
+    source_cylinder_positive_face_center_local_xyz: Vector3
     visual_child_name: str
     collision_child_name: str
     source_child_quat_wxyz: Quaternion
@@ -194,6 +195,7 @@ class NeroLinkGeometryAlignment:
     source_principal_axes_quat_wxyz: Quaternion
     geometry_post_rotation_quat_wxyz: Quaternion
     corrected_cylinder_axis_local_xyz: Vector3
+    corrected_cylinder_positive_face_center_local_xyz: Vector3
     corrected_center_of_mass_m: Vector3
     corrected_principal_axes_quat_wxyz: Quaternion
     assumptions: tuple[str, ...]
@@ -244,6 +246,7 @@ def load_nero_link_geometry_alignment(
                 "urdf_sha256",
                 "link_name",
                 "cylinder_axis_local_xyz",
+                "cylinder_positive_face_center_local_xyz",
             }
         ),
         field="NERO link geometry alignment.source",
@@ -269,6 +272,7 @@ def load_nero_link_geometry_alignment(
             {
                 "geometry_post_rotation_quat_wxyz",
                 "corrected_cylinder_axis_local_xyz",
+                "corrected_cylinder_positive_face_center_local_xyz",
                 "corrected_center_of_mass_m",
                 "corrected_principal_axes_quat_wxyz",
             }
@@ -279,6 +283,14 @@ def load_nero_link_geometry_alignment(
     source_axis = _unit_axis(
         source["cylinder_axis_local_xyz"],
         field="source.cylinder_axis_local_xyz",
+    )
+    source_face_center = cast(
+        Vector3,
+        _vector(
+            source["cylinder_positive_face_center_local_xyz"],
+            size=3,
+            field="source.cylinder_positive_face_center_local_xyz",
+        ),
     )
     source_child_quat = _unit_quaternion(
         representation["source_child_quat_wxyz"],
@@ -314,6 +326,14 @@ def load_nero_link_geometry_alignment(
         correction["corrected_cylinder_axis_local_xyz"],
         field="correction.corrected_cylinder_axis_local_xyz",
     )
+    corrected_face_center = cast(
+        Vector3,
+        _vector(
+            correction["corrected_cylinder_positive_face_center_local_xyz"],
+            size=3,
+            field="correction.corrected_cylinder_positive_face_center_local_xyz",
+        ),
+    )
     corrected_com = cast(
         Vector3,
         _vector(
@@ -334,6 +354,15 @@ def load_nero_link_geometry_alignment(
         rtol=0.0,
     ):
         raise ValueError("corrected cylinder axis does not equal rotation * source axis")
+    if not np.allclose(
+        rotation @ np.asarray(source_face_center),
+        corrected_face_center,
+        atol=1e-10,
+        rtol=0.0,
+    ):
+        raise ValueError(
+            "corrected cylinder face center does not equal rotation * source"
+        )
     if not np.allclose(
         rotation @ np.asarray(source_com),
         corrected_com,
@@ -368,6 +397,7 @@ def load_nero_link_geometry_alignment(
         ),
         link_name=_string(source["link_name"], field="source.link_name"),
         source_cylinder_axis_local_xyz=source_axis,
+        source_cylinder_positive_face_center_local_xyz=source_face_center,
         visual_child_name=_string(
             representation["visual_child_name"],
             field="isaac_representation.visual_child_name",
@@ -383,6 +413,9 @@ def load_nero_link_geometry_alignment(
         source_principal_axes_quat_wxyz=source_principal,
         geometry_post_rotation_quat_wxyz=post_rotation,
         corrected_cylinder_axis_local_xyz=corrected_axis,
+        corrected_cylinder_positive_face_center_local_xyz=(
+            corrected_face_center
+        ),
         corrected_center_of_mass_m=corrected_com,
         corrected_principal_axes_quat_wxyz=corrected_principal,
         assumptions=tuple(assumptions_raw),

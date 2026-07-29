@@ -42,6 +42,16 @@ def test_profile_maps_link6_cylinder_axis_to_forearm_without_joint_changes() -> 
     assert profile.link_name == "link6"
     assert profile.source_cylinder_axis_local_xyz == (0.0, 1.0, 0.0)
     assert profile.corrected_cylinder_axis_local_xyz == (1.0, 0.0, 0.0)
+    assert profile.source_cylinder_positive_face_center_local_xyz == (
+        0.0,
+        0.023,
+        0.0,
+    )
+    assert profile.corrected_cylinder_positive_face_center_local_xyz == (
+        0.023,
+        0.0,
+        0.0,
+    )
     assert profile.geometry_post_rotation_quat_wxyz == pytest.approx(
         (2.0**-0.5, 0.0, 0.0, -(2.0**-0.5))
     )
@@ -67,6 +77,18 @@ def test_profile_maps_link6_cylinder_axis_to_forearm_without_joint_changes() -> 
                 {"corrected_center_of_mass_m": [0.0, 0.0, 0.0]}
             ),
             "corrected center of mass",
+        ),
+        (
+            lambda value: value["correction"].update(
+                {
+                    "corrected_cylinder_positive_face_center_local_xyz": [
+                        0.0,
+                        0.023,
+                        0.0,
+                    ]
+                }
+            ),
+            "corrected cylinder face center",
         ),
         (
             lambda value: value["correction"].update(

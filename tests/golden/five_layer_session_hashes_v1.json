@@ -5,7 +5,7 @@
     "isaac_hand2_right_rotation_ball_qualification_v1.yaml": "b0cb2cba769a76cd883dbccf263e5d81f98b2b5fd2ae63768efc5f2c504e6f99",
     "isaac_hand2_right_rotation_ball_teleop_v1.yaml": "5ceef98573f967b9b4c69135c487d1e2ba7ab6907c5d63d30cbb95b636ba583e",
     "isaac_hand2_teleop_v1.yaml": "ba946e6b8ac786d28cacdd29b01c8ed53a7d955175d574d0e3c60af96fb6bc68",
-    "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml": "4b9f97fb1c946f92918bcb7f8ecffde68f859a6b511dc24914afb694f827578d",
+    "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml": "abf48dd47d90e5feea76fadf628119bf6a769572ef705f3a0a86cc60a945037c",
     "mediapipe_hand2_hand_command_udp_v1.yaml": "c8721bc75054581f4232a392193eda7cd8f8821ca962ecc32514c567975ced22",
     "mediapipe_hand2_q20_udp_v1.yaml": "9b063ea55497e12d225fb3aa9922afa5d2fb8026cb352f369973ddb3e874ff5c",
     "mujoco_fr3v2_hand2_right_table_v1.yaml": "dc92c7689cff92181606ff215407d3eaf86d5baac033ff28fe2a3cc936169059"

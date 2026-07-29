@@ -6,6 +6,7 @@ source:
   urdf_sha256: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
   link_name: link6
   cylinder_axis_local_xyz: [0.0, 1.0, 0.0]
+  cylinder_positive_face_center_local_xyz: [0.0, 0.023, 0.0]
 isaac_representation:
   visual_child_name: link6
   collision_child_name: link6_1
@@ -17,11 +18,13 @@ isaac_representation:
 correction:
   geometry_post_rotation_quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
   corrected_cylinder_axis_local_xyz: [1.0, 0.0, 0.0]
+  corrected_cylinder_positive_face_center_local_xyz: [0.023, 0.0, 0.0]
   corrected_center_of_mass_m: [0.0010783117, -0.00009501505, -0.0001911099]
   corrected_principal_axes_quat_wxyz: [0.008212833135837372, -0.6865021142137911, 0.004853510237980641, -0.7270652240275612]
 assumptions:
   - pinned_isaac_link6_positive_y_is_the_visible_cylinder_axis
   - link6_positive_x_is_the_forearm_axis_in_the_selected_nero_asset
+  - positive_cylinder_face_center_is_a_mesh_derived_rounded_simulation_nominal
   - link6_geometry_alignment_preserves_all_joint_frames_and_hand_world_pose
   - source_urdf_and_derived_usd_remain_immutable
   - physical_link6_clocking_and_cad_remain_unverified

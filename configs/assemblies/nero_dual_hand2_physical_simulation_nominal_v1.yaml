@@ -37,9 +37,9 @@ attachments:
       instance: hand_left
       frame: hand_base
     transform:
-      position_m: [0.0, 0.0, 0.0]
+      position_m: [0.023, 0.0, -0.0235]
       quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
-    assumption: direct_mount_pitch_plus_90_maps_pinned_nero_and_hand2_interface_frames
+    assumption: mesh_nominal_mount_couples_hand_base_face_to_aligned_link6_positive_x_face
   - attachment_id: nero_right_link7_to_hand2_right_base
     parent:
       instance: nero_right
@@ -48,6 +48,6 @@ attachments:
       instance: hand_right
       frame: hand_base
     transform:
-      position_m: [0.0, 0.0, 0.0]
+      position_m: [0.023, 0.0, -0.0235]
       quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
-    assumption: direct_mount_pitch_plus_90_maps_pinned_nero_and_hand2_interface_frames
+    assumption: mesh_nominal_mount_couples_hand_base_face_to_aligned_link6_positive_x_face

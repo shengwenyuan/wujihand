@@ -20,7 +20,9 @@ geometry_contract:
   table_inward_axis_world_xyz: [0.0, 1.0, 0.0]
   table_down_axis_world_xyz: [0.0, 0.0, -1.0]
 thresholds:
-  attachment_origin_max_error_m: 0.000001
+  attachment_anchor_max_error_m: 0.000001
+  hand_base_mount_center_max_error_m: 0.0001
+  hand_base_face_parallel_min_dot: 0.999
   link6_cylinder_forearm_min_dot: 0.999
   base_port_outward_min_dot: 0.999
   hand_world_inward_min_dot: 0.90
@@ -29,13 +31,14 @@ thresholds:
   forearm_world_vertical_abs_max: 0.02
   initial_q7_max_error_rad: 0.08
 arm_drive_gains:
-  stiffness: 6000.0
-  damping: 212.13203435596427
+  stiffness: 6500.0
+  damping: 220.79402165819616
 assumptions:
   - base_local_negative_x_port_axis_inferred_from_pinned_mesh_pending_physical_confirmation
   - tabletop_q7_is_simulation_nominal_not_a_hardware_safe_pose
   - link4_to_link5_forearm_horizontal_is_a_simulation_qualification_requirement
   - direct_mount_transform_maps_the_pinned_nero_and_hand2_interface_frame_conventions
+  - hand_base_mount_center_targets_the_mesh_derived_link6_positive_x_face_center
   - link6_geometry_alignment_is_owned_by_the_nero_isaac_binding
   - arm_drive_gains_are_isaac_qualification_values_not_hardware_controller_facts
   - real_device_joint7_frame_and_link6_geometry_confirmation_remain_required_before_physical_correspondence
