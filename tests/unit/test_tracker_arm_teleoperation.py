@@ -4,6 +4,8 @@ import numpy as np
 import pytest
 
 from wujihand.application.teleoperation import (
+    InteractiveTrackerArmController,
+    InteractiveTrackerArmState,
     RelativeTrackerPoseMapper,
     RelativeTrackerTranslationMapper,
     TrackerReferenceReadinessGate,
@@ -182,6 +184,138 @@ def test_reference_gate_rejects_invalid_configuration_and_ordering() -> None:
 
     assert decision.reason == "non_monotonic_sequence"
     assert not decision.ready
+
+
+def test_interactive_controller_arms_on_first_fresh_running_sample() -> None:
+    subject = InteractiveTrackerArmController(pose_mapper())
+    target_position = (0.4, 0.5, 0.6)
+    target_orientation = euler_zyx_to_quaternion_wxyz(
+        yaw=0.1,
+        pitch=-0.2,
+        roll=0.3,
+    )
+
+    rejected = subject.establish_reference(
+        sample(
+            sequence=0,
+            host_time_ns=1_000_000_000,
+            state=TrackingState.CALIBRATING,
+        ),
+        target_position,
+        target_orientation,
+        now_ns=1_000_000_001,
+    )
+    established = subject.establish_reference(
+        sample(sequence=1, host_time_ns=1_010_000_000),
+        target_position,
+        target_orientation,
+        now_ns=1_010_000_001,
+    )
+
+    assert rejected.state is InteractiveTrackerArmState.WAITING_REFERENCE
+    assert rejected.mapping is None
+    assert rejected.reference_epoch == 0
+    assert established.state is InteractiveTrackerArmState.TRACKING
+    assert established.mapping is not None
+    assert established.mapping.target_position_m == pytest.approx(
+        target_position
+    )
+    assert established.mapping.target_orientation_wxyz == pytest.approx(
+        target_orientation
+    )
+    assert established.reference_epoch == 1
+
+
+def test_interactive_controller_holds_then_references_current_robot_pose() -> None:
+    subject = InteractiveTrackerArmController(pose_mapper())
+    first_target = (0.1, 0.2, 0.3)
+    first_orientation = (1.0, 0.0, 0.0, 0.0)
+    subject.establish_reference(
+        sample(sequence=0, host_time_ns=1_000_000_000),
+        first_target,
+        first_orientation,
+        now_ns=1_000_000_001,
+    )
+
+    held = subject.advance(
+        sample(
+            sequence=1,
+            host_time_ns=1_100_000_000,
+            state=TrackingState.CALIBRATING,
+        ),
+        now_ns=1_100_000_001,
+    )
+    waiting = subject.advance(
+        sample(
+            sequence=2,
+            host_time_ns=1_300_000_000,
+            state=TrackingState.CALIBRATING,
+        ),
+        now_ns=1_300_000_001,
+    )
+
+    reacquired_target = (0.31, 0.22, 0.43)
+    reacquired_orientation = euler_zyx_to_quaternion_wxyz(
+        yaw=-0.1,
+        pitch=0.15,
+        roll=-0.2,
+    )
+    reacquired = subject.establish_reference(
+        sample(
+            sequence=3,
+            host_time_ns=1_310_000_000,
+            position_m=(4.0, 5.0, 6.0),
+        ),
+        reacquired_target,
+        reacquired_orientation,
+        now_ns=1_310_000_001,
+    )
+
+    assert held.state is InteractiveTrackerArmState.HOLD
+    assert held.mapping is not None
+    assert held.mapping.target_position_m == pytest.approx(first_target)
+    assert waiting.state is InteractiveTrackerArmState.WAITING_REFERENCE
+    assert waiting.mapping is not None
+    assert waiting.mapping.requires_reference
+    assert reacquired.reference_epoch == 2
+    assert reacquired.mapping is not None
+    assert reacquired.mapping.target_position_m == pytest.approx(
+        reacquired_target
+    )
+    assert reacquired.mapping.target_orientation_wxyz == pytest.approx(
+        reacquired_orientation
+    )
+    assert reacquired.mapping.tracker_delta_m == pytest.approx((0.0, 0.0, 0.0))
+
+
+def test_interactive_controller_recovers_from_repeated_ik_failure() -> None:
+    subject = InteractiveTrackerArmController(
+        pose_mapper(),
+        max_consecutive_ik_failures=5,
+    )
+    subject.establish_reference(
+        sample(sequence=0, host_time_ns=100),
+        (0.1, 0.2, 0.3),
+        (1.0, 0.0, 0.0, 0.0),
+        now_ns=101,
+    )
+
+    for _ in range(4):
+        assert not subject.record_ik_result(False)
+    assert subject.record_ik_result(False)
+
+    assert subject.state is InteractiveTrackerArmState.WAITING_REFERENCE
+    assert subject.requires_reference
+    assert subject.ik_recoveries == 1
+    assert subject.reference_epoch == 1
+
+
+def test_interactive_controller_rejects_invalid_failure_threshold() -> None:
+    with pytest.raises(ValueError, match="positive integer"):
+        InteractiveTrackerArmController(
+            pose_mapper(),
+            max_consecutive_ik_failures=0,
+        )
 
 
 def test_translation_compatibility_mapper_freezes_orientation_and_maps_xyz() -> None:

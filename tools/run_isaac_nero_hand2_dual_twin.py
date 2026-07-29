@@ -8,6 +8,8 @@ q27 articulation per side, and performs bounded q7/q20 isolation phases
 suitable for the NV-2 simulation Gate.  Explicit opt-in modes may either read
 one Wuji Glove for one simulated Hand 2 or consume canonical Tracker samples
 over loopback for the simulated right NERO; the two input tests are isolated.
+Tracker live mode is persistent when ``--gui`` is enabled and remains bounded
+for headless qualification.
 """
 
 from __future__ import annotations
@@ -43,6 +45,8 @@ from wujihand.application.qualification import (
 )
 from wujihand.application.teleoperation import (
     GloveHand2SimulationController,
+    InteractiveTrackerArmController,
+    InteractiveTrackerArmState,
     RelativeTrackerPoseMapper,
     TrackerReferenceReadiness,
     TrackerReferenceReadinessGate,
@@ -119,13 +123,18 @@ def parse_args() -> argparse.Namespace:
         "--tracker-live",
         action="store_true",
         help=(
-            "Opt in to bounded canonical Tracker pose control of only the "
-            "simulated right NERO; rotation remains separately opt-in."
+            "Opt in to canonical Tracker pose control of only the simulated "
+            "right NERO; GUI mode is interactive and headless mode is bounded."
         ),
     )
     parser.add_argument("--tracker-serial")
     parser.add_argument("--tracker-udp-port", type=int, default=49154)
-    parser.add_argument("--tracker-frames", type=int, default=2400)
+    parser.add_argument(
+        "--tracker-frames",
+        type=int,
+        default=2400,
+        help="Frame limit for headless Tracker qualification; ignored by GUI live mode.",
+    )
     parser.add_argument(
         "--tracker-mapping",
         type=Path,
@@ -168,14 +177,17 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.25,
         help=(
-            "Continuous canonical RUNNING duration required before the "
-            "Tracker reference may be established."
+            "Continuous canonical RUNNING duration required before a headless "
+            "qualification reference may be established."
         ),
     )
     parser.add_argument(
         "--tracker-auto-reference",
         action="store_true",
-        help="Establish the reference without waiting for Enter (CI/HIL only).",
+        help=(
+            "Compatibility option; Tracker reference acquisition is now "
+            "always automatic."
+        ),
     )
     return parser.parse_args()
 
@@ -1200,6 +1212,341 @@ def _run_glove_live_qualification(
     return qualification_gate_exit_code(passed)
 
 
+def _nero_link7_pose(
+    solver: LulaKinematicsSolver,
+    q7: npt.NDArray[np.float64],
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    position_m, rotation = solver.compute_forward_kinematics("link7", q7)
+    position = np.asarray(position_m, dtype=np.float64)
+    rotation_matrix = np.asarray(rotation, dtype=np.float64)
+    if (
+        position.shape != (3,)
+        or not np.isfinite(position).all()
+        or rotation_matrix.shape != (3, 3)
+        or not np.isfinite(rotation_matrix).all()
+    ):
+        raise RuntimeError("NERO Lula FK returned an invalid link7 pose")
+    return position, rotation_matrix_to_quaternion_wxyz(rotation_matrix)
+
+
+def _print_tracker_operator_instruction() -> None:
+    if ARGS.tracker_freeze_translation:
+        print(
+            "rotation-only：保持 link7 参考位置；依次绕身体右向、前向、"
+            "上向轴小幅旋转。仅右 NERO 应响应。",
+            flush=True,
+        )
+    elif ARGS.tracker_rotation:
+        print(
+            "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴"
+            "旋转。仅右 NERO 应响应。",
+            flush=True,
+        )
+    else:
+        print(
+            "现在依次小幅移动 Tracker：左右、前后、上下；仅右 NERO 应响应。",
+            flush=True,
+        )
+
+
+def _run_tracker_interactive(
+    world: World,
+    *,
+    articulations: dict[str, Articulation],
+    partitions: dict[str, NeroHand2DofPartition],
+    solver: LulaKinematicsSolver,
+    mapper: RelativeTrackerPoseMapper,
+    supervisor: JointCommandSupervisor,
+    arm_targets: dict[str, npt.NDArray[np.float64]],
+    apply_targets: Callable[[], None],
+) -> int:
+    """Run a persistent GUI session independent from Tracker control state."""
+
+    assert TRACKER_MAPPING is not None
+    assert TRACKER_MAPPING_PATH is not None
+    assert TRACKER_TRANSLATION_SCALE is not None
+    assert TRACKER_MAX_TRANSLATION_DELTA_M is not None
+    assert TRACKER_ROTATION_SCALE is not None
+    assert TRACKER_MAX_ROTATION_DELTA_RAD is not None
+
+    right_arm_indices = np.asarray(
+        partitions["right"].arm_indices_q7,
+        dtype=np.int64,
+    )
+    controller = InteractiveTrackerArmController(
+        mapper,
+        max_consecutive_ik_failures=5,
+    )
+    frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
+    started_ns = time.monotonic_ns()
+    next_deadline_ns = started_ns
+    last_tick_ns = max(0, started_ns - 1)
+    completed_frames = 0
+    accepted_samples = 0
+    held_frames = 0
+    waiting_frames = 0
+    ik_successes = 0
+    ik_failures = 0
+    translation_clamped_samples = 0
+    rotation_clamped_samples = 0
+    max_world_delta_m = 0.0
+    max_target_rotation_delta_rad = 0.0
+    supervisor_armed = False
+    last_mapping_reason: str | None = None
+    last_logged_state: InteractiveTrackerArmState | None = None
+    termination_reason = "operator_closed"
+
+    print(
+        "TRACKER_INTERACTIVE_WAITING_REFERENCE "
+        "policy=first_fresh_running gui_lifetime=operator_controlled",
+        flush=True,
+    )
+    with UdpTrackingSampleReceiver(
+        ARGS.tracker_udp_port,
+        stream_id=TRACKER_STREAM_ID,
+        device_serial=ARGS.tracker_serial,
+        logical_role=TRACKER_LOGICAL_ROLE,
+        tracking_frame=TRACKER_MAPPING.tracking_frame,
+    ) as receiver:
+        try:
+            while simulation_app.is_running():
+                next_deadline_ns += frame_period_ns
+                tick_ns = max(time.monotonic_ns(), last_tick_ns + 1)
+                sample = receiver.receive_latest(now_ns=tick_ns)
+                mapping = None
+                ik_success: bool | None = None
+
+                if controller.requires_reference:
+                    if sample is not None:
+                        current_right = _positions(articulations["right"])
+                        current_q7 = current_right[right_arm_indices]
+                        (
+                            reference_position_m,
+                            reference_orientation_wxyz,
+                        ) = _nero_link7_pose(solver, current_q7)
+                        reference_step = controller.establish_reference(
+                            sample,
+                            reference_position_m,
+                            reference_orientation_wxyz,
+                            now_ns=tick_ns,
+                        )
+                        mapping = reference_step.mapping
+                        last_mapping_reason = reference_step.reason
+                        if mapping is not None:
+                            if not supervisor_armed:
+                                supervisor.arm(tick_ns)
+                                supervisor_armed = True
+                            print(
+                                "TRACKER_REFERENCE_READY "
+                                f"epoch={reference_step.reference_epoch} "
+                                f"serial={sample.device_serial} "
+                                f"position_m={list(sample.position_m or ())} "
+                                "policy=first_fresh_running "
+                                f"mapping_id={TRACKER_MAPPING.mapping_id}",
+                                flush=True,
+                            )
+                            if reference_step.reference_epoch == 1:
+                                _print_tracker_operator_instruction()
+                    if controller.requires_reference:
+                        waiting_frames += 1
+                else:
+                    control_step = controller.advance(
+                        sample,
+                        now_ns=tick_ns,
+                    )
+                    mapping = control_step.mapping
+                    last_mapping_reason = control_step.reason
+                    if mapping is not None and not mapping.requires_reference:
+                        if mapping.accepted:
+                            accepted_samples += 1
+                            translation_clamped_samples += int(
+                                mapping.translation_clamped
+                            )
+                            rotation_clamped_samples += int(
+                                mapping.rotation_clamped
+                            )
+                        else:
+                            held_frames += 1
+                        if mapping.world_delta_m is not None:
+                            max_world_delta_m = max(
+                                max_world_delta_m,
+                                float(np.linalg.norm(mapping.world_delta_m)),
+                            )
+                        if mapping.rotation_delta_rad is not None:
+                            max_target_rotation_delta_rad = max(
+                                max_target_rotation_delta_rad,
+                                mapping.rotation_delta_rad,
+                            )
+
+                        assert mapping.target_position_m is not None
+                        assert mapping.target_orientation_wxyz is not None
+                        assert mapping.input_host_time_ns is not None
+                        solution, ik_success = (
+                            solver.compute_inverse_kinematics(
+                                "link7",
+                                np.asarray(
+                                    mapping.target_position_m,
+                                    dtype=np.float64,
+                                ),
+                                np.asarray(
+                                    mapping.target_orientation_wxyz,
+                                    dtype=np.float64,
+                                ),
+                                warm_start=supervisor.last_command,
+                                position_tolerance=0.002,
+                                orientation_tolerance=0.02,
+                            )
+                        )
+                        try:
+                            candidate_q7 = supervisor.layout.validate_vector(
+                                np.asarray(solution, dtype=np.float64)
+                            )
+                        except (
+                            TypeError,
+                            ValueError,
+                            OverflowError,
+                        ):
+                            ik_success = False
+                            candidate_q7 = supervisor.last_command.copy()
+
+                        if ik_success:
+                            ik_successes += 1
+                            controller.record_ik_result(True)
+                            supervision = supervisor.step(
+                                candidate_q7,
+                                now_ns=tick_ns,
+                                input_time_ns=mapping.input_host_time_ns,
+                            )
+                            arm_targets["right"] = supervision.command.copy()
+                            apply_targets()
+                        else:
+                            ik_failures += 1
+                            if controller.record_ik_result(False):
+                                print(
+                                    "TRACKER_CONTROL_WAITING_REFERENCE "
+                                    "reason=five_consecutive_ik_failures "
+                                    "gui=running",
+                                    flush=True,
+                                )
+
+                if controller.state is not last_logged_state:
+                    print(
+                        "TRACKER_CONTROL_STATE "
+                        f"state={controller.state.value} "
+                        f"reason={last_mapping_reason or 'startup'} "
+                        "gui=running",
+                        flush=True,
+                    )
+                    last_logged_state = controller.state
+
+                world.step(render=True)
+                completed_frames += 1
+                if not simulation_app.is_running():
+                    termination_reason = "operator_closed"
+                    break
+                if completed_frames % 60 == 0:
+                    print(
+                        f"tracker_frame={completed_frames:06d} "
+                        f"state={controller.state.value} "
+                        f"reference_epoch={controller.reference_epoch} "
+                        f"ik={'n/a' if ik_success is None else ('ok' if ik_success else 'hold')} "
+                        f"last_reason={last_mapping_reason}",
+                        flush=True,
+                    )
+
+                last_tick_ns = tick_ns
+                remaining_s = (
+                    next_deadline_ns - time.monotonic_ns()
+                ) / 1_000_000_000
+                if remaining_s > 0.0:
+                    time.sleep(remaining_s)
+        except KeyboardInterrupt:
+            termination_reason = "operator_interrupt"
+
+        report = {
+            "schema": "wujihand.isaac_tracker_right_nero_interactive.v1",
+            "scope": (
+                "simulation-only right NERO q7 interactive control; "
+                "no ROS, CAN, NERO hardware, or Hand 2 hardware"
+            ),
+            "session_id": RESOLVED.session.session_id,
+            "session_hash": RESOLVED.session_hash,
+            "session_mode": "interactive_gui",
+            "five_layer_configuration_modified": False,
+            "tracker": {
+                "serial": ARGS.tracker_serial,
+                "stream_id": TRACKER_STREAM_ID,
+                "logical_role": TRACKER_LOGICAL_ROLE,
+                "tracking_frame": TRACKER_MAPPING.tracking_frame,
+                "udp_endpoint": f"127.0.0.1:{ARGS.tracker_udp_port}",
+                "reference_policy": "first_fresh_running",
+                "reference_epochs": controller.reference_epoch,
+                "accepted_samples": accepted_samples,
+                "held_frames": held_frames,
+                "waiting_frames": waiting_frames,
+                "receiver_accepted_drains": receiver.accepted,
+                "receiver_rejected_datagrams": receiver.rejected,
+                "final_control_state": controller.state.value,
+            },
+            "mapping": {
+                "profile": str(TRACKER_MAPPING_PATH),
+                "mapping_id": TRACKER_MAPPING.mapping_id,
+                "tracker_to_workcell": [
+                    list(row)
+                    for row in TRACKER_MAPPING.tracker_to_workcell
+                ],
+                "translation_scale": TRACKER_TRANSLATION_SCALE,
+                "translation_enabled": (
+                    not ARGS.tracker_freeze_translation
+                ),
+                "max_translation_delta_each_axis_m": (
+                    TRACKER_MAX_TRANSLATION_DELTA_M
+                ),
+                "translation_clamped_samples": (
+                    translation_clamped_samples
+                ),
+                "max_world_delta_norm_m": max_world_delta_m,
+                "rotation_enabled": ARGS.tracker_rotation,
+                "rotation_scale": TRACKER_ROTATION_SCALE,
+                "max_rotation_delta_deg": math.degrees(
+                    TRACKER_MAX_ROTATION_DELTA_RAD
+                ),
+                "rotation_clamped_samples": rotation_clamped_samples,
+                "max_target_rotation_delta_deg": math.degrees(
+                    max_target_rotation_delta_rad
+                ),
+            },
+            "kinematics": {
+                "solver": "Isaac Sim 6.0.1 LulaKinematicsSolver",
+                "end_effector_frame": "link7",
+                "ik_successes": ik_successes,
+                "ik_failures": ik_failures,
+                "ik_reference_recoveries": controller.ik_recoveries,
+            },
+            "runtime": {
+                "requested_frames": None,
+                "completed_frames": completed_frames,
+                "termination_reason": termination_reason,
+                "last_mapping_reason": last_mapping_reason,
+                "wall_duration_s": (
+                    time.monotonic_ns() - started_ns
+                )
+                / 1_000_000_000,
+            },
+            "qualification_evaluated": False,
+            "passed": None,
+        }
+        encoded = (
+            json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
+            + "\n"
+        )
+        if ARGS.report is not None:
+            ARGS.report.parent.mkdir(parents=True, exist_ok=True)
+            ARGS.report.write_text(encoded, encoding="utf-8")
+        print(encoded, end="")
+    return 0
+
+
 def _run_tracker_live(
     world: World,
     *,
@@ -1256,20 +1603,10 @@ def _run_tracker_live(
     initial_q7 = initial_feedback["right"][right_arm_indices].copy()
     arm_targets["right"] = initial_q7.copy()
     apply_targets()
-    reference_position_m, reference_rotation = solver.compute_forward_kinematics(
-        "link7",
-        initial_q7,
-    )
-    reference_position_m = np.asarray(reference_position_m, dtype=np.float64)
-    reference_rotation = np.asarray(reference_rotation, dtype=np.float64)
-    if (
-        reference_position_m.shape != (3,)
-        or not np.isfinite(reference_position_m).all()
-        or reference_rotation.shape != (3, 3)
-        or not np.isfinite(reference_rotation).all()
-    ):
-        raise RuntimeError("NERO Lula FK returned an invalid reference pose")
-    reference_orientation_wxyz = rotation_matrix_to_quaternion_wxyz(reference_rotation)
+    (
+        reference_position_m,
+        reference_orientation_wxyz,
+    ) = _nero_link7_pose(solver, initial_q7)
 
     mapper = RelativeTrackerPoseMapper(
         stream_id=TRACKER_STREAM_ID,
@@ -1313,6 +1650,16 @@ def _run_tracker_live(
             camera_prim_path=SCREENSHOT_CAMERA_PRIM_PATH,
         )
         _step(world, 5, render=True)
+        return _run_tracker_interactive(
+            world,
+            articulations=articulations,
+            partitions=partitions,
+            solver=solver,
+            mapper=mapper,
+            supervisor=supervisor,
+            arm_targets=arm_targets,
+            apply_targets=apply_targets,
+        )
 
     with UdpTrackingSampleReceiver(
         ARGS.tracker_udp_port,
@@ -1321,15 +1668,6 @@ def _run_tracker_live(
         logical_role=TRACKER_LOGICAL_ROLE,
         tracking_frame=TRACKER_MAPPING.tracking_frame,
     ) as receiver:
-        if not ARGS.tracker_auto_reference:
-            print(
-                "\n保持 Tracker 静止；确认 Isaac 场景就绪后按 Enter 建立 reference。",
-                flush=True,
-            )
-            try:
-                input()
-            except EOFError as exc:
-                raise RuntimeError("stdin closed before Tracker reference confirmation") from exc
         reference_requested_ns = time.monotonic_ns()
         reference_deadline_ns = reference_requested_ns + round(
             TRACKER_REFERENCE_WAIT_S * 1_000_000_000
@@ -1398,23 +1736,7 @@ def _run_tracker_live(
             f"±{math.degrees(TRACKER_MAX_ROTATION_DELTA_RAD):g}deg",
             flush=True,
         )
-        if ARGS.tracker_freeze_translation:
-            print(
-                "rotation-only：保持 link7 参考位置；依次绕身体右向、前向、"
-                "上向轴小幅旋转。仅右 NERO 应响应。",
-                flush=True,
-            )
-        elif ARGS.tracker_rotation:
-            print(
-                "依次小幅测试：左右、前后、上下；再绕身体右向、前向、上向轴"
-                "旋转。仅右 NERO 应响应。",
-                flush=True,
-            )
-        else:
-            print(
-                "现在依次小幅移动 Tracker：左右、前后、上下；仅右 NERO 应响应。",
-                flush=True,
-            )
+        _print_tracker_operator_instruction()
 
         frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
         next_deadline_ns = armed_ns

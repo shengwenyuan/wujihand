@@ -6,6 +6,9 @@ from .glove_hand2 import (
     compose_q27_hand_target,
 )
 from .tracker_arm import (
+    InteractiveTrackerArmController,
+    InteractiveTrackerArmState,
+    InteractiveTrackerArmStep,
     Matrix3,
     QuaternionWxyz,
     RelativeTrackerPoseMapper,
@@ -20,6 +23,9 @@ from .tracker_arm import (
 __all__ = [
     "GloveHand2SimulationController",
     "Hand2SimulationStep",
+    "InteractiveTrackerArmController",
+    "InteractiveTrackerArmState",
+    "InteractiveTrackerArmStep",
     "Matrix3",
     "QuaternionWxyz",
     "RelativeTrackerPoseMapper",

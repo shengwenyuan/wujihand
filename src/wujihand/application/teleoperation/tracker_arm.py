@@ -9,6 +9,7 @@ their adapters and composition roots.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 from typing import Sequence, cast
 
@@ -708,7 +709,152 @@ class RelativeTrackerTranslationMapper(RelativeTrackerPoseMapper):
         )
 
 
+class InteractiveTrackerArmState(str, Enum):
+    """Control state independent from the surrounding GUI process lifetime."""
+
+    WAITING_REFERENCE = "waiting_reference"
+    TRACKING = "tracking"
+    HOLD = "hold"
+
+
+@dataclass(frozen=True, slots=True)
+class InteractiveTrackerArmStep:
+    """One interactive state transition around the canonical pose mapper."""
+
+    state: InteractiveTrackerArmState
+    mapping: TrackerPoseDecision | None
+    reference_epoch: int
+    reason: str
+
+
+class InteractiveTrackerArmController:
+    """Keep an interactive arm session alive across Tracker reference loss.
+
+    This controller owns only the teleoperation state machine. It does not own
+    UDP, Isaac, joint supervision, coordinate mappings, or five-layer product
+    configuration. A composition root supplies the current robot pose whenever
+    a fresh canonical Tracker sample can begin a new relative reference epoch.
+    """
+
+    def __init__(
+        self,
+        mapper: RelativeTrackerPoseMapper,
+        *,
+        max_consecutive_ik_failures: int = 5,
+    ) -> None:
+        if not isinstance(mapper, RelativeTrackerPoseMapper):
+            raise TypeError("mapper must be a RelativeTrackerPoseMapper")
+        if (
+            type(max_consecutive_ik_failures) is not int
+            or max_consecutive_ik_failures < 1
+        ):
+            raise ValueError(
+                "max_consecutive_ik_failures must be a positive integer"
+            )
+        self.mapper = mapper
+        self.max_consecutive_ik_failures = max_consecutive_ik_failures
+        self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+        self.reference_epoch = 0
+        self.consecutive_ik_failures = 0
+        self.ik_recoveries = 0
+
+    @property
+    def requires_reference(self) -> bool:
+        return self.mapper.requires_reference
+
+    def establish_reference(
+        self,
+        sample: TrackedRigidBodySample,
+        reference_target_position_m: object,
+        reference_target_orientation_wxyz: Sequence[float],
+        *,
+        now_ns: int,
+    ) -> InteractiveTrackerArmStep:
+        """Start a new relative epoch from the first fresh actionable sample."""
+
+        if not self.mapper.requires_reference:
+            raise RuntimeError("the current Tracker reference is still active")
+        try:
+            mapping = self.mapper.arm(
+                sample,
+                reference_target_position_m,
+                reference_target_orientation_wxyz,
+                now_ns=now_ns,
+            )
+        except ValueError as exc:
+            self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+            return self._step(
+                mapping=None,
+                reason=f"reference_rejected:{str(exc)}",
+            )
+
+        self.reference_epoch += 1
+        self.consecutive_ik_failures = 0
+        self.state = InteractiveTrackerArmState.TRACKING
+        return self._step(mapping=mapping, reason="reference_established")
+
+    def advance(
+        self,
+        sample: TrackedRigidBodySample | None,
+        *,
+        now_ns: int,
+    ) -> InteractiveTrackerArmStep:
+        """Advance tracking without treating reference loss as process exit."""
+
+        now = validate_host_time_ns(now_ns)
+        if self.mapper.requires_reference:
+            self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+            return self._step(
+                mapping=None,
+                reason="waiting_for_reference",
+            )
+        mapping = self.mapper.advance(sample, now_ns=now)
+        if mapping.requires_reference:
+            self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+        elif mapping.accepted:
+            self.state = InteractiveTrackerArmState.TRACKING
+        else:
+            self.state = InteractiveTrackerArmState.HOLD
+        return self._step(mapping=mapping, reason=mapping.reason)
+
+    def record_ik_result(self, succeeded: bool) -> bool:
+        """Disarm the mapping epoch after repeated IK failure, without exit."""
+
+        if type(succeeded) is not bool:
+            raise ValueError("succeeded must be a boolean")
+        if succeeded:
+            self.consecutive_ik_failures = 0
+            return False
+
+        self.consecutive_ik_failures += 1
+        if (
+            self.consecutive_ik_failures
+            < self.max_consecutive_ik_failures
+        ):
+            return False
+        self.mapper.disarm()
+        self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+        self.ik_recoveries += 1
+        return True
+
+    def _step(
+        self,
+        *,
+        mapping: TrackerPoseDecision | None,
+        reason: str,
+    ) -> InteractiveTrackerArmStep:
+        return InteractiveTrackerArmStep(
+            state=self.state,
+            mapping=mapping,
+            reference_epoch=self.reference_epoch,
+            reason=reason,
+        )
+
+
 __all__ = [
+    "InteractiveTrackerArmController",
+    "InteractiveTrackerArmState",
+    "InteractiveTrackerArmStep",
     "Matrix3",
     "QuaternionWxyz",
     "RelativeTrackerPoseMapper",
