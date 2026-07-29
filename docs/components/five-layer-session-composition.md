@@ -175,8 +175,8 @@ source-lock gate。后续提升 leaf 时应删除这些镜像，而不是让它�
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
 ```
 
 省略 `--session` 时，runner 按上表和 `--command-source`/publish 参数选择兼容默认值，
@@ -250,10 +250,11 @@ Isaac authored-stage、PhysX 和真人输入回归不能由普通 fast suite 代
 场景仍有其固定 Isaac 环境；NV-2 dual q27 以 Isaac Sim 6.0.1 单独做阶段验证。真人
 MediaPipe 需要相机/模型，真人 Glove 需要实际设备、Wuji SDK、side/serial 与有效
 calibration。缺少对应环境时必须记录为“未执行”，不能由 fake SDK 或 fixture 替代。
-link6-aligned tabletop v12 已通过 86/86：保留 scripted physical v2 的双侧 q7、
+coaxial-mount tabletop v14 已通过 90/90：保留 scripted physical v2 的双侧 q7、
 五指/组合手型、隔离、reset/topology/recovery 与 bounded rest settling，并增加
-分侧 q7 初态、`link6` 圆柱—小臂轴对齐、attachment 原点、`link4 → link5`
-小臂近水平、桌内方向、掌面朝下和端口假设轴朝外检查。接口近景由 Workcell camera
+分侧 q7 初态、`link6` 圆柱—小臂轴对齐、Hand 2 基座端面中心/平行度、
+attachment anchor、`link4 → link5` 小臂近水平、桌内方向、掌面朝下和端口假设轴
+朝外检查。接口近景由 Workcell camera
 frame 所有。J7 运动学和 Lula 已恢复固定来源 URDF；旧 corrected-J7
 rotation/SE(3) 报告不再代表当前定义。上述结果不包括 deliberate
 contact/unknown penetration；

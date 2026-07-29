@@ -57,7 +57,7 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
    两个语义帧属于 NERO Asset，后端 prim 由 Binding 映射；水平阈值属于 Session
    引用的 qualification profile，runner 只消费解析结果。
 10. qualification profile 的 Isaac-only q7 drive gain 采用
-    `stiffness=6000`、`damping=212.13203435596427`，用于抵消组合 Hand 2 重力负载下
+    `stiffness=6500`、`damping=220.79402165819616`，用于抵消组合 Hand 2 重力负载下
     约一度的静态下垂并满足 `|forearm_axis.z| <= 0.02`。该数值不是硬件控制器参数。
 11. 逐 prim 隐藏检查确认截图中待旋转的近端圆柱属于 NERO `link6`，不是
     Hand 2 根刚体、`link7` 或一个未建模的直角转接件。固定 URDF/USD 的所有 joint
@@ -68,10 +68,11 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
     visual/collision 表示由局部 `+Y` 轴后旋 `Rz(-90°)` 到局部 `+X` 轴，并同步旋转
     center of mass 与 principal inertia axes。该 overlay 不改变 q7 运动学、关节限位、
     `link7` 世界位姿或 Hand 2 世界位姿；物理 link6 clocking/CAD 仍未核验。
-13. Assembly 的左右 `link7 → hand_base` 恢复为零平移、
-    `Ry(+90°)`。这里的旋转只映射两个固定资产的接口坐标约定，不表示存在直角转接
-    结构。qualification Gate 验证 `link6` 圆柱轴与 `link4 → link5` 小臂轴同向、
-    attachment 原点重合，以及既有的手朝桌内、掌面朝下要求。
+13. Assembly 的左右 `link7 → hand_base` 采用
+    `position=[0.023, 0, -0.0235] m`、`Ry(+90°)`。平移抵消固定 J7 origin 的
+    `-23.5 mm` 横向偏置，并把 Hand 2 基座耦合面放到 mesh-derived `link6 +X`
+    端面中心；旋转保持既有 Hand 2 工作朝向并令两盘面平行。这是当前固定资产的
+    simulation-nominal 接口映射，不表示存在直角转接结构。
 
 ## 结果
 
@@ -86,8 +87,9 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   两者都不表达一个不存在的直角转接结构，也不改写 J7 运动学。
 - tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过，但只保留为修正前历史
   组合的准备位和 drive qualification 证据。
-- link6-aligned tabletop v12 已在 Workstation2 以 86/86 checks 通过；左右圆柱轴与
-  小臂轴点积分别为 `0.999182` 与 `0.999247`，掌面朝下、手朝桌内、连接原点以及
+- coaxial-mount tabletop v14 已在 Workstation2 以 90/90 checks 通过；左右 Hand 2
+  基座中心到 `link6` 端面中心误差分别约为 `28.4 µm` 与 `20.8 µm`，盘面平行点积
+  均大于 `0.999999`。圆柱—小臂轴、掌面朝下、手朝桌内、attachment anchor 以及
   双 q27 功能 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
 - 先前 corrected-J7 Lula 的旋转/SE(3) 报告只保留为已撤销定义下的历史证据，不再
   支持当前 Tracker rotation 结论；当前定义须使用固定来源 URDF 重新做 Tracker

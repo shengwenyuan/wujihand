@@ -1,13 +1,14 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
-状态：**PARTIAL / 部分完成（link6-aligned tabletop v12 已在 Workstation2
-通过 86/86；右侧 Glove live 已现场打通，2026-07-29）**。
+状态：**PARTIAL / 部分完成（coaxial-mount tabletop v14 已在 Workstation2
+通过 90/90；右侧 Glove live 已现场打通，2026-07-29）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
-目标机 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。tabletop v12
-的 86 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/组合手型、
-隔离、finite/limits、reset/topology/recovery 检查，并增加 18 项 tabletop
-attachment、同侧桌沿 mount、左右准备位、手部朝向、小臂近水平及 `link6` 表示
+目标机 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。tabletop v14
+的 90 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/组合手型、
+隔离、finite/limits、reset/topology/recovery 检查，并增加 22 项 tabletop
+attachment anchor、基座端面中心/平行度、同侧桌沿 mount、左右准备位、手部朝向、
+小臂近水平及 `link6` 表示
 资格检查。
 结果不包含真实 NERO 或 Hand 2 运动，也不把 nominal 装配、端口轴假设和工作台数值
 解释为现场测量事实。
@@ -33,7 +34,7 @@ NV-2 尚不能标记为完整完成：
 | 逻辑命令 | 已建立 | 左/右 NERO q7 + 左/右 Hand 2 q20，4 个显式 route、54 logical DoF |
 | Isaac 物理拓扑 | 已验证 | 左右各一棵 q27 articulation，共 2 棵 |
 | tabletop v6 | 历史通过 | 84/84：旧 attachment 定义的回归基线 |
-| link6-aligned tabletop v12 | 通过 | 86/86；圆柱—小臂轴和连接原点 Gate 均通过 |
+| coaxial-mount tabletop v14 | 通过 | 90/90；基座端面中心、平行度、attachment anchor 与圆柱—小臂轴 Gate 均通过 |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
 | 真实 Glove live 路径 | 右侧已执行 | 2399/2400 帧接收、0 帧拒绝；当前迭代进一步拆出快速 live-only 分支 |
@@ -90,14 +91,14 @@ nero_right (root) -> link7 -> hand_right (physical q20 child)
 当前左右 `link7 → hand_base` attachment 是直接装配：
 
 ```text
-position_m = [0, 0, 0]
+position_m = [0.023, 0, -0.0235] m
 quat_wxyz = [0.70710678, 0, 0.70710678, 0]  # Ry(+90°)
 ```
 
-该 `Ry(+90°)` 映射固定 NERO `link7` 与 Hand 2 `hand_base` 的接口坐标约定，不表示
-存在直角转接结构。逐 prim 隐藏检查已经证明待调整的圆柱属于 NERO `link6`，所以
-不再通过 Assembly 或 J7 带动整只 Hand 2。物理对应仍待设备 J7 轴、零位、符号、
-`link6` clocking 和螺孔方向只读核对。
+平移抵消固定 J7 origin 的 `-23.5 mm` 横向偏置，并把 Hand 2 基座耦合面放到
+mesh-derived `link6 +X` 端面中心；`Ry(+90°)` 保持既有手部工作朝向并令盘面平行。
+该变换是 simulation-nominal 接口映射，不表示存在直角转接结构。物理对应仍待设备
+J7 轴、零位、符号、`link6` clocking 和螺孔方向只读核对。
 
 ### Workcell
 
@@ -136,12 +137,12 @@ contract；它是 NV-2 scripted/fixture 仿真的唯一 composition root。Sessi
 | left | `[-10, -45, 0, -45, -90, 0, 0]` |
 | right | `[+10, -45, 0, -45, -90, 0, 0]` |
 
-同一 profile 将 NERO q7 Isaac drive gain 设为 `stiffness=6000`、
-`damping=212.13203435596427`，并把 Asset/Binding 解析出的 `link4 → link5`
+同一 profile 将 NERO q7 Isaac drive gain 设为 `stiffness=6500`、
+`damping=220.79402165819616`，并把 Asset/Binding 解析出的 `link4 → link5`
 世界轴竖直分量限制为 `<=0.02`。这些是 Isaac-only qualification 数值，不修改通用
 NERO profile、固定来源 URDF/USD 或硬件控制器事实。J7 初值仍为 `0°`，J7 限位
 不变；Binding overlay 不改动 J7 origin。Tracker Lula 直接使用固定来源 URDF，
-Assembly 保持上述 `Ry(+90°)` 接口映射。
+Assembly 保持上述固定平移与 `Ry(+90°)` 接口映射。
 
 ## 两棵 q27 物理 articulation
 
@@ -150,7 +151,8 @@ Assembly 保持上述 `Ry(+90°)` 接口映射。
 
 1. 从 NERO Binding profile 对 live stage 的 `link6` visual/collision 及 mass
    properties 施加 source-locked 表示对齐，不改 joint frame；
-2. 从已解析 Assembly 读取 `Ry(+90°)` 的 `link7 → hand_base` transform；
+2. 从已解析 Assembly 读取带固定平移和 `Ry(+90°)` 的
+   `link7 → hand_base` transform；
 3. 把 Hand 2 base 放到目标法兰位姿，避免约束建立时产生 snap impulse；
 4. 禁用 Hand 2 USD 原有的 world-fixed `root_joint`；
 5. 从该 prim 移除 `ArticulationRootAPI`；
@@ -216,11 +218,11 @@ Wuji Glove hand_skeleton
 | Hand 2 source | `wuji-description v2026.6.27` / `aee64892ebcf8e3237bedc30231bb09476cbc71d` |
 | Hand 2 left USD | `646287f10ac0a2097bf602facc02c9af17f0f1cf8982c38037f69bb695492eca` |
 | Hand 2 right USD | `3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00` |
-| link6 geometry alignment profile | `5fa87dce8c4ae90f716223b314ccf3229a794d8c24139ed1884fd0d25ae7c51a` |
+| link6 geometry alignment profile | `0dafd7b44904e69cd8742df41088db81b6c5bbcbb49d186273ff645c571e63ae` |
 | Lula URDF | 固定来源 URDF：`c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278` |
-| tabletop qualification profile | `c9d1164fa781555cf1ab508eaa239d1f06fd7354fd8251b13a6c39b717f4e7bd` |
+| tabletop qualification profile | `bd4bed117eaa1158c8df6fcb9b2472d0de964bad20c7faedeaadc44dac6fdafa` |
 | simulation nominal Workcell | `c507b8f7d0548156949d7d49a0bc5cb7ec1764f355ed4ee8b53ef241f06b40b8` |
-| full Session hash（v12） | `4b9f97fb1c946f92918bcb7f8ecffde68f859a6b511dc24914afb694f827578d` |
+| full Session hash（v14） | `abf48dd47d90e5feea76fadf628119bf6a769572ef705f3a0a86cc60a945037c` |
 
 ## 运行与验证入口
 
@@ -229,8 +231,8 @@ Wuji Glove hand_skeleton
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
 ```
 
 ### Glove 快速 live 入口
@@ -314,8 +316,8 @@ override 只用于有意实验。此 calibration 标记为 `simulation_only`，�
 
 ```text
 artifacts/validation/nv2/nero-dual-asset-smoke.json
-artifacts/validation/nv2/nero-dual-hand2-tabletop-v12.json
-artifacts/validation/nv2/nero-dual-hand2-right-interface-v12.png
+artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json
+artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-corrected-flange-final-v3.json  # 已撤销 J7 定义下的历史证据
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-corrected-flange-final-v2.json       # 已撤销 J7 定义下的历史证据
 artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json       # 历史 84/84 基线
@@ -328,23 +330,24 @@ artifacts/validation/nv2/nero-dual-hand2-physical.png           # v1 历史截�
 目标机执行时对应路径前缀为
 `/home/lenovo/swy/wujihand/`。
 
-当前 tabletop v12 报告的 86 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
+当前 tabletop v14 报告的 90 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
 q27 root、q7/q20 partition 稳定、左右 q7 回到 Session qualification profile
 指定准备位，并可在 reset 后恢复左中指 PIP 命令。固定工作台 collider
 `/World/Workcell/simulation_nominal_table` 存在；初始、每个 scripted hand baseline
 及 reset 后的双 q27 静置均在 `0.005 rad` 容差内有界收敛。
 
-v12 的几何测量值来自 Isaac stage：
+v14 的几何测量值来自 Isaac stage：
 
 | Gate | left | right |
 |---|---:|---:|
-| `link6` 圆柱轴与 `link4 → link5` 小臂轴点积 | `0.999182` | `0.999247` |
-| 法兰—Hand 2 base 原点误差 | `1.077e-16 m` | `1.192e-7 m` |
+| `link6` 圆柱轴与 `link4 → link5` 小臂轴点积 | `0.999084` | `0.999098` |
+| Hand 2 基座端面与 `link6` 端面平行点积 | `0.99999924` | `0.99999959` |
+| Hand 2 基座中心—`link6` 端面中心误差 | `28.4 µm` | `20.8 µm` |
+| attachment anchor 误差 | `7.75 nm` | `20.8 nm` |
 | 端口假设轴朝桌外点积 | `1.0` | `1.0` |
-| `link4 → link5` 竖直分量绝对值 | `0.01809` | `0.01778` |
-| 手纵轴朝桌内点积 | `0.98369` | `0.98378` |
-| 手纵轴竖直分量绝对值 | `0.05849` | `0.05656` |
-| 掌面朝下点积 | `0.99828` | `0.99837` |
+| `link4 → link5` 竖直分量绝对值 | `0.01965` | `0.01930` |
+| 手纵轴朝桌内点积 | `0.98326` | `0.98330` |
+| 掌面朝下点积 | `0.99804` | `0.99805` |
 
 其中 attachment、手轴与掌面值是仿真几何测量；端口点积仅验证
 “pinned mesh 推断的 `base local -X` 轴 + nominal mount”的内部一致性，仍待实物确认，
@@ -352,16 +355,16 @@ v12 的几何测量值来自 Isaac stage：
 
 报告明确记录 `deliberate_unknown_penetration_probe=false`：它没有引入 deliberate
 contact/unknown penetration 场景。same-digit uncommanded linkage 仅作为诊断，
-other-finger isolation 才是本轮 Gate。v12 报告 SHA-256 是
-`2255dcf1fff63ecbcffdbeb88665a411b8d5169c0d7f74af5013e6caec57d062`，Workcell-owned
+other-finger isolation 才是本轮 Gate。v14 报告 SHA-256 是
+`5fc6e6329ef553f3ee3e508f8445190045e23e92e1e57c720e4efc07be44aa79`，Workcell-owned
 右侧接口近景 SHA-256 是
-`d64cb06c8c54853bd797daf31ef0a1521698b8b5c541a768e991c8ad4f8e767e`。
+`5994bf58bf8f0d157fb241493f2c01ad5ebd25db95ab510b0ee0e6a085fc505b`。
 
 历史 scripted physical v2 的 68/68
 （报告 `5623b8552f54cfd186640a5b857179bca2b7cbd935f4d847451cf1912573b20f`，
 截图 `2366d024a8d26f85ca97fd2c79aa190a148270ac8e01be85592587a79e201a6a`）
-仍保留为前一版基线；v6 与 v11 均因 J7/Assembly 定义变化转为历史证据，当前结论以
-link6-aligned tabletop v12 为准。v1 文件只保留为更早历史基线。
+仍保留为前一版基线；v6、v11 与 v12 均因 J7/Assembly 定义变化转为历史证据，当前
+结论以 coaxial-mount tabletop v14 为准。v1 文件只保留为更早历史基线。
 
 ## 尚需关闭
 
