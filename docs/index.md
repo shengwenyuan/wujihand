@@ -17,6 +17,7 @@
 - [ADR-0004：NV-1 作为 VIVE 输入组件资格验证](decisions/0004-vive-input-component-qualification.md)
 - [ADR-0005：NERO 模型来源与临时仿真限位](decisions/0005-nero-model-source-and-provisional-limits.md)
 - [ADR-0006：NV-2 物理 Hand 2 与 Glove 命令边界](decisions/0006-nv2-physical-hand2-glove-command-boundary.md)
+- [NERO + Hand 2 + Wuji Glove 仿真全流程透明说明](guides/nero-hand2-glove-simulation-flow.md)
 - [MediaPipe 控制 Hand 2 转向抓球指南](guides/mediapipe-hand2-rotation-ball.md)
 - [VIVE Tracker NV-1 资格验证指南](guides/vive-tracker-qualification.md)
 - [MuJoCo FR3—Wuji Hand 2 桌面运行指南](guides/mujoco-fr3-hand2-table.md)

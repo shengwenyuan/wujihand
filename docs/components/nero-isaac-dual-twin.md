@@ -1,7 +1,7 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
 状态：**PARTIAL / 部分完成（coaxial-mount tabletop v14 已在 Workstation2
-通过 90/90；右侧 Glove live 已现场打通，2026-07-29）**。
+通过 90/90；左右 Glove live 均已现场打通，2026-07-29）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
 目标机 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。tabletop v14
@@ -15,9 +15,10 @@ attachment anchor、基座端面中心/平行度、同侧桌沿 mount、左右�
 
 NV-2 尚不能标记为完整完成：
 
-- 右侧实际 Glove live 已取得
-  `hand_skeleton → canonical → retarget → supervision → Isaac` 证据；最近一次长运行
-  2400 帧中接收 2399 帧、拒绝 0 帧，当前轻量启动分支仍待目标机复验；
+- 左右实际 Glove live 均已取得
+  `hand_skeleton → canonical → retarget → supervision → Isaac` 证据；两次轻量
+  live-only 运行各 9000 帧、接收 8999 帧、拒绝 0 帧。报告生成后 Session
+  资产快照继续演进，当前 hash 下的复验仍需单独记录；
 - 合并 q27 articulation 的最终 self-collision policy 仍待项目负责人确认；
 - fixed external collider 与 bounded rest settling 已通过，但 deliberate
   contact/unknown penetration 场景和异常穿透量化尚未执行；
@@ -37,7 +38,7 @@ NV-2 尚不能标记为完整完成：
 | coaxial-mount tabletop v14 | 通过 | 90/90；基座端面中心、平行度、attachment anchor 与圆柱—小臂轴 Gate 均通过 |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
-| 真实 Glove live 路径 | 右侧已执行 | 2399/2400 帧接收、0 帧拒绝；当前迭代进一步拆出快速 live-only 分支 |
+| 真实 Glove live 路径 | 左右均已执行 | 各 8999/9000 帧接收、0 帧拒绝；快速 live-only Gate 均通过 |
 | Tracker → 右 NERO 平移 | 人工通过 | Workstation2 三方向已核对；仅为仿真输入映射 |
 | Tracker → 右 NERO rotation | 待按当前定义复验 | 旧 corrected-J7 合成报告已降为历史证据；当前 Lula 使用固定来源 URDF |
 | self-collision policy | 待确认 | 当前 smoke 关闭合并 articulation 自碰撞，保留外部碰撞 |
@@ -203,7 +204,7 @@ Wuji Glove hand_skeleton
 安全输出。该安全输出不是由 invalid input 派生的新 q20 intent。
 
 当前 domain、ports、adapter、controller 与 q27 partition composer 已有无硬件测试，
-右侧实际 live 链路也已执行。设备 identity、正式 handedness calibration revision
+左右实际 live 链路也已执行。设备 identity、正式 handedness calibration revision
 与脱敏 replay 仍需补齐为可复现实验材料。
 
 ## 来源与可复现性
@@ -371,8 +372,8 @@ other-finger isolation 才是本轮 Gate。v14 报告 SHA-256 是
 1. 记录已打通 Glove 的 side、serial、SDK version、named SDK user 和正式
    handedness calibration revision；当前 builtin calibration 只作为现场 smoke
    provenance。
-2. 在目标机复验快速 live-only 分支的就绪时长、首个 intent 与首个命令变化时间；
-   另一侧可继续使用相同 contract 的 fixture。
+2. 在当前 `abf48dd4…` Session 资产快照上复验左右快速 live-only 分支；现有左右
+   报告属于此前 `4b9f97fb…` 快照，保留为控制链与隔离逻辑证据。
 3. 由项目负责人确认 merged q27 self-collision 保持关闭，还是启用并增加 NERO
    collision filtering；确认后补对应 contact/GUI 证据。
 4. 执行 deliberate external contact/unknown penetration 场景和异常穿透量化；
