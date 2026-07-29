@@ -17,6 +17,7 @@ from wujihand.specs import (
     BackendBinding,
     SessionSpec,
     WorkcellSpec,
+    NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT,
 )
 
 from .config_repository import ConfigRepository
@@ -275,6 +276,32 @@ class SessionResolver:
         self._validate_attachments(assembly, tuple(resolved_instances))
         self._validate_control_layouts(session, tuple(resolved_instances))
         self._validate_runtime_contract(session)
+        if (
+            session.runtime.transport_contract
+            == NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT
+        ):
+            profile_path = session.runtime.compatibility_profile
+            if profile_path is None:
+                raise ValueError(
+                    "native dual teleoperation requires a compatibility profile"
+                )
+            live_profile = (
+                self.repository.load_native_dual_teleoperation_profile(
+                    profile_path
+                )
+            )
+            if (
+                live_profile.transport_contract
+                != session.runtime.transport_contract
+            ):
+                raise ValueError(
+                    "native dual profile and Session transport contracts differ"
+                )
+            referenced_paths.add(
+                self.repository.validate_profile_reference(
+                    live_profile.base_qualification
+                )
+            )
 
         if workcell.compatibility_profile is not None:
             referenced_paths.add(workcell.compatibility_profile)

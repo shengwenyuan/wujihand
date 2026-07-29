@@ -1,4 +1,4 @@
-"""Filesystem boundary for strict five-layer configuration documents.
+"""Filesystem boundary for strict project configuration documents.
 
 The spec package deliberately has no YAML or filesystem dependency.  This
 repository is the single place that turns a project-relative reference into a
@@ -16,6 +16,9 @@ from wujihand.specs import (
     AssetManifest,
     BackendBinding,
     ConfigRef,
+    DeploymentSpec,
+    LocalDeviceBindingSpec,
+    NativeDualTeleoperationProfile,
     SessionSpec,
     WorkcellSpec,
 )
@@ -30,11 +33,14 @@ SpecT = TypeVar(
     AssemblySpec,
     WorkcellSpec,
     SessionSpec,
+    DeploymentSpec,
+    LocalDeviceBindingSpec,
+    NativeDualTeleoperationProfile,
 )
 
 
 class ConfigRepository:
-    """Load five-layer YAML inside one project root and fail closed on escapes."""
+    """Load typed project YAML inside one project root and fail closed on escapes."""
 
     def __init__(self, project_root: str | Path) -> None:
         root = Path(project_root).resolve()
@@ -114,6 +120,59 @@ class ConfigRepository:
             field="session",
             spec_type=SessionSpec,
             id_attribute="session_id",
+        )
+
+    def load_deployment(self, reference: ConfigRef | str | Path) -> DeploymentSpec:
+        return self._load(
+            reference,
+            field="deployment",
+            spec_type=DeploymentSpec,
+            id_attribute="deployment_id",
+        )
+
+    def load_local_device_binding(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> LocalDeviceBindingSpec:
+        return self._load(
+            reference,
+            field="local device binding",
+            spec_type=LocalDeviceBindingSpec,
+            id_attribute="binding_id",
+        )
+
+    def load_native_dual_teleoperation_profile(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> NativeDualTeleoperationProfile:
+        return self._load(
+            reference,
+            field="native dual teleoperation profile",
+            spec_type=NativeDualTeleoperationProfile,
+            id_attribute="profile_id",
+        )
+
+    def validate_profile_reference(self, reference: ConfigRef) -> str:
+        """Validate a generic profile ID and return its project-relative path."""
+
+        path = self.resolve_project_path(
+            reference.path,
+            field="referenced compatibility profile",
+        )
+        document = load_yaml_strict(path.read_text(encoding="utf-8"))
+        if not isinstance(document, Mapping):
+            raise ValueError(
+                f"compatibility profile must contain a mapping: {path}"
+            )
+        actual_id = document.get("profile_id")
+        if actual_id != reference.expected_id:
+            raise ValueError(
+                "compatibility profile reference expected "
+                f"{reference.expected_id!r}, loaded {actual_id!r}"
+            )
+        return self.project_relative(
+            path,
+            field="referenced compatibility profile",
         )
 
     def _load(

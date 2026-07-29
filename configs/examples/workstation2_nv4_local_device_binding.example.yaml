@@ -1,0 +1,30 @@
+# Copy this file into ignored configs/local/ and replace every REPLACE_* token.
+# Full device identities stay local; resolved run reports contain only hashes.
+schema: wujihand.local_device_binding.v1
+binding_id: workstation2_nv4_v1
+host_id: workstation2
+processes:
+  - process_id: openvr_producer
+    executable: /REPLACE_WITH_OPENVR_PYTHON
+    environment_id: workstation2_openvr_python_pending_v1
+sources:
+  - binding_key: tracker_left
+    source_kind: vive_tracker
+    device_identity: REPLACE_WITH_LEFT_TRACKER_SERIAL
+    endpoint: udp://127.0.0.1:49154
+    calibration_id: tracker_left_handle_pending_v1
+  - binding_key: tracker_right
+    source_kind: vive_tracker
+    device_identity: REPLACE_WITH_RIGHT_TRACKER_SERIAL
+    endpoint: udp://127.0.0.1:49155
+    calibration_id: tracker_right_handle_pending_v1
+  - binding_key: glove_left
+    source_kind: wuji_glove
+    device_identity: REPLACE_WITH_LEFT_GLOVE_ID
+    endpoint: wuji://REPLACE_WITH_LEFT_GLOVE_ADDRESS
+    calibration_id: glove_left_sdk_default_pending_v1
+  - binding_key: glove_right
+    source_kind: wuji_glove
+    device_identity: REPLACE_WITH_RIGHT_GLOVE_ID
+    endpoint: wuji://REPLACE_WITH_RIGHT_GLOVE_ADDRESS
+    calibration_id: glove_right_sdk_default_pending_v1

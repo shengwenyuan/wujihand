@@ -1,0 +1,19 @@
+schema: wujihand.tracker_workcell_mapping.v1
+mapping_id: vive_tracker_workcell_workstation2_v3
+tracking_frame: vive_tracking
+workcell_frame: world
+# Workstation2 measured OpenVR standing frame:
+# body right = Tracker -Z, body forward = Tracker -X, body up = Tracker +Y.
+# Workcell frame: +X right, +Y table-inward, +Z up.
+# The same proper rotation maps both translation axes and relative rotation axes.
+tracker_to_workcell:
+  - [0.0, 0.0, -1.0]  # Workcell +X = Tracker -Z
+  - [-1.0, 0.0, 0.0]  # Workcell +Y = Tracker -X
+  - [0.0, 1.0, 0.0]   # Workcell +Z = Tracker +Y
+translation_scale: 1.0
+max_translation_delta_m: 0.4
+rotation_scale: 1.0
+max_rotation_delta_deg: 15.0
+relative_rotation_semantics: workcell_spatial_delta
+scope: simulation_only
+provenance: workstation2_v2_axes_scale_rotation_plus_nv4_per_axis_0_4m_2026_07_29
