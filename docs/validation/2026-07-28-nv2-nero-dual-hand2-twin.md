@@ -461,6 +461,23 @@ configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
 但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
 
+2026-07-29 对现场 running/calibrating 交替现象复核后，输入状态语义保持严格：
+producer 每帧持续发送 canonical sample，但只有 OpenVR `Running_OK` 是 actionable；
+calibrating 不携带 canonical pose。新增 application-level reference readiness gate，
+默认要求 `0.25 s` 连续 running，并逐包检查同一次 UDP drain，任一 observed 非
+running 状态或超过 freshness 阈值的样本空窗都会重置启动窗口。建立 reference 后
+沿用既有策略：短暂非 running 只 hold 且不刷新有效时间戳，超过 freshness 窗才要求
+新 reference。现场随后完成 10 秒、900 帧只读复测：`running=900`、valid ratio
+`1.0`、dropout `0`。
+
+同日使用当前 fixed-source Lula 和合成 Tracker 流复验完整 consumer：reference 在
+连续 `0.255545899 s`、24 个 running sample 后建立，随后完成 `120/120` 帧、
+IK `120/120`、失败 `0`、UDP rejected datagram `0`，最终 `passed=true`，且报告明确
+记录 `five_layer_configuration_modified=false`。证据为
+`artifacts/validation/input-smoke/tracker-right-nero/reference-readiness-current-lula-v1.json`，
+SHA-256
+`3db53e6eb805358caca1840c023cfcef676fe82d006c4bf41f72d3b8597c380e`。
+
 以下 rotation/SE(3) 数据来自已经撤销的 corrected-J7 Lula 定义，只用于说明当时
 测试发生过，不能作为当前 fixed-source Lula 的通过证据。XYZ 人工方向结论不依赖
 该 J7 修正，仍然有效；rotation 必须按当前定义重新人工验证。

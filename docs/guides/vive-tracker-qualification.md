@@ -136,6 +136,24 @@ rotate-z-positive
 检查 canonical quaternion 顺序为 active `wxyz`、连续帧无无意义符号翻转，并把三个
 物理正方向与 standing frame 的观察结果写入验证记录。
 
+### Running 就绪与连续传输
+
+OpenVR `TrackingResult` 是逐帧状态，不是由应用自行锁存的一次性枚举。只有
+`Running_OK` 可产生 actionable canonical pose；`Calibrating_InProgress`、
+`Calibrating_OutOfRange`、`Running_OutOfRange` 和 `Fallback_RotationOnly` 即使 UDP
+仍在发送，也不能产生新控制目标。producer 的状态日志会分别打印
+`udp=sent` 和 `actionable=<true|false>`，避免把“持续传输”误读成“持续有效姿态”。
+
+建立 Tracker → NERO reference 时，consumer 默认要求 `0.25 s` 连续 running。稳定
+窗口内观察到任一非 running sample 或超过既有 freshness 阈值的样本空窗都从零
+重新计时；UDP receiver 的 batch drain 会保留中间状态，不能让同批次较新的 running
+包掩盖 calibrating。reference 建立后，短暂非 running 只 hold 最后目标且不刷新
+freshness；持续异常才 disarm 并要求新 reference。不得通过把 calibrating 重标成
+running 来保持运动。
+
+Valve OpenVR 官方依据见
+[`Driver API Documentation` 的 “Poses / ETrackingResult”](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#poses)。
+
 ### 遮挡、失联与重捕获
 
 使用同一次 `occlusion-reacquisition` capture：

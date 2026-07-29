@@ -299,6 +299,20 @@ position；这两个开关必须联用。YAML 还持有 translation/rotation sca
 override 只用于有意实验。此 calibration 标记为 `simulation_only`，不能直接解释为
 真实 NERO TCP 标定或真机安全参数。
 
+OpenVR 的 `Calibrating_InProgress/OutOfRange` 是显式非 actionable 状态，不能因
+`bPoseIsValid`、相邻帧曾为 `Running_OK` 或 UDP 仍连通而改写成 running。Tracker
+producer 持续发送 running 和非 running 的 canonical sample；状态切换日志中的
+`udp=sent` 与 `actionable=false` 分别表示“传输仍连续”和“该帧不可用于新命令”。
+Isaac consumer 在建立 reference 前逐包检查输入，并要求默认 `0.25 s` 连续
+`Running_OK`；任一 observed calibrating/out-of-range/lost sample 都重置启动稳定窗口，
+超过现有 freshness 阈值的样本空窗同样重置，且不会被同一次 UDP drain 中更新的
+running 包遮蔽。reference 建立后，短暂非 running 仍只 hold 最后目标且不刷新有效
+输入时间戳，持续超过 freshness 窗才要求新 reference。该状态门属于 application
+teleoperation，不进入或改写五层配置。
+
+依据为 Valve OpenVR `Driver_API_Documentation.md` 的 “Poses / ETrackingResult”：
+[`Calibrating_*` 尚未完全就绪且不应使用，只有 `Running_OK` 表示已校准的有效姿态](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#poses)。
+
 | 入口 | 责任 |
 |---|---|
 | `tests/contract/test_nero_dual_hand2_physical_session.py` | 五层闭合、四 route、54 logical DoF、来源和 nominal 假设 |
@@ -319,6 +333,7 @@ override 只用于有意实验。此 calibration 标记为 `simulation_only`，�
 artifacts/validation/nv2/nero-dual-asset-smoke.json
 artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json
 artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
+artifacts/validation/input-smoke/tracker-right-nero/reference-readiness-current-lula-v1.json
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-corrected-flange-final-v3.json  # 已撤销 J7 定义下的历史证据
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-corrected-flange-final-v2.json       # 已撤销 J7 定义下的历史证据
 artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json       # 历史 84/84 基线
