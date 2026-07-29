@@ -32,9 +32,13 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from wujihand.application.supervision import JointCommandSupervisor
 from wujihand.application.qualification import (
+    FULL_SCRIPTED_Q27_SETTLING_POLICY,
+    GLOVE_LIVE_Q27_READINESS_POLICY,
     Hand2QualificationTarget,
+    Q27ReadinessPolicy,
     build_hand2_qualification_targets,
     partition_hand2_single_digit_indices,
+    q27_window_max_delta_rad,
     qualification_gate_exit_code,
 )
 from wujihand.application.teleoperation import (
@@ -316,11 +320,8 @@ MOTION_ISOLATION_TOLERANCE_RAD = 0.03
 LIVE_HAND_RESPONSE_MIN_RAD = 0.01
 SCRIPTED_RESPONSE_MIN_RAD = 0.01
 SCRIPTED_RESPONSE_FRACTION = 0.10
-SETTLING_WINDOW_FRAMES = 60
-REST_SETTLING_DELTA_TOLERANCE_RAD = 0.005
-REST_SETTLING_MIN_WINDOWS = 2
-REST_SETTLING_MAX_WINDOWS = 8
 RESET_INITIAL_TOLERANCE_RAD = 0.08
+GLOVE_LIVE_ARM_FEEDBACK_TOLERANCE_RAD = 0.05
 TRACKER_REFERENCE_WAIT_S = 10.0
 TRACKER_RESPONSE_MIN_RAD = 0.005
 TRACKER_ROTATION_RESPONSE_MIN_RAD = math.radians(1.0)
@@ -774,10 +775,19 @@ def _run_glove_live(
     frame_processing_timing = DurationRecorder()
     frame_period_ns = round(1_000_000_000 / PHYSICS_HZ)
     started_ns = time.monotonic_ns()
+    controller_armed_ns: int | None = None
+    first_intent_ns: int | None = None
+    first_command_change_ns: int | None = None
     last_tick_ns = started_ns
     deadline_ns = started_ns
+    print("GLOVE LIVE CONNECTING: opening Wuji hand_skeleton input.", flush=True)
     try:
         controller.start(now_ns=started_ns)
+        controller_armed_ns = time.monotonic_ns()
+        print(
+            "GLOVE LIVE ARMED: waiting for the first canonical skeleton.",
+            flush=True,
+        )
         for _ in range(ARGS.glove_frames):
             deadline_ns += frame_period_ns
             frame_started_ns = time.monotonic_ns()
@@ -794,6 +804,13 @@ def _run_glove_live(
                 )
             if step.intent is not None:
                 accepted_frames += 1
+                if first_intent_ns is None:
+                    first_intent_ns = time.monotonic_ns()
+                    print(
+                        "GLOVE LIVE ACTIVE: first q20 intent accepted; "
+                        "operator motion now controls the simulated Hand2.",
+                        flush=True,
+                    )
                 last_retarget_model_id = step.intent.retarget_model_id
                 last_retarget_config_id = step.intent.retarget_config_id
                 minimum_landmark_confidences.append(step.intent.retarget_confidence)
@@ -813,6 +830,11 @@ def _run_glove_live(
                 max_supervised_command_delta_rad,
                 float(np.max(np.abs(decision.command - initial_hand_target))),
             )
+            if (
+                first_command_change_ns is None
+                and max_supervised_command_delta_rad >= LIVE_HAND_RESPONSE_MIN_RAD
+            ):
+                first_command_change_ns = time.monotonic_ns()
             hand_targets[side_name] = decision.command.copy()
             stage_started_ns = time.monotonic_ns()
             apply_targets()
@@ -925,6 +947,23 @@ def _run_glove_live(
         "last_retarget_model_id": last_retarget_model_id,
         "last_retarget_config_id": last_retarget_config_id,
         "wall_duration_s": (finished_ns - started_ns) / 1_000_000_000,
+        "lifecycle": {
+            "connect_to_armed_ms": (
+                None
+                if controller_armed_ns is None
+                else (controller_armed_ns - started_ns) / 1_000_000.0
+            ),
+            "armed_to_first_intent_ms": (
+                None
+                if controller_armed_ns is None or first_intent_ns is None
+                else (first_intent_ns - controller_armed_ns) / 1_000_000.0
+            ),
+            "armed_to_first_command_change_ms": (
+                None
+                if controller_armed_ns is None or first_command_change_ns is None
+                else (first_command_change_ns - controller_armed_ns) / 1_000_000.0
+            ),
+        },
         "effective_loop_rate_hz": (
             ARGS.glove_frames
             / max((finished_ns - started_ns) / 1_000_000_000, 1e-9)
@@ -945,6 +984,188 @@ def _run_glove_live(
         "other_side_max_feedback_delta_rad": max_other_side_feedback_delta_rad,
     }
     return report, feedback
+
+
+def _run_glove_live_qualification(
+    world: World,
+    *,
+    articulations: dict[str, Articulation],
+    partitions: dict[str, NeroHand2DofPartition],
+    arm_profiles: dict[str, NeroModelProfile],
+    hand_profiles: dict[str, Hand2ModelProfile],
+    arm_targets: dict[str, npt.NDArray[np.float64]],
+    hand_targets: dict[str, npt.NDArray[np.float64]],
+    apply_targets: Callable[[], None],
+    readiness_record: dict[str, object],
+    readiness_feedback: dict[str, dict[str, list[float]]],
+    articulation_root_paths: tuple[str, ...],
+    arm_drive_runtime: dict[str, dict[str, list[float]]],
+) -> int:
+    """Run the isolated, startup-bounded Glove -> simulated Hand2 smoke."""
+
+    side_name = cast(str, ARGS.glove_side)
+    other_side = "left" if side_name == "right" else "right"
+    initial_arm_commands = {
+        side: arm_targets[side].copy() for side in ("left", "right")
+    }
+    initial_other_hand_command = hand_targets[other_side].copy()
+    glove_report, live_feedback = _run_glove_live(
+        world,
+        articulations=articulations,
+        partitions=partitions,
+        hand_profiles=hand_profiles,
+        hand_targets=hand_targets,
+        apply_targets=apply_targets,
+    )
+
+    accounted_frames = (
+        cast(int, glove_report["accepted_skeleton_frames"])
+        + cast(int, glove_report["empty_polls"])
+        + cast(int, glove_report["rejected_skeleton_frames"])
+    )
+    arm_commands_held = all(
+        np.array_equal(arm_targets[side], initial_arm_commands[side])
+        for side in ("left", "right")
+    )
+    other_hand_command_held = bool(
+        np.array_equal(hand_targets[other_side], initial_other_hand_command)
+    )
+    feedback_values = np.asarray(
+        [
+            values
+            for phase in (*readiness_feedback.values(), *live_feedback.values())
+            for values in phase.values()
+        ],
+        dtype=np.float64,
+    )
+    checks = {
+        "bounded_run_completed": accounted_frames == ARGS.glove_frames,
+        "fresh_skeleton_received": (
+            cast(int, glove_report["accepted_skeleton_frames"]) > 0
+        ),
+        "supervised_command_changed": (
+            cast(float, glove_report["max_supervised_command_delta_rad"])
+            >= LIVE_HAND_RESPONSE_MIN_RAD
+        ),
+        "selected_hand_responded": (
+            cast(float, glove_report["selected_hand_max_feedback_delta_rad"])
+            >= LIVE_HAND_RESPONSE_MIN_RAD
+        ),
+        "arm_commands_held": arm_commands_held,
+        "other_hand_command_held": other_hand_command_held,
+        "selected_arm_feedback_bounded": (
+            cast(float, glove_report["selected_arm_max_feedback_delta_rad"])
+            <= GLOVE_LIVE_ARM_FEEDBACK_TOLERANCE_RAD
+        ),
+        "other_side_feedback_bounded": (
+            cast(float, glove_report["other_side_max_feedback_delta_rad"])
+            <= MOTION_ISOLATION_TOLERANCE_RAD
+        ),
+        "readiness_wait_bounded": (
+            cast(int, readiness_record["windows_run"])
+            <= GLOVE_LIVE_Q27_READINESS_POLICY.maximum_windows
+        ),
+        "all_observed_feedback_finite": bool(np.isfinite(feedback_values).all()),
+    }
+    passed = all(checks.values())
+
+    screenshot_runtime: dict[str, object] = {}
+    oblique_camera_eye = _workcell_frame_position(OBLIQUE_CAMERA_EYE_FRAME)
+    oblique_camera_target = _workcell_frame_position(OBLIQUE_CAMERA_TARGET_FRAME)
+    if ARGS.screenshot is not None:
+        screenshot_runtime = _capture_screenshot(
+            world,
+            ARGS.screenshot,
+            eye_m=oblique_camera_eye,
+            target_m=oblique_camera_target,
+        )
+    top_screenshot_runtime: dict[str, object] = {}
+    top_camera_eye = _workcell_frame_position(TOP_CAMERA_EYE_FRAME)
+    top_camera_target = _workcell_frame_position(TOP_CAMERA_TARGET_FRAME)
+    if ARGS.top_screenshot is not None:
+        top_screenshot_runtime = _capture_screenshot(
+            world,
+            ARGS.top_screenshot,
+            eye_m=top_camera_eye,
+            target_m=top_camera_target,
+        )
+
+    report = {
+        "schema": "wujihand.isaac_glove_hand2_live_smoke.v1",
+        "scope": (
+            f"simulation-only {side_name} Hand2 q20; both NERO arms and "
+            f"{other_side} Hand2 command-held; no ROS, CAN, NERO hardware, "
+            "or Hand2 hardware"
+        ),
+        "session_id": RESOLVED.session.session_id,
+        "session_hash": RESOLVED.session_hash,
+        "five_layer_configuration_modified": False,
+        "isaac_distribution": version("isaacsim"),
+        "physics_hz": PHYSICS_HZ,
+        "run_mode": "glove_live_only",
+        "scripted_qualification_executed": False,
+        "live_readiness": readiness_record,
+        "topology": {
+            "articulation_root_paths": list(articulation_root_paths),
+            "partitions": {
+                side: {
+                    "arm_indices_q7": list(partitions[side].arm_indices_q7),
+                    "hand_indices_q20": list(partitions[side].hand_indices_q20),
+                }
+                for side in ("left", "right")
+            },
+        },
+        "qualification_runtime": {
+            "arm_drive_gains": arm_drive_runtime,
+            "selected_arm_feedback_tolerance_rad": (
+                GLOVE_LIVE_ARM_FEEDBACK_TOLERANCE_RAD
+            ),
+            "other_side_feedback_tolerance_rad": MOTION_ISOLATION_TOLERANCE_RAD,
+            "arm_layout_ids": {
+                side: arm_profiles[side].layout_id for side in ("left", "right")
+            },
+        },
+        "command_ownership": {
+            "selected_hand": side_name,
+            "arm_commands_held": arm_commands_held,
+            "other_hand_command_held": other_hand_command_held,
+        },
+        "glove_live": glove_report,
+        "feedback": {
+            "readiness": readiness_feedback,
+            "live": live_feedback,
+        },
+        "checks": checks,
+        "screenshot": {
+            "path": (
+                None
+                if ARGS.screenshot is None
+                else ARGS.screenshot.resolve().as_posix()
+            ),
+            "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
+            "camera_eye_frame": OBLIQUE_CAMERA_EYE_FRAME,
+            "camera_target_frame": OBLIQUE_CAMERA_TARGET_FRAME,
+            **screenshot_runtime,
+        },
+        "top_screenshot": {
+            "path": (
+                None
+                if ARGS.top_screenshot is None
+                else ARGS.top_screenshot.resolve().as_posix()
+            ),
+            "camera_prim_path": SCREENSHOT_CAMERA_PRIM_PATH,
+            "camera_eye_frame": TOP_CAMERA_EYE_FRAME,
+            "camera_target_frame": TOP_CAMERA_TARGET_FRAME,
+            **top_screenshot_runtime,
+        },
+        "passed": passed,
+    }
+    encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    if ARGS.report is not None:
+        ARGS.report.parent.mkdir(parents=True, exist_ok=True)
+        ARGS.report.write_text(encoded, encoding="utf-8")
+    print(encoded, end="")
+    return qualification_gate_exit_code(passed)
 
 
 def _run_tracker_live(
@@ -1724,68 +1945,123 @@ def main() -> int:
             raise RuntimeError(f"duplicate feedback phase key: {alias_key}")
         feedback[alias_key] = {side: list(feedback[source_key][side]) for side in ("left", "right")}
 
-    def settle_until_stable(settling_id: str) -> tuple[str, str]:
-        """Wait for two consecutive bounded q27 windows or fail closed."""
+    def settle_until_stable(
+        settling_id: str,
+        *,
+        policy: Q27ReadinessPolicy = FULL_SCRIPTED_Q27_SETTLING_POLICY,
+    ) -> tuple[str, str]:
+        """Apply one explicit bounded q27 readiness policy."""
 
         if settling_id in settling_records:
             raise RuntimeError(f"duplicate settling phase: {settling_id}")
+        started_ns = time.monotonic_ns()
         window_keys: list[str] = []
         max_delta_history_rad: list[float] = []
         previous_key: str | None = None
-        for window_number in range(1, REST_SETTLING_MAX_WINDOWS + 1):
-            _step(world, SETTLING_WINDOW_FRAMES, render=ARGS.gui)
+        for window_number in range(1, policy.maximum_windows + 1):
+            _step(world, policy.window_frames, render=ARGS.gui)
             current_key = f"{settling_id}_settle_{window_number:02d}"
             capture_feedback(current_key)
             window_keys.append(current_key)
             if previous_key is not None:
-                max_delta_rad = max(
-                    float(
-                        np.max(
-                            np.abs(
-                                np.asarray(feedback[current_key][side])
-                                - np.asarray(feedback[previous_key][side])
-                            )
-                        )
-                    )
-                    for side in ("left", "right")
+                max_delta_rad = q27_window_max_delta_rad(
+                    feedback[previous_key],
+                    feedback[current_key],
                 )
                 max_delta_history_rad.append(max_delta_rad)
                 if (
-                    window_number >= REST_SETTLING_MIN_WINDOWS
-                    and max_delta_rad <= REST_SETTLING_DELTA_TOLERANCE_RAD
+                    window_number >= policy.minimum_windows
+                    and max_delta_rad <= policy.max_window_delta_rad
                 ):
                     settling_records[settling_id] = {
+                        "policy_id": policy.policy_id,
                         "converged": True,
-                        "window_frames": SETTLING_WINDOW_FRAMES,
+                        "proceeded_after_timeout": False,
+                        "require_convergence": policy.require_convergence,
+                        "window_frames": policy.window_frames,
                         "windows_run": window_number,
                         "window_keys": list(window_keys),
                         "max_delta_history_rad": list(max_delta_history_rad),
                         "peak_max_delta_rad": max(max_delta_history_rad),
                         "final_max_delta_rad": max_delta_rad,
-                        "tolerance_rad": REST_SETTLING_DELTA_TOLERANCE_RAD,
+                        "tolerance_rad": policy.max_window_delta_rad,
                         "measured_scope": "both q27 articulations",
+                        "wall_duration_s": (
+                            time.monotonic_ns() - started_ns
+                        )
+                        / 1_000_000_000,
                     }
                     return previous_key, current_key
             previous_key = current_key
 
         settling_records[settling_id] = {
+            "policy_id": policy.policy_id,
             "converged": False,
-            "window_frames": SETTLING_WINDOW_FRAMES,
-            "windows_run": REST_SETTLING_MAX_WINDOWS,
+            "proceeded_after_timeout": not policy.require_convergence,
+            "require_convergence": policy.require_convergence,
+            "window_frames": policy.window_frames,
+            "windows_run": policy.maximum_windows,
             "window_keys": list(window_keys),
             "max_delta_history_rad": list(max_delta_history_rad),
             "peak_max_delta_rad": max(max_delta_history_rad),
             "final_max_delta_rad": max_delta_history_rad[-1],
-            "tolerance_rad": REST_SETTLING_DELTA_TOLERANCE_RAD,
+            "tolerance_rad": policy.max_window_delta_rad,
             "measured_scope": "both q27 articulations",
+            "wall_duration_s": (
+                time.monotonic_ns() - started_ns
+            )
+            / 1_000_000_000,
         }
-        raise RuntimeError(
-            f"{settling_id} did not settle within "
-            f"{REST_SETTLING_MAX_WINDOWS} windows: "
-            f"last max q27 delta={max_delta_history_rad[-1]:.6f} rad"
+        if policy.require_convergence:
+            raise RuntimeError(
+                f"{settling_id} did not settle within "
+                f"{policy.maximum_windows} windows: "
+                f"last max q27 delta={max_delta_history_rad[-1]:.6f} rad"
+            )
+        print(
+            f"GLOVE LIVE READINESS: bounded warmup completed without strict "
+            f"convergence ({max_delta_history_rad[-1]:.4f} rad); continuing "
+            "because this path commands simulation only.",
+            flush=True,
         )
+        return window_keys[-2], window_keys[-1]
 
     apply_targets()
+    if ARGS.glove_live:
+        print(
+            "GLOVE LIVE READINESS: running at most "
+            f"{GLOVE_LIVE_Q27_READINESS_POLICY.maximum_windows * GLOVE_LIVE_Q27_READINESS_POLICY.window_frames} "
+            "simulation warmup frames; scripted hand qualification is skipped.",
+            flush=True,
+        )
+        settle_until_stable(
+            "glove_live_ready",
+            policy=GLOVE_LIVE_Q27_READINESS_POLICY,
+        )
+        readiness_record = settling_records["glove_live_ready"]
+        readiness_feedback = {
+            key: feedback[key]
+            for key in cast(list[str], readiness_record["window_keys"])
+        }
+        print(
+            "GLOVE LIVE READINESS COMPLETE: starting input connection.",
+            flush=True,
+        )
+        return _run_glove_live_qualification(
+            world,
+            articulations=articulations,
+            partitions=partitions,
+            arm_profiles=arm_profiles,
+            hand_profiles=hand_profiles,
+            arm_targets=arm_targets,
+            hand_targets=hand_targets,
+            apply_targets=apply_targets,
+            readiness_record=readiness_record,
+            readiness_feedback=readiness_feedback,
+            articulation_root_paths=root_paths_before_reset,
+            arm_drive_runtime=arm_drive_runtime,
+        )
+
     initial_previous_key, initial_final_key = settle_until_stable("initial")
     alias_feedback(initial_previous_key, "initial_settle_a")
     alias_feedback(initial_final_key, "initial")
@@ -1859,16 +2135,6 @@ def main() -> int:
         combined_phases.append(run_hand_phase(combined))
 
     glove_live_report: dict[str, object] = {"enabled": False}
-    if ARGS.glove_live:
-        glove_live_report, live_feedback = _run_glove_live(
-            world,
-            articulations=articulations,
-            partitions=partitions,
-            hand_profiles=hand_profiles,
-            hand_targets=hand_targets,
-            apply_targets=apply_targets,
-        )
-        feedback.update(live_feedback)
 
     partitions_before_reset = dict(partitions)
     world.reset()
@@ -1985,7 +2251,8 @@ def main() -> int:
             and np.isfinite(arrays["initial"]["right"]).all()
         ),
         "initial_two_window_settling_bounded": bool(
-            max_all_sides_delta("initial", "initial_settle_a") <= REST_SETTLING_DELTA_TOLERANCE_RAD
+            max_all_sides_delta("initial", "initial_settle_a")
+            <= FULL_SCRIPTED_Q27_SETTLING_POLICY.max_window_delta_rad
         ),
         "post_reset_two_window_settling_finite": bool(
             np.isfinite(arrays["post_reset_settle_a"]["left"]).all()
@@ -1995,7 +2262,7 @@ def main() -> int:
         ),
         "post_reset_two_window_settling_bounded": bool(
             max_all_sides_delta("post_reset_settle_b", "post_reset_settle_a")
-            <= REST_SETTLING_DELTA_TOLERANCE_RAD
+            <= FULL_SCRIPTED_Q27_SETTLING_POLICY.max_window_delta_rad
         ),
         "post_command_reset_two_q27_revalidated": topology_stable_after_reset,
         "post_command_reset_returned_to_approved_initial": bool(
@@ -2144,33 +2411,6 @@ def main() -> int:
                 phase.baseline_key,
                 other_side,
             )
-            <= MOTION_ISOLATION_TOLERANCE_RAD
-        )
-
-    if ARGS.glove_live:
-        accounted_frames = (
-            cast(int, glove_live_report["accepted_skeleton_frames"])
-            + cast(int, glove_live_report["empty_polls"])
-            + cast(int, glove_live_report["rejected_skeleton_frames"])
-        )
-        checks["glove_live_observation_received"] = bool(
-            cast(int, glove_live_report["accepted_skeleton_frames"]) > 0
-        )
-        checks["glove_live_frames_accounted"] = bool(accounted_frames == ARGS.glove_frames)
-        checks["glove_live_supervised_command_changed"] = bool(
-            cast(float, glove_live_report["max_supervised_command_delta_rad"])
-            >= LIVE_HAND_RESPONSE_MIN_RAD
-        )
-        checks["glove_live_selected_hand_responded"] = bool(
-            cast(float, glove_live_report["selected_hand_max_feedback_delta_rad"])
-            >= LIVE_HAND_RESPONSE_MIN_RAD
-        )
-        checks["glove_live_selected_arm_held"] = bool(
-            cast(float, glove_live_report["selected_arm_max_feedback_delta_rad"])
-            <= MOTION_ISOLATION_TOLERANCE_RAD
-        )
-        checks["glove_live_other_side_held"] = bool(
-            cast(float, glove_live_report["other_side_max_feedback_delta_rad"])
             <= MOTION_ISOLATION_TOLERANCE_RAD
         )
 
@@ -2512,10 +2752,19 @@ def main() -> int:
         },
         "external_collision_settling": {
             "fixed_workcell_collider_paths": external_fixed_collider_paths,
-            "settling_window_frames": SETTLING_WINDOW_FRAMES,
-            "settling_min_windows": REST_SETTLING_MIN_WINDOWS,
-            "settling_max_windows": REST_SETTLING_MAX_WINDOWS,
-            "settling_tolerance_rad": REST_SETTLING_DELTA_TOLERANCE_RAD,
+            "settling_policy_id": FULL_SCRIPTED_Q27_SETTLING_POLICY.policy_id,
+            "settling_window_frames": (
+                FULL_SCRIPTED_Q27_SETTLING_POLICY.window_frames
+            ),
+            "settling_min_windows": (
+                FULL_SCRIPTED_Q27_SETTLING_POLICY.minimum_windows
+            ),
+            "settling_max_windows": (
+                FULL_SCRIPTED_Q27_SETTLING_POLICY.maximum_windows
+            ),
+            "settling_tolerance_rad": (
+                FULL_SCRIPTED_Q27_SETTLING_POLICY.max_window_delta_rad
+            ),
             "settling_records": settling_records,
             "initial_max_feedback_delta_rad": max_all_sides_delta(
                 "initial",

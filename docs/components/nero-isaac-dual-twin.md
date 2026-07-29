@@ -1,7 +1,8 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
 状态：**PARTIAL / 部分完成（J7/法兰统一修正已完成本地验证；历史 tabletop v6
-84/84；新定义的 Workstation2 Isaac 回归因目标机暂不可访问而待执行，2026-07-28）**。
+84/84；右侧 Glove live 已现场打通，轻量启动分支待 Workstation2 交互回归，
+2026-07-29）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
 目标机上的历史 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。
@@ -13,10 +14,9 @@ attachment、同侧桌沿 mount、左右准备位、手部朝向及左右小臂�
 
 NV-2 尚不能标记为完整完成：
 
-- 专用网口 `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，但尚未执行 SDK discovery，
-  因此尚无
-  `hand_skeleton → canonical → retarget → supervision → Isaac` 的实际 Glove live
-  证据；
+- 右侧实际 Glove live 已取得
+  `hand_skeleton → canonical → retarget → supervision → Isaac` 证据；最近一次长运行
+  2400 帧中接收 2399 帧、拒绝 0 帧，当前轻量启动分支仍待目标机复验；
 - 合并 q27 articulation 的最终 self-collision policy 仍待项目负责人确认；
 - fixed external collider 与 bounded rest settling 已通过，但 deliberate
   contact/unknown penetration 场景和近景视觉资格尚未执行；
@@ -35,7 +35,7 @@ NV-2 尚不能标记为完整完成：
 | corrected flange tabletop v7 | 待执行 | 本地 contract 通过；目标机暂不可访问，预计 88 项 |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 与近景待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
-| 真实 Glove live 路径 | 未执行 | 专用 NIC 已配置；待 SDK discovery/identity，尚未取得 live `hand_skeleton` |
+| 真实 Glove live 路径 | 右侧已执行 | 2399/2400 帧接收、0 帧拒绝；当前迭代进一步拆出快速 live-only 分支 |
 | Tracker → 右 NERO 平移 | 人工通过 | Workstation2 三方向已核对；仅为仿真输入映射 |
 | Tracker → 右 NERO rotation | 合成通过、待人工验证 | pure-rotation 240/240、relative SE(3)、右 q7 only；`--tracker-rotation` 显式启用 |
 | self-collision policy | 待确认 | 当前 smoke 关闭合并 articulation 自碰撞，保留外部碰撞 |
@@ -189,16 +189,18 @@ Wuji Glove hand_skeleton
 ```
 
 `hand_joint_angles` 表示人手 21 DoF 结果，不是 Hand 2 q20，不能直接透传。adapter
-还会拒绝错误 side、缺失点、低置信度、stale、非单调 sequence/time、NaN 和错误输出
-shape；来源、标定或 frame epoch 切换后必须先 reset retargeter。
+会拒绝错误 side、缺失点、stale、非单调 sequence/time、NaN 和错误输出 shape；
+来源、标定或 frame epoch 切换后必须先 reset retargeter。
 
-置信度策略固定为：`<0.90` 拒绝，`[0.90, 0.95)` 只允许以 `DEGRADED` 状态经过
-supervisor，`>=0.95` 才是 success。缺帧或被拒绝的观测不会创建新的 input-derived
-`HandIntent`；supervisor 可在 `0.25 s` freshness 窗内保持最后有效命令，超时后生成
-渐进 return-to-rest 安全输出。该安全输出不是由 invalid input 派生的新 q20 intent。
+完整且 finite 的 skeleton 不再因低置信度被硬阻塞：21 个 landmark 的最低置信度
+`<0.90` 时产生 `DEGRADED` intent，`>=0.90` 时为 `SUCCESS`；默认硬拒绝下限为
+`0.0`。缺帧或被拒绝的观测不会创建新的 input-derived `HandIntent`；supervisor
+可在 `0.25 s` freshness 窗内保持最后有效命令，超时后生成渐进 return-to-rest
+安全输出。该安全输出不是由 invalid input 派生的新 q20 intent。
 
-当前 domain、ports、adapter、controller 与 q27 partition composer 已有无硬件测试；
-实际 live 链路仍等待专用 NIC 配置和设备 identity/calibration 证据。
+当前 domain、ports、adapter、controller 与 q27 partition composer 已有无硬件测试，
+右侧实际 live 链路也已执行。设备 identity、正式 handedness calibration revision
+与脱敏 replay 仍需补齐为可复现实验材料。
 
 ## 来源与可复现性
 
@@ -226,6 +228,37 @@ supervisor，`>=0.95` 才是 success。缺帧或被拒绝的观测不会创建�
   --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v6.png \
   --top-screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v6.png
 ```
+
+### Glove 快速 live 入口
+
+显式 `--glove-live` 进入独立的 `glove_live_only` 分支。它仍先完成五层 Session
+解析、双 q27 root、q7/q20 分区、关节限位和固定 workcell collider 检查，但跳过双臂、
+逐指、组合手型、reset 与 recovery 的完整 scripted qualification。
+
+输入连接前使用 application 层的 `nv2.glove_live_q27_readiness.v1`：每窗 15 个仿真
+帧，最少 2 窗、最多 4 窗，q27 窗间阈值 `0.03 rad`。达到阈值即可提前继续；最多
+60 帧后即使未严格收敛也继续，因为该入口只拥有仿真手部命令，不控制真实 NERO 或
+Hand 2。默认不带 `--glove-live` 时，完整 scripted 路径继续使用严格的 60 帧窗口、
+最多 8 窗和 `0.005 rad` 收敛门。
+
+频繁交互测试使用：
+
+```bash
+/home/lenovo/.venvs/isaacsim-6.0.1/bin/python \
+  tools/run_isaac_nero_hand2_dual_twin.py \
+  --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
+  --gui \
+  --glove-live \
+  --glove-side right \
+  --glove-calibration-id wuji_sdk.default_user.builtin.sdk_2026.7.21 \
+  --glove-frames 600 \
+  --report artifacts/validation/input-smoke/glove-right-hand2/live-right-fast-v1.json
+```
+
+控制台依次打印 `GLOVE LIVE READINESS`、`GLOVE LIVE CONNECTING`、
+`GLOVE LIVE ARMED` 和首次有效输入时的 `GLOVE LIVE ACTIVE`。报告单独记录就绪
+等待时长、SDK connect-to-armed、首个 intent 和首个命令变化时间，不再把 GUI 已出现
+到 scripted 阶段结束的等待误认为 Glove SDK 延迟。
 
 ### Tracker live 映射入口
 
@@ -267,6 +300,7 @@ override 只用于有意实验。此 calibration 标记为 `simulation_only`，�
 | `tests/unit/test_wuji_glove_adapter.py` | Glove SDK 边界、side、header、latest-frame 与失败路径 |
 | `tests/unit/test_wuji_hand2_retarget_adapter.py` | `(21,3) m → q20 rad`、side、freshness、confidence 与 reset |
 | `tests/unit/test_glove_hand2_simulation_controller.py` | input/retarget/supervisor composition、失败语义与 q27 partition |
+| `tests/unit/test_live_readiness.py` | 快速 live 与完整 scripted 的显式 q27 就绪策略 |
 | `tests/contract/test_hand_observation_jsonl_fixture.py` | strict canonical JSONL contract |
 | `tests/unit/test_hand_observation_replay_adapter.py` | SDK-independent bounded replay 与时间重基准 |
 | `tests/integration/isaac_nero_dual_asset_smoke.py` | 历史 NERO-only pre-composition 双 q7 smoke |
@@ -325,12 +359,11 @@ corrected flange tabletop v7。v1 文件只保留为更早历史基线。
 
 ## 尚需关闭
 
-1. 为专用网口 `enx6c1ff7cd0e76` 临时配置 `192.168.1.10/24`，让目标机 Wuji SDK
-   识别实际 Glove，并记录 side、serial、SDK version、named SDK user 和对应
-   handedness calibration revision。
-2. 完成至少一侧 live
-   `hand_skeleton → canonical (21,3) m → side-specific retarget → q20 → Isaac`
-   自由空间 smoke；另一侧可继续使用相同 contract 的 fixture。
+1. 记录已打通 Glove 的 side、serial、SDK version、named SDK user 和正式
+   handedness calibration revision；当前 builtin calibration 只作为现场 smoke
+   provenance。
+2. 在目标机复验快速 live-only 分支的就绪时长、首个 intent 与首个命令变化时间；
+   另一侧可继续使用相同 contract 的 fixture。
 3. 由项目负责人确认 merged q27 self-collision 保持关闭，还是启用并增加 NERO
    collision filtering；确认后补对应 contact/GUI 证据。
 4. 执行 deliberate external contact/unknown penetration 场景、异常穿透量化和近景

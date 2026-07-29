@@ -203,7 +203,10 @@ MuJoCo 与 Isaac 报告新增 `session`/`session_hash`，MediaPipe 启动日志�
 
 NV-2 runner 的 `--glove-live`、side/device selector 与 calibration 参数是五层之外、
 显式 opt-in 的 bounded input qualification；它们不修改 resolved Session，也不属于
-Asset/profile 兼容 override。
+Asset/profile 兼容 override。该参数进入独立的 live-only 分支：五层解析和 q27
+拓扑/分区检查仍保留，application qualification 只做最多 60 个仿真帧的软就绪等待，
+不串行执行完整 arm/hand scripted qualification。默认不带该参数时，原严格收敛和
+完整 scripted Gate 保持不变。
 
 ## 验证
 
@@ -254,10 +257,10 @@ calibration。缺少对应环境时必须记录为“未执行”，不能由 fa
 deliberate contact/unknown penetration。J7/Assembly 定义随后发生修订，因此 v6
 只作为历史证据；新定义已通过本地 contract，目标机 Isaac 回归待执行。端口轴由
 固定 mesh 推断，仍待实物确认。
-真实 Glove live 尚未执行，等待专用网口
-`enx6c1ff7cd0e76` 临时配置 `192.168.1.10/24`。
+右侧真实 Glove live 已执行；当前轻量 live-only 分支仍需在目标机复验启动时序。
 因此五层与 scripted physical 子 Gate 的成功不等于完整 NV-2 完成；NV-2 状态仍为
-`PARTIAL`，直到 live、deliberate contact/penetration 与 self-collision 决策闭合。
+`PARTIAL`，直到 Glove 可复现实验材料、deliberate contact/penetration 与
+self-collision 决策闭合。
 
 本次实际资产、MuJoCo、Isaac GPU、q20 UDP 和 D435I/MediaPipe smoke 结果见
 [2026-07-23 五层架构与既有仿真链路验证](../validation/2026-07-23-five-layer-architecture.md)。
