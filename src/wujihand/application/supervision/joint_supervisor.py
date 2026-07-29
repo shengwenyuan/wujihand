@@ -64,6 +64,19 @@ class JointCommandSupervisor:
         self.last_step_ns = None
         return self._decision("disarmed_at_rest", False, False)
 
+    def hold(self, *, now_ns: int, reason: str) -> SafetyDecision:
+        """Advance time while preserving the last executable command exactly."""
+
+        if self.state is SafetyState.DISARMED:
+            return self._decision("disarmed", False, False)
+        if self.last_step_ns is None or now_ns <= self.last_step_ns:
+            raise ValueError("now_ns must increase strictly while armed")
+        if not isinstance(reason, str) or not reason or len(reason) > 128:
+            raise ValueError("reason must be a bounded non-empty string")
+        self.last_step_ns = now_ns
+        self.state = SafetyState.DEGRADED
+        return self._decision(reason, False, False)
+
     def step(
         self,
         intent: Sequence[float] | npt.NDArray[np.floating] | None,

@@ -43,6 +43,28 @@ def test_stale_boundary_then_gradual_return_to_rest() -> None:
     np.testing.assert_allclose(decision.command, [0.49, 0.98])
 
 
+def test_explicit_hold_preserves_command_and_advances_time() -> None:
+    supervisor = JointCommandSupervisor(
+        layout(),
+        [0.0, 0.0],
+        velocity_scale=1.0,
+    )
+    supervisor.arm(0)
+    tracked = supervisor.step(
+        [0.5, -0.5],
+        now_ns=100_000_000,
+        input_time_ns=100_000_000,
+    )
+    held = supervisor.hold(
+        now_ns=200_000_000,
+        reason="tracking_reference_required_hold",
+    )
+
+    np.testing.assert_array_equal(held.command, tracked.command)
+    assert held.state is SafetyState.DEGRADED
+    assert held.reason == "tracking_reference_required_hold"
+
+
 def test_invalid_vector_never_reaches_output() -> None:
     supervisor = JointCommandSupervisor(layout(), [0.0, 0.0])
     supervisor.arm(0)

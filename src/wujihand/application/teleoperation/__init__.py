@@ -5,6 +5,10 @@ from .glove_hand2 import (
     Hand2SimulationStep,
     compose_q27_hand_target,
 )
+from .glove_hand2_set import (
+    GloveHand2ControllerSet,
+    SideHand2SimulationStep,
+)
 from .tracker_arm import (
     InteractiveTrackerArmController,
     InteractiveTrackerArmState,
@@ -19,6 +23,10 @@ from .tracker_arm import (
     TrackerTranslationDecision,
     Vector3,
 )
+from .tracker_arm_simulation import (
+    TrackerArmSimulationController,
+    TrackerArmSimulationStep,
+)
 from .tracker_diagnostics import (
     JointLimitMargin,
     TrackerTargetMotion,
@@ -29,6 +37,7 @@ from .tracker_diagnostics import (
 
 __all__ = [
     "GloveHand2SimulationController",
+    "GloveHand2ControllerSet",
     "Hand2SimulationStep",
     "InteractiveTrackerArmController",
     "InteractiveTrackerArmState",
@@ -38,9 +47,12 @@ __all__ = [
     "QuaternionWxyz",
     "RelativeTrackerPoseMapper",
     "RelativeTrackerTranslationMapper",
+    "SideHand2SimulationStep",
     "TrackerPoseDecision",
     "TrackerReferenceReadiness",
     "TrackerReferenceReadinessGate",
+    "TrackerArmSimulationController",
+    "TrackerArmSimulationStep",
     "TrackerTargetMotion",
     "TrackerTranslationDecision",
     "Vector3",

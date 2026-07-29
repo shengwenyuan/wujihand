@@ -7,6 +7,10 @@ from typing import Protocol, runtime_checkable
 from wujihand.domain.hand_teleoperation import CanonicalHandObservation, HandIntent
 
 
+class NoHandObservationAvailable(RuntimeError):
+    """A non-blocking hand input has no fresh observation for this tick."""
+
+
 @runtime_checkable
 class HandObservationInputPort(Protocol):
     """Source of canonical hand observations from one configured input."""
@@ -55,4 +59,8 @@ class RetargetPort(Protocol):
         ...
 
 
-__all__ = ["HandObservationInputPort", "RetargetPort"]
+__all__ = [
+    "HandObservationInputPort",
+    "NoHandObservationAvailable",
+    "RetargetPort",
+]

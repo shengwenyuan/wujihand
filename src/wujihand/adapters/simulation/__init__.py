@@ -14,6 +14,10 @@ from .hand2_grasp import (
     BallLiftSample,
 )
 from .hand2_model import Hand2ModelProfile, load_hand2_model_profile
+from .lula_arm_kinematics import (
+    LulaArmKinematicsAdapter,
+    LulaKinematicsSolverLike,
+)
 from .fr3_model import Fr3ModelProfile, load_fr3_model_profile
 from .mujoco_fr3_hand2 import (
     FINGERTIP_SITE_NAMES,
@@ -67,6 +71,8 @@ __all__ = [
     "Hand2BallConfig",
     "Hand2BallSceneHandles",
     "Hand2ModelProfile",
+    "LulaArmKinematicsAdapter",
+    "LulaKinematicsSolverLike",
     "Hand2RotationMountConfig",
     "FINGERTIP_SITE_NAMES",
     "Fr3ModelProfile",

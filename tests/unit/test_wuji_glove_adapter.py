@@ -97,6 +97,23 @@ class _Manager:
         self.disconnect_calls.append(device_name)
 
 
+class _DualManager:
+    def __init__(self, left: _Glove, right: _Glove) -> None:
+        self.gloves = {
+            _Handedness.Left: left,
+            _Handedness.Right: right,
+        }
+        self.connect_calls: list[dict[str, object]] = []
+        self.disconnect_calls: list[str] = []
+
+    def connect(self, *, device_name: str, **selection: object) -> _Glove:
+        self.connect_calls.append({"device_name": device_name, **selection})
+        return self.gloves[selection["handedness"]]
+
+    def disconnect(self, *, device_name: str) -> None:
+        self.disconnect_calls.append(device_name)
+
+
 class _Handedness:
     class _Value:
         def __init__(self, value: str) -> None:
@@ -211,6 +228,45 @@ def test_adapter_owns_side_selected_connection_and_normalizes_named_frame() -> N
     adapter.close()
     assert subscription.close_calls == 1
     assert manager.disconnect_calls == ["wuji_glove_left"]
+
+
+def test_two_adapters_share_one_manager_with_distinct_device_names() -> None:
+    left_subscription = _Subscription(
+        [_frame(side=HandSide.LEFT), None]
+    )
+    right_subscription = _Subscription(
+        [_frame(side=HandSide.RIGHT), None]
+    )
+    manager = _DualManager(
+        _Glove(left_subscription, side=_Handedness.Left),
+        _Glove(right_subscription, side=_Handedness.Right),
+    )
+    left = _adapter(manager, side=HandSide.LEFT)  # type: ignore[arg-type]
+    right = _adapter(manager, side=HandSide.RIGHT)  # type: ignore[arg-type]
+
+    left.start()
+    right.start()
+    left_observation = left.poll(receive_time_ns=3_000_000)
+    right_observation = right.poll(receive_time_ns=3_000_000)
+    right.close()
+    left.close()
+
+    assert left_observation.side is HandSide.LEFT
+    assert right_observation.side is HandSide.RIGHT
+    assert manager.connect_calls == [
+        {
+            "device_name": "wuji_glove_left",
+            "handedness": _Handedness.Left,
+        },
+        {
+            "device_name": "wuji_glove_right",
+            "handedness": _Handedness.Right,
+        },
+    ]
+    assert manager.disconnect_calls == [
+        "wuji_glove_right",
+        "wuji_glove_left",
+    ]
 
 
 def test_official_handedness_object_is_not_mistaken_for_a_wrong_side() -> None:

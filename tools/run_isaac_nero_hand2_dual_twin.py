@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402  # Isaac modules must be imported after SimulationApp starts.
-"""Run the resolved NV-2 dual NERO + physical Hand 2 simulation Session.
+"""Run the NV-4 native dual NERO + Hand 2 teleoperation Deployment.
 
-This entry point never connects to ROS, CAN, NERO hardware, or Hand 2 hardware.
-It resolves all five configuration layers before starting Isaac, authors one
-q27 articulation per side, and performs bounded q7/q20 isolation phases
-suitable for the NV-2 simulation Gate.  Explicit opt-in modes may either read
-one Wuji Glove for one simulated Hand 2 or consume canonical Tracker samples
-over loopback for the simulated right NERO; the two input tests are isolated.
-Tracker live mode is persistent when ``--gui`` is enabled and remains bounded
-for headless qualification.
+The default resolves one DeploymentSpec, its single five-layer live Session,
+one managed OpenVR producer, and the configured Tracker/Glove sources.  It
+commands only the two simulated q27 articulations: no ROS, CAN, NERO hardware,
+or Hand 2 hardware command path is present.
+
+The historical NV-2 scripted and isolated live paths remain temporarily
+available only when ``--session`` is explicit; NV-4F moves those paths to a
+dedicated qualification entry point.
 """
 
 from __future__ import annotations
 
 import argparse
 from collections import deque
+from collections import Counter
 from collections.abc import Callable
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from importlib.metadata import version
 import json
@@ -45,6 +47,7 @@ from wujihand.application.qualification import (
     qualification_gate_exit_code,
 )
 from wujihand.application.teleoperation import (
+    GloveHand2ControllerSet,
     GloveHand2SimulationController,
     InteractiveTrackerArmController,
     InteractiveTrackerArmState,
@@ -52,6 +55,7 @@ from wujihand.application.teleoperation import (
     RelativeTrackerPoseMapper,
     TrackerReferenceReadiness,
     TrackerReferenceReadinessGate,
+    TrackerArmSimulationController,
     TrackerTargetMotion,
     compose_q27_hand_target,
     joint_limit_margins,
@@ -73,20 +77,62 @@ from wujihand.domain.pose import (
     quaternion_geodesic_distance_rad,
     rotation_matrix_to_quaternion_wxyz,
 )
-from wujihand.runtime import SessionResolver
-from wujihand.specs import AttachmentSpec, PoseSpec
+from wujihand.runtime import (
+    ConfigRepository,
+    DeploymentResolver,
+    ManagedOpenVrProducer,
+    ResolvedDeployment,
+    SessionResolver,
+    build_native_dual_runtime_plan,
+    build_openvr_producer_launch,
+)
+from wujihand.specs import (
+    AttachmentSpec,
+    NativeDualTeleoperationProfile,
+    PoseSpec,
+)
 
 
 DEFAULT_SESSION = (
     ROOT / "configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
+)
+DEFAULT_DEPLOYMENT = (
+    ROOT
+    / "configs/deployments/"
+    "isaac_nero_hand2_native_dual_live_v1.yaml"
+)
+DEFAULT_LOCAL_BINDING = (
+    ROOT / "configs/local/workstation2_nv4_v1.yaml"
 )
 DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--session", type=Path, default=DEFAULT_SESSION)
-    parser.add_argument("--gui", action="store_true")
+    parser.add_argument(
+        "--deployment",
+        type=Path,
+        help=(
+            "NV-4 DeploymentSpec; defaults to the native dual live "
+            "deployment when --session is absent."
+        ),
+    )
+    parser.add_argument(
+        "--local-binding",
+        type=Path,
+        default=DEFAULT_LOCAL_BINDING,
+        help="Ignored host-local Tracker/Glove/process binding.",
+    )
+    parser.add_argument(
+        "--session",
+        type=Path,
+        help="Temporary explicit entry to the historical NV-2 qualification path.",
+    )
+    parser.add_argument(
+        "--gui",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
     parser.add_argument("--frames-per-phase", type=int, default=240)
     parser.add_argument("--arm-amplitude-rad", type=float, default=0.08)
     parser.add_argument("--hand-amplitude-rad", type=float, default=0.40)
@@ -196,6 +242,36 @@ def parse_args() -> argparse.Namespace:
 
 
 ARGS = parse_args()
+NATIVE_DUAL_LIVE = ARGS.session is None
+if ARGS.deployment is not None and not NATIVE_DUAL_LIVE:
+    raise SystemExit("--deployment and --session are mutually exclusive")
+if NATIVE_DUAL_LIVE and any(
+    (
+        ARGS.glove_live,
+        ARGS.tracker_live,
+        ARGS.glove_side is not None,
+        ARGS.glove_serial is not None,
+        ARGS.glove_address is not None,
+        ARGS.glove_calibration_id is not None,
+        ARGS.tracker_serial is not None,
+        ARGS.tracker_auto_reference,
+        ARGS.tracker_rotation,
+        ARGS.tracker_freeze_translation,
+        ARGS.tracker_scale is not None,
+        ARGS.tracker_max_delta_m is not None,
+        ARGS.tracker_rotation_scale is not None,
+        ARGS.tracker_max_rotation_deg is not None,
+    )
+):
+    raise SystemExit(
+        "NV-4 live source/mapping policy comes only from "
+        "DeploymentSpec/Session/local binding; legacy live flags require "
+        "an explicit --session qualification run"
+    )
+if ARGS.gui is None:
+    ARGS.gui = NATIVE_DUAL_LIVE
+if NATIVE_DUAL_LIVE and not ARGS.gui:
+    raise SystemExit("NV-4 native live currently requires the Isaac GUI")
 if ARGS.frames_per_phase < 1:
     raise SystemExit("--frames-per-phase must be positive")
 if not 0.01 <= ARGS.arm_amplitude_rad <= 0.15:
@@ -249,21 +325,67 @@ if not 0.05 <= ARGS.tracker_stale_s <= 1.0:
 if not 0.10 <= ARGS.tracker_reference_stable_s <= 2.0:
     raise SystemExit("--tracker-reference-stable-s must be in [0.10, 2.0]")
 
-RESOLVED = SessionResolver(ROOT).resolve(
-    ARGS.session,
-    verify_artifacts=ARGS.verify_artifacts,
-)
-if RESOLVED.session.backend != "isaac" or RESOLVED.session.runtime_role != "simulation":
-    raise SystemExit("NV-2 runner requires an Isaac simulation Session")
-if RESOLVED.session.runtime.transport_contract is not None:
-    raise SystemExit("NV-2 scripted runner must not declare a transport contract")
-
+RESOLVED_DEPLOYMENT: ResolvedDeployment | None = None
+NATIVE_PROFILE: NativeDualTeleoperationProfile | None = None
 TRACKER_MAPPING: TrackerWorkcellMapping | None = None
 TRACKER_MAPPING_PATH: Path | None = None
 TRACKER_TRANSLATION_SCALE: float | None = None
 TRACKER_MAX_TRANSLATION_DELTA_M: float | None = None
 TRACKER_ROTATION_SCALE: float | None = None
 TRACKER_MAX_ROTATION_DELTA_RAD: float | None = None
+if NATIVE_DUAL_LIVE:
+    deployment_path = (
+        DEFAULT_DEPLOYMENT
+        if ARGS.deployment is None
+        else ARGS.deployment
+    )
+    try:
+        RESOLVED_DEPLOYMENT = DeploymentResolver(ROOT).resolve(
+            deployment_path,
+            local_binding=ARGS.local_binding,
+            verify_artifacts=ARGS.verify_artifacts,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"NV-4 deployment preflight failed: {exc}") from exc
+    RESOLVED = RESOLVED_DEPLOYMENT.session
+    profile_path = RESOLVED.session.runtime.compatibility_profile
+    if profile_path is None:
+        raise SystemExit(
+            "NV-4 live Session is missing its compatibility profile"
+        )
+    NATIVE_PROFILE = (
+        ConfigRepository(ROOT).load_native_dual_teleoperation_profile(
+            profile_path
+        )
+    )
+    TRACKER_MAPPING = RESOLVED_DEPLOYMENT.mapping
+    TRACKER_MAPPING_PATH = (
+        ROOT / RESOLVED_DEPLOYMENT.mapping_path
+    ).resolve()
+    TRACKER_TRANSLATION_SCALE = TRACKER_MAPPING.translation_scale
+    TRACKER_MAX_TRANSLATION_DELTA_M = (
+        TRACKER_MAPPING.max_translation_delta_m
+    )
+    TRACKER_ROTATION_SCALE = TRACKER_MAPPING.rotation_scale
+    TRACKER_MAX_ROTATION_DELTA_RAD = (
+        TRACKER_MAPPING.max_rotation_delta_rad
+    )
+else:
+    assert ARGS.session is not None
+    RESOLVED = SessionResolver(ROOT).resolve(
+        ARGS.session,
+        verify_artifacts=ARGS.verify_artifacts,
+    )
+    if (
+        RESOLVED.session.backend != "isaac"
+        or RESOLVED.session.runtime_role != "simulation"
+    ):
+        raise SystemExit("NV-2 runner requires an Isaac simulation Session")
+    if RESOLVED.session.runtime.transport_contract is not None:
+        raise SystemExit(
+            "NV-2 scripted runner must not declare a transport contract"
+        )
+
 if ARGS.tracker_live:
     TRACKER_MAPPING_PATH = (
         ARGS.tracker_mapping if ARGS.tracker_mapping.is_absolute() else ROOT / ARGS.tracker_mapping
@@ -326,6 +448,7 @@ from isaacsim.robot_motion.motion_generation import (  # type: ignore[import-not
 from wujihand.adapters.transport import UdpTrackingSampleReceiver
 from wujihand.adapters.simulation import (
     Hand2ModelProfile,
+    LulaArmKinematicsAdapter,
     NeroHand2AttachmentConfig,
     NeroHand2AttachmentHandles,
     NeroHand2DofPartition,
@@ -365,6 +488,9 @@ TRACKER_LEFT_FEEDBACK_TOLERANCE_RAD = 0.03
 TRACKER_HAND_FEEDBACK_TOLERANCE_RAD = 0.10
 TRACKER_STREAM_ID = "vive.right"
 TRACKER_LOGICAL_ROLE = "operator_right"
+TRACKER_PRODUCER_INSTANCE = "openvr_single_tracker"
+TRACKER_TRANSPORT_EPOCH = 0
+TRACKER_SETUP_REVISION = "steamvr_standing_unqualified"
 TRACKER_MAX_CONSECUTIVE_IK_FAILURES = 5
 TRACKER_DIAGNOSTIC_HISTORY_LIMIT = 64
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
@@ -552,7 +678,14 @@ ALIGNMENT_PROFILE = load_nero_link_geometry_alignment(ALIGNMENT_PROFILE_PATH)
 NERO_LULA_SOURCE_URDF = (ROOT / ALIGNMENT_PROFILE.source_urdf_path).resolve()
 if RESOLVED.session.runtime.compatibility_profile is None:
     raise RuntimeError("NV-2 tabletop qualification requires a Session compatibility profile")
-TABLETOP_PROFILE_PATH = ROOT / RESOLVED.session.runtime.compatibility_profile
+TABLETOP_PROFILE_PATH = (
+    ROOT
+    / (
+        RESOLVED.session.runtime.compatibility_profile
+        if NATIVE_PROFILE is None
+        else NATIVE_PROFILE.base_qualification.path
+    )
+)
 TABLETOP_PROFILE = load_nero_dual_tabletop_qualification_profile(TABLETOP_PROFILE_PATH)
 
 
@@ -1353,6 +1486,9 @@ def _run_tracker_interactive(
         stream_id=TRACKER_STREAM_ID,
         device_serial=ARGS.tracker_serial,
         logical_role=TRACKER_LOGICAL_ROLE,
+        producer_instance=TRACKER_PRODUCER_INSTANCE,
+        transport_epoch=TRACKER_TRANSPORT_EPOCH,
+        tracking_setup_revision=TRACKER_SETUP_REVISION,
         tracking_frame=TRACKER_MAPPING.tracking_frame,
     ) as receiver:
         try:
@@ -2339,6 +2475,437 @@ def _run_tracker_live(
         return qualification_gate_exit_code(passed)
 
 
+def _run_native_dual_live(
+    world: World,
+    *,
+    articulations: dict[str, Articulation],
+    partitions: dict[str, NeroHand2DofPartition],
+    arm_profiles: dict[str, NeroModelProfile],
+    hand_profiles: dict[str, Hand2ModelProfile],
+    initial_arm_targets: dict[str, npt.NDArray[np.float64]],
+    arm_targets: dict[str, npt.NDArray[np.float64]],
+    hand_targets: dict[str, npt.NDArray[np.float64]],
+    apply_targets: Callable[[], None],
+) -> int:
+    """Run the Deployment-owned NV-4 native dual simulation loop."""
+
+    resolved = RESOLVED_DEPLOYMENT
+    profile = NATIVE_PROFILE
+    mapping = TRACKER_MAPPING
+    if resolved is None or profile is None or mapping is None:
+        raise RuntimeError(
+            "native dual Deployment was not resolved before Isaac startup"
+        )
+    if sha256_file(NERO_LULA_SOURCE_URDF) != (
+        ALIGNMENT_PROFILE.source_urdf_sha256
+    ):
+        raise RuntimeError("source-locked NERO URDF hash drifted")
+    if not NERO_LULA_DESCRIPTION.is_file():
+        raise RuntimeError(
+            f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}"
+        )
+
+    plan = build_native_dual_runtime_plan(resolved)
+    launch = build_openvr_producer_launch(resolved, ROOT)
+    producer = ManagedOpenVrProducer(launch)
+    stream_by_side = {stream.side: stream for stream in launch.streams}
+    if set(stream_by_side) != set(plan.live_sides):
+        raise RuntimeError(
+            "OpenVR streams differ from Deployment live arm ownership"
+        )
+
+    receivers = {
+        side: UdpTrackingSampleReceiver(
+            stream_by_side[side].udp_port,
+            stream_id=stream_by_side[side].stream_id,
+            device_serial=stream_by_side[side].device_serial,
+            logical_role=stream_by_side[side].logical_role,
+            producer_instance=launch.producer_instance,
+            transport_epoch=launch.transport_epoch,
+            tracking_setup_revision=launch.tracking_setup_revision,
+            tracking_frame=launch.tracking_frame,
+        )
+        for side in plan.live_sides
+    }
+    side_runtime = {runtime.side: runtime for runtime in SIDES}
+    arm_controllers: dict[str, TrackerArmSimulationController] = {}
+    arm_indices = {
+        side: np.asarray(
+            partitions[side].arm_indices_q7,
+            dtype=np.int64,
+        )
+        for side in ("left", "right")
+    }
+    started_ns = time.monotonic_ns()
+    for side in plan.live_sides:
+        runtime = side_runtime[side]
+        solver = LulaKinematicsSolver(
+            str(NERO_LULA_DESCRIPTION),
+            str(NERO_LULA_SOURCE_URDF),
+        )
+        if tuple(solver.get_joint_names()) != NERO_JOINT_NAMES:
+            raise RuntimeError(
+                f"{side} Lula cspace differs from canonical q7"
+            )
+        if profile.kinematics.end_effector_frame not in (
+            solver.get_all_frame_names()
+        ):
+            raise RuntimeError(
+                f"{side} Lula model does not expose "
+                f"{profile.kinematics.end_effector_frame}"
+            )
+        solver.set_robot_base_pose(
+            np.asarray(runtime.mount_pose.position_m, dtype=np.float64),
+            np.asarray(runtime.mount_pose.quat_wxyz, dtype=np.float64),
+        )
+        kinematics = LulaArmKinematicsAdapter(
+            solver=solver,
+            layout=arm_profiles[side].layout,
+            frame_name=profile.kinematics.end_effector_frame,
+            position_tolerance_m=(
+                profile.kinematics.position_tolerance_m
+            ),
+            orientation_tolerance_rad=(
+                profile.kinematics.orientation_tolerance_rad
+            ),
+        )
+        source = plan.side(side).arm
+        local = source.local_binding
+        if local is None:
+            raise RuntimeError(f"{side} Tracker local binding is missing")
+        identity = {
+            "stream_id": stream_by_side[side].stream_id,
+            "device_serial": local.device_identity,
+            "logical_role": source.source.logical_role,
+            "tracking_frame": mapping.tracking_frame,
+        }
+        mapper = RelativeTrackerPoseMapper(
+            **identity,
+            tracker_to_workcell=mapping.tracker_to_workcell,
+            translation_scale=mapping.translation_scale,
+            max_translation_delta_m=(
+                mapping.max_translation_delta_m
+            ),
+            rotation_scale=mapping.rotation_scale,
+            max_rotation_delta_rad=mapping.max_rotation_delta_rad,
+            stale_after_s=profile.tracker.stale_after_s,
+            min_quality=profile.tracker.minimum_quality,
+            translation_enabled=True,
+            rotation_enabled=True,
+        )
+        readiness = TrackerReferenceReadinessGate(
+            **identity,
+            stable_after_s=profile.tracker.stable_after_s,
+            max_sample_gap_s=profile.tracker.max_sample_gap_s,
+        )
+        feedback_q7 = _positions(articulations[side])[
+            arm_indices[side]
+        ]
+        arm_targets[side] = feedback_q7.copy()
+        supervisor = JointCommandSupervisor(
+            arm_profiles[side].layout,
+            feedback_q7,
+            stale_after_s=profile.arm_supervision.stale_after_s,
+            velocity_scale=profile.arm_supervision.velocity_scale,
+        )
+        controller = TrackerArmSimulationController(
+            side=side,
+            readiness=readiness,
+            tracker=InteractiveTrackerArmController(
+                mapper,
+                max_consecutive_ik_failures=(
+                    profile.tracker.max_consecutive_ik_failures
+                ),
+            ),
+            kinematics=kinematics,
+            supervisor=supervisor,
+        )
+        controller.start(now_ns=started_ns)
+        arm_controllers[side] = controller
+
+    glove_controllers: dict[
+        HandSide,
+        GloveHand2SimulationController,
+    ] = {}
+    for side in plan.live_sides:
+        source = plan.side(side).hand
+        local = source.local_binding
+        if local is None:
+            raise RuntimeError(f"{side} Glove local binding is missing")
+        hand_side = HandSide(side)
+        input_adapter = WujiGloveHandSkeletonAdapter(
+            hand_side,
+            source_id=source.source.source_id,
+            calibration_id=local.calibration_id,
+            transform_id="wuji_glove.hand_skeleton.v1",
+            serial_number=local.device_identity,
+            device_name=f"nv4_glove_{side}",
+        )
+        retargeter = WujiHand2RetargetAdapter(
+            hand_side,
+            max_observation_age_s=profile.glove.max_observation_age_s,
+            minimum_landmark_confidence=(
+                profile.glove.minimum_landmark_confidence
+            ),
+            success_landmark_confidence=(
+                profile.glove.success_landmark_confidence
+            ),
+        )
+        supervisor = JointCommandSupervisor(
+            hand_profiles[side].layout,
+            hand_targets[side],
+            stale_after_s=profile.hand_supervision.stale_after_s,
+            velocity_scale=profile.hand_supervision.velocity_scale,
+        )
+        glove_controllers[hand_side] = (
+            GloveHand2SimulationController(
+                hand_side,
+                input_adapter,
+                retargeter,
+                supervisor,
+            )
+        )
+    gloves = GloveHand2ControllerSet(glove_controllers)
+
+    for side in ("left", "right"):
+        if side not in plan.live_sides:
+            arm_targets[side] = initial_arm_targets[side].copy()
+            hand_targets[side] = (
+                hand_profiles[side].rest_position.copy()
+            )
+    apply_targets()
+    set_camera_view(
+        eye=np.asarray(
+            _workcell_frame_position(OBLIQUE_CAMERA_EYE_FRAME),
+            dtype=np.float64,
+        ),
+        target=np.asarray(
+            _workcell_frame_position(OBLIQUE_CAMERA_TARGET_FRAME),
+            dtype=np.float64,
+        ),
+        camera_prim_path=SCREENSHOT_CAMERA_PRIM_PATH,
+    )
+    _step(world, 5, render=True)
+
+    arm_reasons = {side: Counter() for side in plan.live_sides}
+    hand_reasons = {side: Counter() for side in plan.live_sides}
+    references_established = Counter()
+    references_revoked = Counter()
+    ik_successes = Counter()
+    ik_failures = Counter()
+    max_source_skew_ns = 0
+    producer_restarts = 0
+    completed_frames = 0
+    last_tick_ns = started_ns
+    loop_started_ns = time.monotonic_ns()
+    print(
+        "NV4 LIVE CONNECTING: opening configured Gloves and managed "
+        "OpenVR producer.",
+        flush=True,
+    )
+    try:
+        gloves.start(now_ns=started_ns)
+        lifecycle = producer.start()
+        print(
+            "NV4 LIVE READY: "
+            f"deployment={resolved.deployment.deployment_id} "
+            f"live_sides={list(plan.live_sides)} "
+            f"transport_epoch={lifecycle.new_transport_epoch}; "
+            "move the configured Tracker(s) and Glove(s) when ready.",
+            flush=True,
+        )
+        while simulation_app.is_running():
+            tick_ns = max(time.monotonic_ns(), last_tick_ns + 1)
+            try:
+                producer.ensure_running()
+            except RuntimeError:
+                lifecycle = producer.restart()
+                producer_restarts += 1
+                assert lifecycle.new_transport_epoch is not None
+                for side, receiver in receivers.items():
+                    receiver.authorize_epoch(
+                        producer_instance=launch.producer_instance,
+                        transport_epoch=(
+                            lifecycle.new_transport_epoch
+                        ),
+                        tracking_setup_revision=(
+                            launch.tracking_setup_revision
+                        ),
+                    )
+                    arm_controllers[side].invalidate_reference()
+                print(
+                    "NV4 OPENVR REBOUND: "
+                    f"transport_epoch={lifecycle.new_transport_epoch}; "
+                    "active arm references invalidated.",
+                    flush=True,
+                )
+
+            fresh_source_times: list[int] = []
+            arm_states: dict[str, str] = {}
+            for side, controller in arm_controllers.items():
+                samples = receivers[side].receive_available(
+                    now_ns=tick_ns
+                )
+                step = controller.step(
+                    samples,
+                    feedback_q7_rad=_positions(
+                        articulations[side]
+                    )[arm_indices[side]],
+                    now_ns=tick_ns,
+                )
+                arm_targets[side] = step.safety.command.copy()
+                arm_reasons[side][step.reason] += 1
+                arm_states[side] = step.state.value
+                if step.reference_established:
+                    references_established[side] += 1
+                    print(
+                        f"NV4 {side.upper()} ARM REFERENCE "
+                        f"epoch={step.reference_epoch}",
+                        flush=True,
+                    )
+                if step.reference_revoked:
+                    references_revoked[side] += 1
+                    print(
+                        f"NV4 {side.upper()} ARM HOLD: {step.reason}",
+                        flush=True,
+                    )
+                if step.kinematics is not None:
+                    if step.kinematics.succeeded:
+                        ik_successes[side] += 1
+                    else:
+                        ik_failures[side] += 1
+                if (
+                    step.mapping is not None
+                    and step.mapping.input_host_time_ns is not None
+                ):
+                    fresh_source_times.append(
+                        step.mapping.input_host_time_ns
+                    )
+
+            hand_steps = gloves.step(now_ns=tick_ns)
+            hand_states: dict[str, str] = {}
+            for labelled in hand_steps:
+                side = labelled.side.value
+                step = labelled.step
+                hand_targets[side] = step.decision.command.copy()
+                hand_reasons[side][
+                    step.rejection_reason or step.decision.reason
+                ] += 1
+                hand_states[side] = step.decision.state.value
+                if step.intent is not None:
+                    fresh_source_times.append(
+                        step.intent.source_observation.receive_time_ns
+                    )
+
+            if len(fresh_source_times) >= 2:
+                max_source_skew_ns = max(
+                    max_source_skew_ns,
+                    max(fresh_source_times) - min(fresh_source_times),
+                )
+            apply_targets()
+            world.step(render=True)
+            completed_frames += 1
+            if completed_frames % profile.physics_hz == 0:
+                print(
+                    "NV4 LIVE "
+                    f"frame={completed_frames} "
+                    f"arm={arm_states} hand={hand_states} "
+                    f"ik_failures={dict(ik_failures)}",
+                    flush=True,
+                )
+            last_tick_ns = tick_ns
+    finally:
+        producer.close()
+        gloves.close()
+        for controller in arm_controllers.values():
+            controller.close()
+        for receiver in receivers.values():
+            receiver.close()
+
+    report = {
+        "schema": "wujihand.isaac_native_dual_teleoperation_run.v1",
+        "scope": (
+            "simulation-only dual NERO + Hand2; no ROS, CAN, NERO "
+            "hardware, or Hand2 hardware commands"
+        ),
+        "deployment": resolved.to_mapping(),
+        "session_id": RESOLVED.session.session_id,
+        "session_hash": RESOLVED.session_hash,
+        "compatibility_profile": {
+            "profile_id": profile.profile_id,
+            "status": profile.status,
+            "path": RESOLVED.session.runtime.compatibility_profile,
+        },
+        "mapping": {
+            "mapping_id": mapping.mapping_id,
+            "translation_scale": mapping.translation_scale,
+            "max_translation_delta_each_axis_m": (
+                mapping.max_translation_delta_m
+            ),
+            "max_diagonal_delta_m": (
+                math.sqrt(3.0) * mapping.max_translation_delta_m
+            ),
+            "rotation_scale": mapping.rotation_scale,
+            "max_rotation_delta_deg": mapping.max_rotation_delta_deg,
+        },
+        "runtime": {
+            "live_sides": list(plan.live_sides),
+            "completed_frames": completed_frames,
+            "wall_duration_s": (
+                time.monotonic_ns() - loop_started_ns
+            )
+            / 1_000_000_000,
+            "producer_restarts": producer_restarts,
+            "max_fresh_source_skew_ms": max_source_skew_ns / 1_000_000,
+        },
+        "arms": {
+            side: {
+                "reasons": dict(arm_reasons[side]),
+                "references_established": references_established[side],
+                "references_revoked": references_revoked[side],
+                "ik_successes": ik_successes[side],
+                "ik_failures": ik_failures[side],
+                "udp_batches_accepted": receivers[side].accepted,
+                "udp_datagrams_rejected": receivers[side].rejected,
+            }
+            for side in plan.live_sides
+        },
+        "hands": {
+            side: {"reasons": dict(hand_reasons[side])}
+            for side in plan.live_sides
+        },
+        "tracking_setup_qualified": resolved.tracking_qualified,
+        "qualification_evaluated": False,
+        "passed": None,
+    }
+    report_path = ARGS.report
+    if report_path is None:
+        timestamp = datetime.now(timezone.utc).strftime(
+            "%Y%m%dT%H%M%SZ"
+        )
+        report_path = (
+            ROOT
+            / resolved.deployment.report_root
+            / f"{resolved.deployment.deployment_id}-{timestamp}.json"
+        )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(
+            report,
+            ensure_ascii=False,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(
+        f"NV4 LIVE CLOSED: report={report_path.resolve()}",
+        flush=True,
+    )
+    return 0
+
+
 def main() -> int:
     world = World(
         stage_units_in_meters=1.0,
@@ -2702,6 +3269,28 @@ def main() -> int:
         return window_keys[-2], window_keys[-1]
 
     apply_targets()
+    if NATIVE_DUAL_LIVE:
+        print(
+            "NV4 LIVE READINESS: settling the shared two-q27 scene "
+            "before opening external inputs.",
+            flush=True,
+        )
+        settle_until_stable(
+            "native_dual_live_ready",
+            policy=GLOVE_LIVE_Q27_READINESS_POLICY,
+        )
+        return _run_native_dual_live(
+            world,
+            articulations=articulations,
+            partitions=partitions,
+            arm_profiles=arm_profiles,
+            hand_profiles=hand_profiles,
+            initial_arm_targets=initial_arm_targets,
+            arm_targets=arm_targets,
+            hand_targets=hand_targets,
+            apply_targets=apply_targets,
+        )
+
     if ARGS.glove_live:
         print(
             "GLOVE LIVE READINESS: running at most "

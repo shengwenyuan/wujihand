@@ -837,6 +837,20 @@ class InteractiveTrackerArmController:
         self.ik_recoveries += 1
         return True
 
+    def invalidate_reference(self) -> None:
+        """Forget only the active mapping epoch while keeping run counters."""
+
+        self.mapper.disarm()
+        self.state = InteractiveTrackerArmState.WAITING_REFERENCE
+        self.consecutive_ik_failures = 0
+
+    def reset(self) -> None:
+        """Reset controller state for a new bounded application run."""
+
+        self.invalidate_reference()
+        self.reference_epoch = 0
+        self.ik_recoveries = 0
+
     def _step(
         self,
         *,

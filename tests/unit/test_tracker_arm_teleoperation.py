@@ -31,6 +31,9 @@ def sample(
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         sequence=sequence,
         tracking_frame="vive_tracking",
         position_m=position_m if valid else None,
@@ -61,6 +64,8 @@ def mapper() -> RelativeTrackerTranslationMapper:
 def pose_mapper(
     *,
     max_rotation_delta_rad: float = np.deg2rad(15.0),
+    translation_scale: float = 0.25,
+    max_translation_delta_m: float = 0.08,
     translation_enabled: bool = True,
 ) -> RelativeTrackerPoseMapper:
     return RelativeTrackerPoseMapper(
@@ -73,8 +78,8 @@ def pose_mapper(
             (-1.0, 0.0, 0.0),
             (0.0, 1.0, 0.0),
         ),
-        translation_scale=0.25,
-        max_translation_delta_m=0.08,
+        translation_scale=translation_scale,
+        max_translation_delta_m=max_translation_delta_m,
         rotation_scale=1.0,
         max_rotation_delta_rad=max_rotation_delta_rad,
         stale_after_s=0.25,
@@ -530,6 +535,60 @@ def test_rotation_only_mode_freezes_position_despite_tracker_translation() -> No
     assert decision.rotation_delta_rad == pytest.approx(np.deg2rad(8.0))
 
 
+def test_relative_se3_maps_translation_and_rotation_from_the_same_sample() -> None:
+    subject = pose_mapper(
+        translation_scale=1.0,
+        max_translation_delta_m=0.4,
+    )
+    target_reference = euler_zyx_to_quaternion_wxyz(
+        yaw=np.deg2rad(5.0),
+        pitch=0.0,
+        roll=0.0,
+    )
+    subject.arm(
+        sample(sequence=0, host_time_ns=100),
+        (0.4, 0.5, 0.6),
+        target_reference,
+        now_ns=101,
+    )
+    tracker_rotation = euler_zyx_to_quaternion_wxyz(
+        yaw=np.deg2rad(-10.0),
+        pitch=0.0,
+        roll=0.0,
+    )
+
+    decision = subject.advance(
+        sample(
+            sequence=1,
+            host_time_ns=102,
+            position_m=(1.2, 1.8, 3.1),
+            quat_wxyz=tuple(float(value) for value in tracker_rotation),
+        ),
+        now_ns=103,
+    )
+
+    expected_workcell_rotation = euler_zyx_to_quaternion_wxyz(
+        yaw=0.0,
+        pitch=0.0,
+        roll=np.deg2rad(10.0),
+    )
+    expected_target_rotation = multiply_quaternions_wxyz(
+        expected_workcell_rotation,
+        target_reference,
+    )
+    assert decision.accepted
+    assert not decision.clamped
+    assert decision.world_delta_m == pytest.approx((-0.1, -0.2, -0.2))
+    assert decision.target_position_m == pytest.approx((0.3, 0.3, 0.4))
+    assert decision.rotation_delta_rad == pytest.approx(np.deg2rad(10.0))
+    assert decision.target_orientation_wxyz is not None
+    np.testing.assert_allclose(
+        quaternion_wxyz_to_rotation_matrix(decision.target_orientation_wxyz),
+        quaternion_wxyz_to_rotation_matrix(expected_target_rotation),
+        atol=1e-12,
+    )
+
+
 def test_missing_sample_holds_briefly_then_requires_new_reference() -> None:
     subject = mapper()
     subject.arm(
@@ -560,6 +619,9 @@ def test_wrong_identity_sample_disarms_epoch() -> None:
         "stream_id": "vive.right",
         "device_serial": "LHR-24B6E288",
         "logical_role": "operator_right",
+        "producer_instance": "openvr_fixture",
+        "transport_epoch": 1,
+        "tracking_setup_revision": "standing_fixture_v1",
         "sequence": 1,
         "tracking_frame": "vive_tracking",
         "position_m": (1.0, 2.0, 3.0),
@@ -594,6 +656,9 @@ def test_disconnected_tracker_disarms_epoch_immediately() -> None:
             stream_id="vive.right",
             device_serial="LHR-24B6E288",
             logical_role="operator_right",
+            producer_instance="openvr_fixture",
+            transport_epoch=1,
+            tracking_setup_revision="standing_fixture_v1",
             sequence=1,
             tracking_frame="vive_tracking",
             position_m=None,

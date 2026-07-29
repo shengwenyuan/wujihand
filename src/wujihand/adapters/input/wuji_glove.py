@@ -23,13 +23,14 @@ from wujihand.domain import (
     MediaPipeHandLandmark,
 )
 from wujihand.domain.pose import validate_host_time_ns
+from wujihand.ports import NoHandObservationAvailable
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/+-]{0,127}$")
 _DEVICE_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
-class NoHandSkeletonFrameAvailable(RuntimeError):
+class NoHandSkeletonFrameAvailable(NoHandObservationAvailable):
     """Raised when the SDK's synchronous non-blocking subscription has no frame."""
 
 
