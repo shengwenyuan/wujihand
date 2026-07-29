@@ -124,11 +124,11 @@ external collision shapes/contact = retained
 - 若改为 `true`，需先为 NERO 增加明确 collision filtering，再重跑结构、contact、
   GUI 和稳定性 Gate。
 
-在确认前，历史 tabletop v6 的 84/84 证明旧 attachment 定义下双侧 q7/q20、
-五指/组合手型、隔离、reset/recovery、limits、有界静置收敛，以及 nominal
-attachment/mount/q7 准备位的几何方向；它不证明 Hand 2 internal self-collision，
-也不证明 deliberate contact/unknown penetration 或 live Glove，因此不关闭完整
-NV-2 Gate。
+在确认前，corrected-flange tabletop v11 的 88/88 证明当前 nominal 定义下双侧
+q7/q20、五指/组合手型、隔离、reset/recovery、limits、有界静置收敛，以及
+attachment 法向/clocking/原点、mount/q7 准备位的几何方向；右侧 live Glove
+另有现场证据。它仍不证明 Hand 2 internal self-collision 或 deliberate
+contact/unknown penetration，因此不关闭完整 NV-2 Gate。
 
 ## Nominal 与 measured Workcell
 
@@ -196,17 +196,16 @@ measured Binding/Assembly/Workcell revision，不得静默覆盖 nominal 文件�
   `hand_skeleton → canonical → retarget → Isaac` smoke；
 - self-collision policy 对应的 contact/GUI 资格证据。
 
-历史 tabletop v6 报告的 84 项检查全部通过：保留 scripted physical v2 的双侧 q7、
-五指/组合手型、隔离、finite/limits、命令后 topology reset、回到批准初态及
-post-reset recovery，并增加分侧 q7 初态、手—法兰轴、`link4 → link5` 小臂近水平、
-桌内方向、掌面向下和端口
-假设轴朝外检查；
+corrected-flange tabletop v11 报告的 88 项检查全部通过：保留 scripted physical
+v2 的双侧 q7、五指/组合手型、隔离、finite/limits、命令后 topology reset、回到
+批准初态及 post-reset recovery，并增加分侧 q7 初态、手—法兰法向/clocking/原点、
+`link4 → link5` 小臂近水平、桌内方向、掌面向下和端口假设轴朝外检查；
 controller/supervisor/composer 的无硬件测试也已覆盖 composition-level invalid
 fail-closed。报告只证明 fixed external collider 保留和 bounded rest settling，
-且明确 `deliberate_unknown_penetration_probe=false`。实际 Glove live 尚待专用 NIC
-`enx6c1ff7cd0e76` 临时配置 `192.168.1.10/24` 后执行，self-collision 仍待确认，因此
-deliberate contact/近景、live 与最终 self-collision 验证责任仍未闭合。J7/Assembly
-定义修订后，v6 只保留为历史证据；新定义的 Isaac 回归尚未执行。
+且明确 `deliberate_unknown_penetration_probe=false`。右侧实际 Glove live 已完成，
+最近一次 2400 帧接收 2399 帧、拒绝 0 帧；稳定 identity、正式 calibration revision
+和脱敏 replay 尚未冻结。法兰接口近景已完成，但 deliberate contact/异常穿透与最终
+self-collision 验证责任仍未闭合。历史 v6 只保留为旧 J7/Assembly 定义证据。
 
 ## 重验触发器
 

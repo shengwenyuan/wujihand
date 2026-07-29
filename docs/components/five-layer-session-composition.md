@@ -174,9 +174,8 @@ source-lock gate。后续提升 leaf 时应删除这些镜像，而不是让它�
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json \
-  --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-oblique-v6.png \
-  --top-screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-top-v6.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png
 ```
 
 省略 `--session` 时，runner 按上表和 `--command-source`/publish 参数选择兼容默认值，
@@ -250,13 +249,13 @@ Isaac authored-stage、PhysX 和真人输入回归不能由普通 fast suite 代
 场景仍有其固定 Isaac 环境；NV-2 dual q27 以 Isaac Sim 6.0.1 单独做阶段验证。真人
 MediaPipe 需要相机/模型，真人 Glove 需要实际设备、Wuji SDK、side/serial 与有效
 calibration。缺少对应环境时必须记录为“未执行”，不能由 fake SDK 或 fixture 替代。
-历史 NV-2 tabletop v6 已通过 84/84：保留 scripted physical v2 的双侧 q7、
+corrected-flange tabletop v11 已通过 88/88：保留 scripted physical v2 的双侧 q7、
 五指/组合手型、隔离、reset/topology/recovery 与 bounded rest settling，并增加
-分侧 q7 初态、手—法兰轴、`link4 → link5` 小臂近水平、桌内方向、掌面朝下和
-端口假设轴朝外检查；这不包括
-deliberate contact/unknown penetration。J7/Assembly 定义随后发生修订，因此 v6
-只作为历史证据；新定义已通过本地 contract，目标机 Isaac 回归待执行。端口轴由
-固定 mesh 推断，仍待实物确认。
+分侧 q7 初态、手—法兰法向/clocking/原点、`link4 → link5` 小臂近水平、桌内方向、
+掌面朝下和端口假设轴朝外检查。法兰接口近景由 Workcell camera frame 所有；纯旋转
+与有界 relative SE(3) 均在 corrected Lula 上通过 240/240。历史 v6 只作为旧
+J7/Assembly 定义证据。上述结果不包括 deliberate contact/unknown penetration；
+端口轴由固定 mesh 推断，仍待实物确认。
 右侧真实 Glove live 已执行；当前轻量 live-only 分支仍需在目标机复验启动时序。
 因此五层与 scripted physical 子 Gate 的成功不等于完整 NV-2 完成；NV-2 状态仍为
 `PARTIAL`，直到 Glove 可复现实验材料、deliberate contact/penetration 与

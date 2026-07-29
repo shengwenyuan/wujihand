@@ -86,11 +86,14 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   模型事实。
 - J7/法兰固定修正归 Backend Binding，Hand 2 直连关系归 Assembly；Assembly 不再
   表达一个不存在的直角转接结构。
-- tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过；左右
-  `link4 → link5` 竖直分量绝对值分别为 `0.01807` 与 `0.01775`。该结果只证明
-  修正前历史组合的准备位和 drive qualification，不是新法兰定义的回归证据。
-- 新定义已通过本地 schema、URDF materialization、五层 Session 和全仓测试；当前
-  Workstation2 不可访问，Isaac tabletop v7、截图和 Tracker rotation 回归仍待执行。
+- tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过，但只保留为修正前历史
+  组合的准备位和 drive qualification 证据。
+- corrected-flange tabletop v11 已在 Workstation2 以 88/88 checks 通过；左右
+  `link4 → link5` 竖直分量绝对值分别为 `0.01807` 与 `0.01780`，法兰法向、
+  clocking 和连接原点三类 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
+- corrected Lula 上的纯旋转与有界 relative SE(3) 均完成 240/240、0 次 IK 失败。
+  同时施加 `0.05591 m + 15°` 的较强组合量会在连续 5 次 IK 失败后中止；该负例
+  保留为可达工作区边界证据，不作为放宽固定 URDF 限位的理由。
 - 物理对应仍需要两台设备 J7 轴/零位/符号只读回读，以及可明确螺孔 clocking 的
   末端近景或接口图；不再假设存在直角转接件，也不把缺失 CAD 写成当前实现阻塞项。
 

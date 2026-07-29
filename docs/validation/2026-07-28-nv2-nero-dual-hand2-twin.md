@@ -1,7 +1,7 @@
 # 2026-07-28 NV-2 NERO 双实例、物理 Hand 2 与 Glove 链路阶段验证
 
-状态：**PARTIAL / 历史 tabletop v6 已通过 84/84；J7/法兰统一修正已通过本地验证，
-但目标台式机暂不可访问，新定义的 Isaac 回归尚未执行**。
+状态：**PARTIAL / corrected-flange tabletop v11 已在 Workstation2 通过 88/88；
+纯旋转与有界 relative SE(3) 均通过 240/240**。
 
 已通过的范围是：
 
@@ -9,22 +9,26 @@
 - NERO-only 双实例 pre-composition q7 smoke；
 - 双 NERO + 双侧完整物理 Hand 2 + nominal Workcell + Session v1 的五层闭合；
 - Isaac 中两棵同侧 q27 articulation；
-- tabletop v6 的 84 项检查：保留 scripted physical v2 的左右 q7、双侧五指逐指、
+- corrected-flange tabletop v11 的 88 项检查：保留 scripted physical v2 的左右
+  q7、双侧五指逐指、
   双侧组合手型、另一手/两臂隔离、有限值与限位、命令后 topology reset、回到批准
-  初态和 post-reset recovery 等 68 项检查，并增加 16 项 tabletop 几何和准备位检查；
-- 历史 v6 的 Assembly 拥有 Hand 2 local `Ry(+90°)` attachment；当前定义已把该旋转
+  初态和 post-reset recovery 等 68 项检查，并增加 20 项 tabletop 几何、准备位和
+  法兰接口检查；
+- 历史 v6 的 Assembly 拥有 Hand 2 local `Ry(+90°)` attachment；v11 已把该旋转
   迁移到 NERO Binding 的 J7/法兰 frame correction，并将 Assembly 改为 identity；
   Workcell 继续拥有桌面、同一近侧桌沿双 mount 和相机 frame；
 - fixed external Workcell collider 存在，初始、每个 scripted hand baseline 与 reset
-  后的双 q27 静置均有界收敛。
+  后的双 q27 静置均有界收敛；
+- corrected Lula 上的纯旋转和有界 relative SE(3) 均完成 240 帧、0 次 IK 失败；
+- 右侧实际 Glove live 已完成；最近一次 2400 帧运行接收 2399 帧、拒绝 0 帧。
 
 尚未通过的范围是：
 
-- 专用网口 `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，但实际
-  `hand_skeleton → canonical → retarget → supervision → Isaac` live smoke 尚未执行；
 - fixed collider 与 bounded rest settling 不能替代 deliberate contact/unknown
-  penetration 场景；异常穿透量化和近景视觉 Gate 尚未执行；
+  penetration 场景；异常穿透量化尚未执行；
 - merged q27 的最终 self-collision policy 尚待项目负责人确认；
+- 实际 Glove 的稳定 identity、正式 handedness calibration revision 和脱敏 replay
+  尚未冻结为可复现实验材料；
 - measured Workcell 和设备 J7/法兰 frame 回读尚未建立。
 
 因此本报告不能将 NV-2 标为完整完成。以下全部仿真均未启动或控制真实 NERO、
@@ -196,7 +200,7 @@ right q27 = NERO right q7 + Hand 2 right q20
 
 四条 logical command route 与两棵 physical articulation 是不同层次的事实。
 
-## 当前 J7/法兰统一修正（本地已验证，Isaac 待回归）
+## 当前 J7/法兰统一修正（Isaac 已回归）
 
 项目负责人确认 `J7=0` 时当前 Hand 2 相对机械臂的世界位姿正确、没有直角转接结构，
 并采用“Assembly 不应拥有 `+90°`”的边界。当前五层表达为：
@@ -218,7 +222,7 @@ old_link7_world × Ry(+90°) = corrected_link7_world × identity
 Hand 2 的既有世界位姿保持不变，同时法兰圆柱、J7 轴和 Hand 2 使用统一坐标。固定
 来源文件不被覆盖；Tracker Lula 使用从同一 profile 生成的 corrected URDF。
 
-当前本地证据：
+固定配置证据：
 
 | 对象 | SHA-256 / 结果 |
 |---|---|
@@ -226,7 +230,7 @@ Hand 2 的既有世界位姿保持不变，同时法兰圆柱、J7 轴和 Hand 2
 | Assembly identity revision | `ebfa932c78bcca16fc30cdebcf3f963dacab0ed5a61915c3c4f9f1e86755c867` |
 | NERO Binding revision | `c991e15b2d5082463527692abb5e8a69b98aed731b1111e60db6ba5b0c4bcaee` |
 | tabletop qualification profile | `f95d0bd34ac592619111112adb851364ac76788f6b14f175a25c49baea22b18c` |
-| resolved Session hash | `39f3dbb92187afef53a3c2423d3a849a9fdaa42508d877d3f2d828347cb55169` |
+| resolved Session hash（v11） | `5d52774611677a7b4be2b67eaa4462f647b1ee5896c96b045d97adcaadd60bda` |
 | generated corrected Lula URDF（本机） | `aba11058236393943abb9f0a37b32a3d19008436dddf1276d6150bacb22bcd4b` |
 | `pytest -q` | `517 passed, 4 skipped, 9 deselected` |
 | Ruff / `mypy src` / `git diff --check` | 通过 |
@@ -237,9 +241,38 @@ Hand 2 的既有世界位姿保持不变，同时法兰圆柱、J7 轴和 Hand 2
 - Hand 2 palm-normal local `+X` 与 corrected flange clocking local `+X`；
 - `link7` 与 `hand_base` 连接原点距离不超过 `1 µm`。
 
-目标机当前不可访问，所以下列结果仍是**待执行**而不是通过：tabletop v7 预计
-88 项检查、斜视/俯视截图、J7 旋转响应和 Tracker rotation/SE(3) Lula 回归。恢复访问
-后使用现有五层 Session 运行，不再调整 Hand 2 世界姿态。
+Workstation2 上的最终回归入口：
+
+```bash
+/home/lenovo/.venvs/isaacsim-6.0.1/bin/python \
+  tools/run_isaac_nero_hand2_dual_twin.py \
+  --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
+  --frames-per-phase 120 \
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png
+```
+
+结果为 `88/88 checks true`、`passed=true`。新增的法兰接口 Gate 实测为：
+
+| Gate | left | right | threshold |
+|---|---:|---:|---:|
+| 法兰法向对齐点积 | `0.9999999999999866` | `0.9999999999999943` | `>=0.999` |
+| 法兰 clocking 轴对齐点积 | `0.9999999999999913` | `0.9999999999999771` | `>=0.999` |
+| `link7`—`hand_base` 原点误差 | `1.207e-7 m` | `4.480e-16 m` | `<=1e-6 m` |
+| `link4 → link5` 竖直分量 | `0.01807` | `0.01780` | `<=0.02` |
+
+右侧接口近景由 Workcell frame
+`simulation_nominal_camera_right_interface_eye/target` 定义，不是 runner 临时坐标。
+报告同时记录右侧法兰原点
+`[0.2343168, -0.0350437, 1.1738670] m` 与 Hand 2 base 原点逐值重合。
+
+| Artifact | SHA-256 |
+|---|---|
+| `artifacts/validation/nv2/nero-dual-hand2-tabletop-v11.json` | `550b0e2bcbde225b75de77be77cd852913ba057a98600496001903e8c4bceb85` |
+| `artifacts/validation/nv2/nero-dual-hand2-right-interface-v11.png` | `0321edea66c3ec3b8ca836db808a4b2fcaebdb6082a694d335c97e08ad61c866` |
+
+这张图是仿真装配状态证据；它不能替代实体 NERO 法兰螺孔 clocking 照片或 J7
+轴/零位/符号回读。
 
 ## Tabletop v6 仿真（历史 attachment 定义）
 
@@ -390,26 +423,21 @@ tests/unit/test_hand_observation_replay_adapter.py
 
 测试覆盖 side、header/sequence、device clock、canonical 21 点顺序、latest-frame、
 freshness、confidence、missing point、NaN、q20 shape/layout、source epoch 与
-retarget reset。`hand_joint_angles` 从未作为 Hand 2 q20 输入。置信度策略是：
-`<0.90` 拒绝，`[0.90, 0.95)` 只允许以 `DEGRADED` 状态经过 supervisor，
-`>=0.95` 才是 success。
+retarget reset。`hand_joint_angles` 从未作为 Hand 2 q20 输入。完整且 finite 的
+skeleton 在最低 landmark confidence `<0.90` 时产生 `DEGRADED` intent，
+`>=0.90` 时产生 `SUCCESS` intent；默认硬拒绝下限为 `0.0`。缺点、NaN、错误
+shape/side/frame 或 stale 仍会拒绝。
 
 缺帧、错误 side/layout、低置信度、NaN 或 retarget failure 不会创建新的
 input-derived `HandIntent`。已有最后有效命令可在 supervisor 的 `0.25 s` freshness
 窗内继续 hold；超时后由 supervisor 输出渐进 return-to-rest 安全命令。后者不是由
 invalid input 派生的新 q20 intent。
 
-当前 v6 报告记录 `glove_live.enabled=false`。专用网口
-`enx6c1ff7cd0e76` 已由项目负责人配置 `192.168.1.10/24`，但本次报告没有执行
-SDK discovery/live 路径，因此：
-
-- 未记录实际 Glove serial/side；
-- 未形成 named SDK user 与 handedness calibration manifest；
-- 未取得实际 `hand_skeleton` frame；
-- 未运行真人 live retarget 或 live Isaac q20 command。
-
-该结果必须按“未执行”处理，不能由 fake SDK/composition test 或 84 项 tabletop
-仿真代替。
+专用网口 `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`。右侧实际 Glove live
+已经执行，最近一次长运行在 2400 帧中接收 2399 帧、拒绝 0 帧，闭合了
+`hand_skeleton → canonical → retarget → supervision → Isaac q20`。尚未闭合的是
+稳定设备 identity、正式 handedness calibration revision、脱敏 canonical replay
+以及 live fault injection；这些不能由 fake SDK/composition test 代替。
 
 ## Tracker → 右 NERO relative SE(3)
 
@@ -423,28 +451,42 @@ configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml
 该 profile 的同一 proper rotation matrix 同时映射位移轴和相对旋转轴。rotation
 显式使用 `--tracker-rotation` 启用，采用
 `C · (R_current · R_referenceᵀ) · Cᵀ` 的 Workcell 空间相对量；默认限幅为 `15°`。
-本次资格验证同时使用 `--tracker-freeze-translation`：输入仍含 `0.20 m` 合成平移，
+纯旋转资格验证使用 `--tracker-freeze-translation`：输入仍含 `0.20 m` 合成平移，
 但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
 
-纯 rotation 合成流已在 Isaac Sim 6.0.1 headless 执行 240 frames：
+最终代码上的纯 rotation 合成流已在 Isaac Sim 6.0.1 headless 执行 240 frames：
 
 | 项目 | 结果 |
 |---|---:|
 | 合成 Tracker 平移幅度 | `0.20 m` |
 | 映射后 Workcell 位移最大值 | `0 m`（translation frozen） |
-| rotation target 最大值 | `9.9384°` |
-| link7 rotation feedback 最大值 | `10.6984°` |
+| rotation target 最大值 | `15.0°` |
+| link7 rotation feedback 最大值 | `15.3396°` |
 | Lula IK | `240/240` |
-| 右 q7 最大反馈变化 | `0.16379 rad` |
-| 右 Hand 2 最大被动反馈变化 | `0.06806 rad`，低于 `0.10 rad` Gate |
-| 左 q27 最大反馈变化 | `0.00714 rad`，低于 `0.03 rad` Gate |
+| 右 q7 最大反馈变化 | `0.76221 rad` |
+| 右 Hand 2 最大被动反馈变化 | `0.05179 rad`，低于 `0.10 rad` Gate |
+| 左 q27 最大反馈变化 | `0.00876 rad`，低于 `0.03 rad` Gate |
 | 最终结果 | `passed=true` |
 
 报告：
-`artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-only-01.json`，
+`artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-corrected-flange-final-v3.json`，
 SHA-256
-`76c2b17f17a91cc9b85ace06e1614165144516a4e6cc2352f2c4009b0abc41cd`。
+`fb36607a872c20f759535fe860428b098652bb484f6f5cf1101760a220b00b69`。
+
+有界 relative SE(3) 同样完成 240/240、0 次 IK 失败：最大 Workcell 位移
+`0.01415 m`，最大旋转 target `5.6604°`，link7 最大旋转反馈 `6.2706°`。
+报告为
+`artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-corrected-flange-final-v2.json`，
+SHA-256
+`5851eb8649a84f435bac1c812a8257601594c5c563462c5a8f92ba4fbe6a6f9a`。
+
+另保留一份边界负例：同时推到 `0.05591 m + 15°` 时，第 136 帧出现连续 5 次 IK
+失败并中止，未强制归位后继续伪装成功。负例报告 SHA-256 为
+`e645d5a48e65edf08e5bfcb23fa414ff22aee06559b8b19f9d2753cf3bf872ea`。
+该负例说明当前准备位附近的可达工作区小于 mapper 的逐轴独立上限组合，不应据此
+放宽 URDF 关节限位。
+
 该结果闭合代码、映射和 Isaac IK 路径；真人 Tracker 的 roll/pitch/yaw 方向仍需 GUI
 人工确认。
 
@@ -456,40 +498,39 @@ SHA-256
 | 左右完整物理 Hand 2 来源与 q20 layout | 通过 | source lock、Binding、USD hash |
 | stage 恰好两棵 q27 articulation | 通过 | runner 启动前结构检查与报告 |
 | Hand world root 禁用、FixedJoint attachment、q7/q20 分区 | 通过 | adapter fail-closed 检查 |
-| corrected J7 frame + identity Assembly | **本地通过、Isaac 待回归** | profile/URDF/Session contract 已通过；目标机暂不可访问 |
+| corrected J7 frame + identity Assembly | 通过（nominal） | tabletop v11 88/88；法向、clocking、原点三类 Gate 全通过 |
 | 同侧桌沿 mount、端口假设轴朝外 | 通过（nominal） | `x=±0.32, y=-0.52, yaw=+90°`；port-axis dot=`1.0`，轴向为 mesh 推断待实物确认 |
-| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-45,0,-45,-90,0,0]°`；v6 初始/post-reset checks |
-| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01807/0.01775 <= 0.02` |
+| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-45,0,-45,-90,0,0]°`；v11 初始/post-reset checks |
+| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01807/0.01780 <= 0.02` |
 | 手朝桌内、近水平且掌面向下 | 通过（nominal） | inward、vertical 与 palm-down 五项 stage 几何测量均过 threshold |
-| q7 响应与双实例隔离 | 通过 | tabletop v6 84/84，包含历史 v2 相关 Gate |
+| q7 响应与双实例隔离 | 通过 | tabletop v11 88/88，包含历史 v2 相关 Gate |
 | Tracker → 右 NERO XYZ 方向 | 通过（人工 GUI） | Workstation2 三方向核对；simulation-only calibration |
 | Tracker → 右 NERO roll/pitch/yaw | 合成通过、待人工 GUI | pure-rotation 240/240，报告 `passed=true`；真人方向待核对 |
 | 左右逐指与组合手型 fixture | 通过 | 双侧五指单指 phase + 双侧 15-joint 组合 phase |
-| sampled feedback finite 且在 canonical limits 内 | 通过 | v6 全局、左右及 post-reset checks |
+| sampled feedback finite 且在 canonical limits 内 | 通过 | v11 全局、左右及 post-reset checks |
 | 命令后 reset/topology/recovery | 通过 | 两根 q27 重验、partition stable、回到初态并恢复命令 |
 | fixed external collider 与 bounded rest settling | 通过 | table collider + 每个 baseline/reset 后 `0.005 rad` 容差 |
-| deliberate contact/unknown penetration 与近景证据 | **未执行** | `deliberate_unknown_penetration_probe=false` |
-| nominal 场景渲染证据 | 通过 | v6 斜视/俯视 PNG、相机 frame 与 SHA-256 已冻结 |
-| 实际 Glove `hand_skeleton` live smoke | **未执行** | 专用 NIC 已配置；待 SDK discovery/identity 与 live 运行 |
+| deliberate contact/unknown penetration | **未执行** | `deliberate_unknown_penetration_probe=false` |
+| nominal 法兰接口近景 | 通过 | v11 Workcell-owned camera frame、PNG 与 SHA-256 已冻结 |
+| 实际 Glove `hand_skeleton` live smoke | 右侧通过 | 2399/2400 接收、0 拒绝；identity/calibration/replay 待冻结 |
 | composition-level invalid fail-closed | 通过（无硬件） | controller/supervisor/composer 测试；live fault injection 随 live 补验 |
 | merged q27 最终 self-collision policy | **待确认** | 当前仅验证 disabled policy |
 | measured Workcell / 实物 attachment | 后续阶段 | 不阻塞 nominal 功能联调，不构成现场几何事实 |
 
-结论：**NV-2 的五层配置、adapter/controller 边界和双 q27 拓扑已闭合；tabletop v6
-84/84 与 scripted physical v2 68/68 作为历史基线。J7/Assembly 新定义已通过本地
-contract，但目标机 Isaac 回归未执行，因此当前不能把 tabletop runtime Gate 标为
-通过。完整 NV-2 还缺 live Glove、deliberate contact/异常穿透近景、
-self-collision 最终决策和 measured Workcell。**
+结论：**NV-2 的五层配置、adapter/controller 边界、双 q27 拓扑和 corrected
+J7/identity Assembly 仿真 Gate 已闭合；tabletop v11 为 88/88，纯旋转与有界
+relative SE(3) 均为 240/240。历史 v6 84/84 与 scripted physical v2 68/68 只作
+旧定义基线。完整 NV-2 仍缺 Glove 可复现实验材料、deliberate contact/异常穿透、
+self-collision 最终决策和 measured Workcell/设备 J7 回读。**
 
 ## 明确未执行
 
 - 未发送真实 NERO 或 Hand 2 command；
 - 未执行 CAN read/write、ROS 2 command 或机械臂运动；
 - 未把 nominal attachment 宣称为真实安装；
-- 未完成实际 Glove inventory、calibration 或 live hand tracking；
+- 未冻结实际 Glove identity、正式 calibration revision 或脱敏 replay；
 - 未资格化 Hand 2 internal self-collision；
-- 未引入 deliberate contact/unknown penetration 场景，未量化异常穿透或完成近景
-  视觉检查；
+- 未引入 deliberate contact/unknown penetration 场景或量化异常穿透；
 - 未完成 measured Workcell clearance、精度或真实双臂安全包络；
 - 未执行长时间 soak、抓取任务、触觉、力控或真机闭环。
 
@@ -498,7 +539,7 @@ self-collision 最终决策和 measured Workcell。**
 1. 可被目标机 Wuji SDK 识别的 Glove side、serial、address、SDK version；
 2. named SDK user 和每个 handedness 的 calibration revision；
 3. 至少一段脱敏 live `hand_skeleton` fixture 与对应 q20/rejection 记录；
-4. deliberate contact/unknown penetration、异常穿透量化和近景视觉证据；
+4. deliberate contact/unknown penetration 与异常穿透量化证据；
 5. 真人 live failure injection 与监督日志；
 6. 项目负责人对 merged q27 self-collision policy 的确认；
 7. 二维码对应 NERO 末端法兰在已知 q7/零位下的螺孔 clocking 近景/接口图，以及

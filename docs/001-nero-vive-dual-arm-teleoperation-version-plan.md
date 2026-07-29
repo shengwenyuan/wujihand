@@ -151,11 +151,12 @@
   Python 3.12 的固定 Hand 2 Session 最小兼容证据。
 - NV-1 已建立 VIVE input adapter；NV-2 已建立 NERO/Hand 2 Asset 与 Binding、固定导入
   recipe、双根 Assembly、`simulation_nominal` Workcell、Session v1、canonical
-  Glove/retarget/supervision 链和双 q27 runner。历史 tabletop v6 已通过 84/84，
-  覆盖原 68 项 scripted physical Gate，以及桌沿安装、左右分侧 q7 准备位、手—法兰
-  轴对齐、`link4 → link5` 小臂近水平、掌面向下和端口假设轴朝外；仍需关闭实际 Glove live、deliberate
-  contact/异常穿透近景资格、合并 q27 self-collision 最终决策，以及后续 measured
-  Workcell/attachment。J7/Assembly 新定义已完成本地 contract，目标机回归待执行。
+  Glove/retarget/supervision 链和双 q27 runner。corrected-flange tabletop v11 已在
+  Workstation2 通过 88/88，覆盖原 68 项 scripted physical Gate，以及桌沿安装、
+  左右分侧 q7 准备位、手—法兰法向/clocking/原点、`link4 → link5` 小臂近水平、
+  掌面向下和端口假设轴朝外；纯旋转和有界 relative SE(3) 均通过 240/240，右侧
+  实际 Glove live 已打通。仍需关闭 Glove 可复现实验材料、deliberate contact/
+  异常穿透、合并 q27 self-collision 最终决策，以及后续 measured Workcell/attachment。
 - 当前仍没有 ROS 2 package、真机 robot adapter、通用 recorder、延迟分解或独立
   精度评估。
 
@@ -605,7 +606,7 @@ DISARMED
 物理 Hand 2 具有显式 q20 命令入口，并可由对应侧 Wuji Glove 经 canonical
 observation 与 Hand 2 retargeting 驱动。
 
-**执行状态（2026-07-28，PARTIAL / 实施中）**
+**执行状态（2026-07-29，PARTIAL / 实施中）**
 
 - NERO 来源、固定导入 recipe、q7 profile 与 NERO-only pre-composition smoke 已完成；
   固定派生 USD 连续两次导入得到相同 package/report hash。
@@ -613,9 +614,11 @@ observation 与 Hand 2 retargeting 驱动。
   表示，不再等待 visual-only 资产。
 - 双根 Assembly、nominal Workcell、Session v1 四个 logical route、canonical Glove
   observation/HandIntent 契约、supervision composition 及 q27 simulation adapter 已建立。
-- Workstation2 / Isaac Sim 6.0.1 上的历史 tabletop v6 已通过 84/84：保留 scripted
+- Workstation2 / Isaac Sim 6.0.1 上的 corrected-flange tabletop v11 已通过 88/88：
+  保留 scripted
   physical v2 的左右 q7、双侧五指/组合手型、隔离、finite/limits、reset/recovery
-  68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、手—法兰轴对齐、
+  68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、手—法兰法向、
+  clocking 与原点对齐、
   `link4 → link5` 小臂近水平、手向桌内、掌面向下和端口假设轴朝外等 Gate。
 - 项目负责人确认当前 Hand 2 世界位姿正确、没有直角转接结构。NERO Binding profile
   将旧 Assembly `Ry(+90°)` 迁移为 source-locked J7/法兰 frame correction；Isaac
@@ -626,20 +629,23 @@ observation 与 Hand 2 retargeting 驱动。
   `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]` 及 Isaac-only q7 drive gain
   `stiffness=6000, damping=212.13203435596427`，没有修改通用 NERO profile 的全零机械初态或固定
   来源 URDF/USD。
-- v6 运行测得左右 `link4 → link5` 小臂轴竖直分量绝对值为
-  `0.01807/0.01775`，左右手纵轴朝桌内点积约 `0.98372/0.98381`、竖直分量
-  绝对值约 `0.05803/0.05608`、掌面朝下点积约 `0.99830/0.99840`。端口轴
+- v11 运行测得左右 `link4 → link5` 小臂轴竖直分量绝对值为
+  `0.01807/0.01780`，左右手纵轴朝桌内点积约 `0.98329/0.98346`、竖直分量
+  绝对值约 `0.05834/0.05631`、掌面朝下点积约 `0.99815/0.99811`。法兰法向与
+  clocking 点积均约 `1.0`，连接原点误差最大 `1.207e-7 m`。端口轴
   `base local -X` 来源于固定 mesh 外凸特征推断，朝桌外
   点积为 `1.0`，仍等待实物确认，不能写成现场实测。
 - 固定外部工作台 collider 已保留；每个 scripted hand baseline 与 reset 后均在
   `0.005 rad` 容差内有界收敛。该证据没有引入 deliberate unknown
   penetration/contact probe，不能替代后续接触与近景资格验证。
 - Wuji SDK 2026.7.21 已在 Python 3.12 环境验证左右 `21×3 → q20` 求解；专用网口
-  `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，live Glove→Isaac Gate 仍待 SDK
-  discovery、identity 记录与现场执行。
-- 当前法兰修正已通过本地 profile、URDF materialization、五层 Session 和全仓测试；
-  目标台式机暂不可访问，因此新定义的 Isaac tabletop v7、截图和 Tracker rotation
-  回归仍待执行，历史 v6 不得冒充新定义的运行证据。
+  `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，右侧 live Glove→Isaac 已现场执行，
+  最近一次 2400 帧中接收 2399 帧、拒绝 0 帧；identity、正式 calibration revision
+  与脱敏 replay 仍待冻结。
+- 当前法兰修正已通过 profile、URDF materialization、五层 Session、全仓测试与
+  Workstation2 Isaac tabletop v11；Workcell-owned 法兰接口近景已冻结。corrected
+  Lula 上纯旋转与有界 relative SE(3) 均通过 240/240，较强的
+  `0.05591 m + 15°` 组合输入则在连续 5 次 IK 失败后按门禁中止。
 - 真机对应仍需法兰螺孔 clocking 近景/接口图和两台设备 J7 轴、零位、符号只读回读；
   不要求本轮提供不存在的直角转接件 CAD。
 
@@ -701,36 +707,36 @@ observation 与 Hand 2 retargeting 驱动。
 
 - Session 恰好解析四个显式 control group：`2 × q7` NERO 与 `2 × q20` Hand 2，
   共 54 logical DoF；左右命名、layout 和 command route 无碰撞。历史 scripted
-  physical v2 已通过；tabletop v6 曾完整继承并重验，但在 J7/Assembly 定义变化后
-  已转为历史证据，当前 Gate 等待 tabletop v7。
+  physical v2 与 tabletop v6 只作为历史基线；当前以 corrected-flange tabletop
+  v11 的 88/88 为准。
 - Isaac stage 恰好形成两棵 q27 articulation；Hand 2 world root 不再生效，
   FixedJoint body targets 正确，且每侧 q7/q20 分区完整、互斥。命令后 reset 已重验
   两棵 q27 与稳定分区。
 - 两只 Hand 2 可见、侧别正确、随对应法兰运动；20 个主动关节、drive、collision、
   rigid body 与 articulation 在 Isaac 6.0.1 中可解释。
-- 两臂可分别执行小幅 scripted q7，另一臂不受影响。历史 tabletop v6 已通过；
-  corrected flange 定义待目标机重验。
+- 两臂可分别执行小幅 scripted q7，另一臂不受影响；corrected-flange tabletop v11
+  已通过。
 - 左右 q20 fixture 可分别完成逐指/手型小幅运动，另一只手与两臂 q7 不受影响；
   feedback finite 且在 Hand 2 canonical limits 内。历史 scripted physical v2 已覆盖
-  双侧五指、双侧组合手型和 post-reset recovery；tabletop v6 已历史重验，新法兰
-  定义待 tabletop v7。
+  双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v11 重验。
 - 可用 Wuji Glove 的 `hand_skeleton` live 流至少完成一侧
   `Glove → canonical 21×3 → Hand2 retarget q20 → Isaac` 自由空间 smoke；
   另一侧路径用相同 contract/fixture 验证。若现场有双侧 Glove，则补双侧 live smoke。
-  当前 NIC 已配置，但 SDK discovery/identity 与 live 运行尚未执行。
+  当前右侧 live 已执行；另一侧继续由相同 contract/fixture 覆盖，设备 identity、
+  正式 calibration revision 和脱敏 replay 待冻结。
 - stale、低置信度、错误 side/layout、NaN 或 retarget 失败不得产生新 q20 command。
   无硬件 controller/composition 测试已证明这些输入不会创建新的 input-derived
   `HandIntent`；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回
   rest。真人 live failure injection 随 live Gate 补验。
-- 全部 feedback finite 且在批准后的 canonical limits 内。历史 tabletop v6 已通过，
-  新法兰定义待目标机重验。
+- 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v11 已通过。
 - 两底座位于同一桌沿，左右 Hand 2 主轴与 `link7` 法兰轴对齐、指向桌内且掌面朝下；
   `link4 → link5` 小臂近水平，显式 q7 初态与 reset 后反馈分别满足 qualification
-  threshold。历史 tabletop v6 的 84/84 已通过；新定义新增法向、clocking 和原点
-  三类 attachment Gate，待目标机 tabletop v7。
+  threshold。tabletop v11 的 88/88 已通过，包含法向、clocking 和原点三类
+  attachment Gate。
 - nominal 工作台的固定外部 collider 存在，初始状态、各 scripted baseline 与 reset 后
-  均有界静置收敛；该部分已通过。deliberate contact/unknown penetration 与近景人工
-  检查尚未执行。最终结果只关闭功能仿真 Gate，不形成现场 clearance 或物理精度结论。
+  均有界静置收敛；该部分已通过。法兰接口近景已执行，但 deliberate
+  contact/unknown penetration 与异常穿透量化尚未执行。最终结果只关闭功能仿真
+  Gate，不形成现场 clearance 或物理精度结论。
 - Session/source/artifact hash 和 Isaac 版本进入报告。
 
 **材料与工具评审**
