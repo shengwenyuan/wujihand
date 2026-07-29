@@ -96,9 +96,12 @@ Backend Binding，并引用 `third_party/sources.lock.yaml`。Assembly 是无环
 
 Session resolver 必须在 backend 初始化前完成引用闭合、asset/binding/backend
 匹配、frame 与 control layout 校验、root placement、source lock 和配置指纹计算。
-runner 不得绕开 Session 再维护第二套隐式组合默认值。现有 typed scene/runtime
-profile 可暂作 compatibility leaf，以 strangler 方式迁移；兼容期只引用而不复制
-既有几何、physics、控制和报告事实。
+单进程 runner 不得绕开 Session 再维护第二套隐式组合默认值。多进程 live run 可按
+[ADR-0007](decisions/0007-nv4-native-dual-teleoperation-deployment.md) 从
+DeploymentSpec 启动，但该 spec 必须恰好引用一个 ResolvedSession，且只能绑定
+process lifecycle、本机设备/endpoint、tracking setup/calibration 和 artifact 输出，
+不能复制五层事实。现有 typed scene/runtime profile 可暂作 compatibility leaf，以
+strangler 方式迁移；兼容期只引用而不复制既有几何、physics、控制和报告事实。
 
 五层数据模型只表达不可变 spec 和局部不变量；YAML、安全路径、跨层解析和依赖装配
 属于 runtime。`compat/` 暂存现有 MuJoCo compatibility leaf 的纯数据合同，
@@ -114,6 +117,26 @@ ports -> domain
 specs / compat / integrity -> Python standard library
 domain -> no simulator/device/middleware dependency
 ```
+
+### 3.8 Deployment 编排不改变五层
+
+DeploymentSpec 是一次多进程/多设备 live run 的运行根，不是资产组合层：
+
+```text
+DeploymentSpec
+  -> exactly one ResolvedSession
+  -> process/component lifecycle
+  -> canonical live/fixture source bindings
+  -> host-local device binding ID
+  -> tracking setup + calibration references
+  -> report/artifact destination
+```
+
+Session 继续拥有 control route/layout、transport contract 和 compatibility policy；
+Deployment 只能把 source 绑定到 Session 已声明的 `instance_id/group_id`，并必须恰好
+覆盖。完整 serial、IP 和个人路径只进忽略的 `configs/local/`；提交的 Deployment
+保存 logical role 和 binding key，resolved report 只记录脱敏 hash。默认双侧和左右
+单侧诊断使用不同 spec，不把 `side`/mode 重新做成 runner 分支。
 
 ## 4. 全局数据流
 
@@ -211,6 +234,8 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
 │   ├── base/                      稳定默认值
 │   ├── profiles/                  typed compatibility leaf 与组件 profile
 │   ├── sessions/                  五层 composition root 与运行级 override
+│   ├── deployments/               多进程 live run 与 source/Session 绑定
+│   ├── examples/                  可提交、无真实 identity 的本机配置模板
 │   ├── upstream/                  带 provenance 的上游配置快照
 │   └── local/                     IP/SN/个人路径；Git 忽略
 ├── datasets/
@@ -267,6 +292,8 @@ Recorder 旁路订阅多条不同频率的流，不能同步阻塞控制环。�
   项目自有 procedural builder 可令 artifact 为空，但必须进入封闭 registry。
 - 装配拓扑放 `configs/assemblies/`，世界与 mount 放 `configs/workcells/`，一次
   运行只由 `configs/sessions/` 组合。
+- 多进程 live run 用 `configs/deployments/` 恰好引用一个 Session；本机 device
+  identity/endpoint 由 `configs/local/` 绑定，提交模板放 `configs/examples/`。
 - 迁移中的项目 typed 配置放 `configs/base/` 或 `configs/profiles/`，只能作为被
   五层引用的 compatibility leaf，不能与五层重复维护同一事实。
 - 派生配置声明 `derived_from`、上游 commit、单位、修改原因和验证用例。

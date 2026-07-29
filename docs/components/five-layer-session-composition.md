@@ -1,7 +1,10 @@
 # 五层 Session 组合
 
-状态：2026-07-28，五层配置、无 backend resolver、既有 runner 兼容桥和 NV-2
-双 NERO + 双物理 Hand 2 Session 已接入。
+状态：2026-07-29，五层配置、无 backend resolver、既有 runner 兼容桥和 NV-2
+双 NERO + 双物理 Hand 2 Session 已接入；NV-4 已增加五层之外的
+DeploymentSpec v1/resolver、专用 native-dual live Session、受管 OpenVR producer
+和四流运行 composition。主 Isaac runner 省略 `--session` 时已经从该 Deployment
+入口启动；显式 `--session` 暂时保留 NV-2 qualification 兼容路径。
 
 项目以
 `Asset Manifest → Backend Binding → Assembly Spec → Workcell → Session`
@@ -64,7 +67,56 @@ resolved snapshot。
 形成逻辑限定名并执行全类别碰撞检查；当前 compatibility runner 只接受已验证的既有
 实例集合和 topology，尚不会把任意限定名编译成 MuJoCo/Isaac 原生对象。
 
-## 当前 8 个 Session
+## NV-4 DeploymentSpec v1 与 live composition
+
+`DeploymentSpec` 不改变五层，也不是第六个资产层。其当前实现入口是：
+
+| 内容 | 入口 |
+|---|---|
+| 纯数据 schema | `src/wujihand/specs/deployment.py` |
+| strict YAML repository | `wujihand.runtime.ConfigRepository` |
+| 跨 Session/mapping/local binding resolver | `wujihand.runtime.DeploymentResolver` |
+| native-dual live policy | `src/wujihand/specs/native_dual_teleoperation.py` 与 `configs/profiles/isaac_nero_hand2_native_dual_teleoperation_v1.yaml` |
+| side-neutral runtime plan | `wujihand.runtime.build_native_dual_runtime_plan` |
+| managed OpenVR producer | `wujihand.runtime.ManagedOpenVrProducer` 与 `tools/stream_vive_trackers_udp.py` |
+| Workstation2 mapping v3 | `configs/calibrations/vive_tracker_workcell_workstation2_v3.yaml` |
+| 默认双侧/左右单侧诊断模板 | `configs/deployments/` |
+| 忽略的本机 binding 模板 | `configs/examples/workstation2_nv4_local_device_binding.example.yaml` |
+
+一个 DeploymentSpec 恰好引用一个 Session，并只拥有 process/component lifecycle、
+canonical input source、本机 binding ID、tracking setup/mapping calibration 引用和
+report root。`control_bindings` 必须恰好覆盖 Session 已声明的四个
+`instance_id/group_id` route；resolver 还会核对 asset kind，禁止 Tracker/arm-hold
+命令 Hand 2，或 Glove/hand-rest 命令 NERO。它不会复制 layout、装配、Workcell、
+mapping 数值、IK 或 supervisor 参数。
+
+当前已实现三个 spec：
+
+- `isaac_nero_hand2_native_dual_live_v1`：左右 Tracker 与左右 Glove 全部 live；
+- `isaac_nero_hand2_left_single_live_v1`：左 arm+hand live，右 arm hold/hand rest；
+- `isaac_nero_hand2_right_single_live_v1`：右 arm+hand live，左 arm hold/hand rest。
+
+三个 spec 引用同一个专用
+`isaac_nero_dual_hand2_native_teleop_v1` live Session。它与
+`isaac_nero_dual_hand2_physical_simulation_nominal_v1` qualification Session
+复用完全相同的 Assembly、Workcell、四个实例 Binding、root placement 和四 route
+拓扑，只把第五层 runtime role、composite transport contract 与 compatibility
+profile 明确为 live consumer 所需事实。没有修改或复制前四层。
+
+单侧诊断没有遗漏 route、隐藏全零 command 或 `--side` 分支。live source 必须引用
+host-local binding，fixture source 必须显式不引用设备。local binding 原始
+identity/endpoint 不进入 resolved report；报告只保存其 SHA-256、calibration ID 与
+独立 `local_binding_hash`。
+
+tracking setup 当前明确为 `qualification_status: pending`。resolver 已校验 mapping
+expected ID、`vive_tracking` frame、Workcell world frame、v3 文件 hash 和
+simulation-only 配置，但这不证明两枚 Tracker 已属于同一个活动 Standing universe。
+主 runner 已消费 DeploymentSpec，并由 runtime supervisor 启动一个 OpenVR owner，
+按 serial 输出一或两条 canonical UDP stream；左右 Glove 在主进程内由同一 SDK
+manager 管理。以上只证明软件 composition 和生命周期边界已实现，不声明 NV-4
+live/HIL 已完成。
+
+## 当前 9 个 Session
 
 | Session | 角色 | 组合与合同 | 默认使用者 |
 |---|---|---|---|
@@ -76,6 +128,7 @@ resolved snapshot。
 | `mediapipe_hand2_hand_command_udp_v1` | `teleop_producer` | wrist3 + finger20，`wujihand.hand_command.v2` | MediaPipe `--publish-hand-command-port` |
 | `mujoco_fr3v2_hand2_right_table_v1` | `simulation` | FR3 q7 + Hand 2 q20，固定法兰 attachment | MuJoCo table runner |
 | `isaac_nero_dual_hand2_physical_simulation_nominal_v1` | `simulation` | 双 NERO q7 + 双物理 Hand 2 q20；4 route、54 logical DoF、无 transport | NV-2 dual q27 runner |
+| `isaac_nero_dual_hand2_native_teleop_v1` | `teleop_consumer` | 复用 NV-2 前四层与四 route；`wujihand.native_dual_teleoperation.v1` | NV-4 Deployment runner |
 
 producer 与 consumer 保持两个进程。`validate_transport_pair()` 会同时核对 wire
 contract、layout multiplicity、产品、代际、侧别、语义、DoF 和 command interface：
@@ -179,9 +232,22 @@ source-lock gate。后续提升 leaf 时应删除这些镜像，而不是让它�
   --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
 ```
 
-省略 `--session` 时，runner 按上表和 `--command-source`/publish 参数选择兼容默认值，
-所以既有命令不需要新增必填参数。显式 Session 的 backend、runtime role 或 transport
-contract 与当前命令模式不一致时会在启动前拒绝。
+除 NERO 双 q27 runner 外，省略 `--session` 时各 runner 仍按上表和
+`--command-source`/publish 参数选择兼容默认值。NERO runner 省略 `--session` 时默认
+进入 NV-4 native-dual Deployment；显式 `--session` 才进入历史 NV-2 qualification
+路径。显式 Session 的 backend、runtime role 或 transport contract 与当前命令模式
+不一致时会在启动前拒绝。
+
+NV-4 日常入口为：
+
+```bash
+/home/lenovo/.venvs/isaacsim-6.0.1/bin/python \
+  tools/run_isaac_nero_hand2_dual_twin.py
+```
+
+默认读取被 Git 忽略的
+`configs/local/workstation2_nv4_v1.yaml`。左右隔离诊断只用 `--deployment` 选择
+committed diagnostic spec；设备 identity、端口与 SDK 解释器不通过 CLI 重复声明。
 
 保留的旧参数是显式 override：
 
@@ -191,7 +257,7 @@ contract 与当前命令模式不一致时会在启动前拒绝。
 | Isaac fixed-hand | `--asset`、`--profile` |
 | Isaac rotation-ball | `--asset`、`--profile`、`--scene-profile` |
 | MediaPipe | `--publish-udp-port` 与 `--publish-hand-command-port` 继续选择 v1/v2 wire contract |
-| NV-2 dual q27 | 无 CLI Asset/profile override；严格消费完整 resolved Session 及其 typed tabletop qualification compatibility profile |
+| NERO dual q27 | 默认 NV-4 只消费 Deployment/local binding；显式 `--session` 暂时保留 NV-2 qualification 参数 |
 
 override 会连同原始类型及文件内容 hash 进入解析快照和 `session_hash`。它只用于
 复现旧命令或有意实验，不会修改五层 YAML；专用 runner 后续仍执行相应 profile、
@@ -201,12 +267,10 @@ override 会连同原始类型及文件内容 hash 进入解析快照和 `sessio
 结论。`session_hash` 会记录该实验输入，但不会把它重新变成锁定 representation。
 MuJoCo 与 Isaac 报告新增 `session`/`session_hash`，MediaPipe 启动日志打印相同信息。
 
-NV-2 runner 的 `--glove-live`、side/device selector 与 calibration 参数是五层之外、
-显式 opt-in 的 bounded input qualification；它们不修改 resolved Session，也不属于
-Asset/profile 兼容 override。该参数进入独立的 live-only 分支：五层解析和 q27
-拓扑/分区检查仍保留，application qualification 只做最多 60 个仿真帧的软就绪等待，
-不串行执行完整 arm/hand scripted qualification。默认不带该参数时，原严格收敛和
-完整 scripted Gate 保持不变。
+旧 `--glove-live`、`--tracker-live`、side/device selector 与临时数值参数只在显式
+`--session` 的历史 qualification 路径可用；native-dual 默认入口会拒绝它们，避免
+CLI 形成第二套 Deployment 事实。该兼容路径将在 NV-4F 的新主线 HIL 通过后迁出主
+runner 并删除，当前不得把兼容保留误写为轻量化完成。
 
 ## 验证
 
@@ -221,18 +285,27 @@ Asset/profile 兼容 override。该参数进入独立的 live-only 分支：五�
   tests/unit/test_workcell_spec.py \
   tests/unit/test_session_spec.py \
   tests/unit/test_config_repository.py \
-  tests/unit/test_session_resolver.py \
-  tests/unit/test_session_compat.py \
+    tests/unit/test_session_resolver.py \
+    tests/unit/test_deployment_spec.py \
+    tests/contract/test_nv4_deployments.py \
+    tests/unit/test_tracker_workcell_mapping.py \
+    tests/unit/test_session_compat.py \
   tests/contract/test_layered_sessions.py \
   tests/contract/test_nero_dual_hand2_physical_session.py \
   tests/contract/test_architecture_dependencies.py
 ```
 
-其中 contract suite 解析全部 8 个 Session、核对 v1/v2 producer-consumer 配对、确认
+其中 contract suite 解析全部 9 个 Session、核对 v1/v2 producer-consumer 配对、确认
 fixed-hand Workcell 数值归属，并把 MuJoCo/rotation-ball 五层组合与现有 typed leaf
 逐项对照。NV-2 contract 另行确认 4 个实例、2 个 root、4 个 commanded route、
 54 logical DoF、完整物理 Hand 2 Binding 和 nominal 假设。依赖测试阻止
-`specs -> runtime/adapters/外部 SDK` 和 `adapters -> runtime`。
+`specs -> runtime/adapters/外部 SDK` 和 `adapters -> runtime`。Deployment tests
+另行验证 strict fields、process DAG、Session route 全覆盖、live/fixture binding、
+mapping v3、稳定 hash 和本机 identity/endpoint 脱敏。
+
+NV-4 tests 还覆盖双流 OpenVR serial 选择、一个 owner 的生命周期事件、transport
+epoch/revision、旧 datagram 拒绝、side-neutral arm FK/IK 与 reference、双 Glove
+start/close/故障隔离，以及三个 Deployment 到统一四路 runtime plan 的编译。
 
 Glove adapter、retarget、supervisor composition、q27 hand partition 与 canonical
 JSONL/replay 另由无硬件 unit/contract tests 验证；这些测试不改变五层 Session，也
@@ -273,6 +346,11 @@ NV-2 dual q27 的目标机证据与未关闭 Gate 见
 
 - 五层 schema 已实际用于双 NERO、Hand 2 left 和两个 root 的 NV-2 Session；这不表示
   已支持任意机器人或任意双臂 topology。
+- NV-4 native-dual 软件 composition 已完成，但 Workstation2 当前缺少两枚同时
+  connected 的 Tracker，Glove 有界预检也尚未收到 skeleton 帧；共同 universe、
+  双臂/双手 GUI 和故障 HIL 均未取得资格。
+- NERO 主 runner 当前为 `4129` 行并保留 NV-2 compatibility 路径；旧分支删除、独立
+  qualification 入口和 LOC/CLI 轻量化属于 NV-4F，必须在新主线真人验证后执行。
 - resolver 负责配置闭合和 provenance，不是跨 MuJoCo/Isaac 的万能 scene compiler。
 - `session_hash` 证明规范化配置输入一致，不证明 backend 执行成功；只有
   `verify_artifacts=True` 或实际 runner 的 hash/模型检查才能证明本地资产内容一致。
@@ -288,4 +366,5 @@ NV-2 dual q27 的目标机证据与未关闭 Gate 见
 
 架构决策与重验触发器见
 [ADR-0003](../decisions/0003-five-layer-session-composition.md) 与
-[ADR-0006](../decisions/0006-nv2-physical-hand2-glove-command-boundary.md)。
+[ADR-0006](../decisions/0006-nv2-physical-hand2-glove-command-boundary.md)、
+[ADR-0007](../decisions/0007-nv4-native-dual-teleoperation-deployment.md)。

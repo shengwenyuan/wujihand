@@ -4,7 +4,7 @@
 |---|---|
 | 文档编号 | 001 |
 | 迭代代号 | NERO-VIVE R1 |
-| 状态 | 实施中（NV-0/NV-1/NV-2） |
+| 状态 | 实施中（NV-0～NV-3；NV-4 已启动，Deployment/mapping 基础通过） |
 | 建立日期 | 2026-07-28 |
 | 原始需求 | 本地动态需求 [`plans/nero_vive_sim.md`](../plans/nero_vive_sim.md) |
 | 目标环境 | `lenovo-piper2`，Ubuntu 24.04、Isaac Sim 6.0.1、RTX 5090；CUDA 版本以 NV-0 实测矩阵为准 |
@@ -37,12 +37,12 @@
   -> 通过后补齐目标机环境基线
   -> VIVE 最小跟踪
   -> 双 NERO + 双物理 Hand 2 + Wuji Glove 手部遥操作数字孪生
-  -> 本机最小 server-client 单臂仿真遥操作
-  -> ROS 2 单臂仿真遥操作
-  -> ROS 2 单臂真机遥操作
-  -> 单臂精度/延迟基线与阈值冻结
-  -> ROS 2 双臂仿真遥操作
-  -> ROS 2 双臂真机遥操作
+  -> 本机最小 server-client 右臂仿真回归基线
+  -> 原生双 Tracker + 双 Glove + 双 NERO/Hand 2 Isaac 主线（无 ROS 2）
+  -> ROS 2 双流仿真等价性
+  -> ROS 2 右臂真机遥操作
+  -> 右臂精度/延迟基线与阈值冻结
+  -> 左臂隔离与 ROS 2 双臂真机遥操作
   -> 稳定性、可复现性和发布收口
 ```
 
@@ -66,12 +66,13 @@
 - NV-0 实测目标机为 Ubuntu 24.04.4、Isaac Sim 6.0.1.0 / Python 3.12.3、
   RTX 5090 / driver 595.58.03。`nvidia-smi` 的 CUDA 13.2 是驱动兼容上限；
   系统 toolkit 为 12.8.61，Isaac Warp 报告 toolkit 12.9。
-- ROS 2 Jazzy、SteamVR/OpenVR 和设备运行态由 NV-0/NV-1 补齐，不根据硬件齐全
-  直接推定软件已安装或设备已配对。
-- 后续项目 checkout、ROS workspace、缓存、派生 USD、运行 artifact 和临时工具原则上
-  均位于 `~/swy/` 下。
+- SteamVR/OpenVR 和设备运行态由 NV-0/NV-1 补齐，不根据硬件齐全直接推定软件已安装
+  或设备已连接。ROS 2 Jazzy 仍是未来真机/transport 基线，但安装、bridge 和 graph
+  资格验证推迟到 NV-5，不阻断 NV-0～NV-4。
+- 后续项目 checkout、缓存、派生 USD、运行 artifact 和临时工具原则上均位于
+  `~/swy/` 下；ROS workspace 到 NV-5 再建立。
 - 实施前记录 Ubuntu point release、kernel、NVIDIA driver、GPU、Isaac build、
-  Python、ROS 2、RMW、SteamVR/OpenVR、USB/CAN 设备和固件版本。
+  Python、SteamVR/OpenVR、USB/CAN 设备和固件版本；ROS 2/RMW 在 NV-5 记录。
 - 本计划不依赖当前设备能够访问目标机；远端盘点属于里程碑 NV-0。
 
 ### 2.2 工作台、机械臂和末端
@@ -100,23 +101,43 @@
 - 当前可用硬件为 VIVE Tracker 3.0、SteamVR Tracking Base Station 2.0、Watchman
   dongle 及连接附件；没有 HMD 或控制器。SteamVR 的 HMD requirement 已关闭，
   NV-1 不以 HMD/控制器为前提。
+- NV-4 使用两台 Base Station 2.0 和两枚操作 Tracker。两台 Base 是同一 Lighthouse
+  raw tracking space 中的共享光学参考；SteamVR/Chaperone 把该空间映射到一个活动的
+  Standing universe，应用层只保留一个 `vive_tracking`。Tracker 与 Watchman dongle
+  配对，不建立“左 Base 专属左 Tracker、右 Base 专属右 Tracker”的控制链。
+- 工作台左右两侧、略有高低差且近似共线是首个 Base 安装候选。它只描述视场布置，
+  不定义左右坐标系；最终位置由双 Tracker 重叠视场、遮挡和交叉轨迹 HIL 结果决定。
 - 首个单臂闭环默认使用一枚操作 Tracker；独立精度评估优先再在真机法兰安装一枚
   测量 Tracker。
-- 双臂操作默认一臂一枚操作 Tracker；双臂独立外部精度评估需要额外两枚法兰测量
+- NV-4 起默认仿真主线一臂一枚操作 Tracker；双臂独立外部精度评估需要额外两枚法兰测量
   Tracker；实际数量决定外部精度测试范围。
 - Tracker pogo/button 可作为调试输入候选；若当前 Tracker 附件不提供可靠按钮，
-  NV-3 前另选独立 deadman/clutch 输入。真机必须有独立、可触达的机械臂急停手段。
+  不阻断 NV-3/NV-4 自动 reference 仿真。NV-6 真机前必须选定独立 deadman/clutch
+  输入；真机还必须有独立、可触达的机械臂急停手段。
 
 ### 2.4 控制与验收策略
 
-- 首个受控对象为右侧 NERO。
-- 操作语义为 clutch-relative SE(3)；平移比例默认 `1.0`、可配置。
-- VIVE 失联、质量不足、数据陈旧或 calibration epoch 异常时，先保持最后安全目标，
-  随后失能跟踪；恢复必须重新 clutch。
+- NV-3 首个受控对象为右侧 NERO；NV-4 起默认仿真对象为左右 NERO 与左右 Hand 2。
+- 操作语义为 reference-relative SE(3)，平移比例默认 `1.0`、可配置。NV-3/NV-4
+  仿真沿用已通过的自动 reference：对应 Tracker 连续 `running` 后，以当前 Tracker /
+  当前 link7 建立 epoch，不要求回车、按钮或伪 deadman。
+- 已验证的 Workstation2 mapping v2 保持 1:1、逐轴 `±0.08 m`，只作为不可变回归基线；
+  NV-4 新建 simulation-only v3，保持相同 proper 轴映射与 1:1 scale，将 X/Y/Z
+  mapping clamp 分别扩到 `±0.4 m`。约 `0.693 m` 的最大角点位移不代表完整可达或安全
+  包络，超出可达空间时继续由现有 IK hold/reference rebuild 逻辑处理。
+- XYZ-only 与 RPY-only 的分离测试不能替代组合控制资格；NV-4 必须单独通过
+  XYZ+RPY relative SE(3) 真人复合轨迹。
+- VIVE 失联、质量不足、数据陈旧或 calibration epoch 异常时，仿真先 hold，再撤销
+  对应 reference，恢复后按当前 link7 自动重建；NV-6 以后真机则必须经显式
+  clutch/deadman 重新 arm。
 - NERO 真机首次运动通过官方 ROS 2 Cartesian `move_p` 路径，以低速、小范围方式验证。
 - CPV 不是本版本完成条件；仅在 `move_p` 无法达到已冻结指标时另行评审。
 - 性能采用“先建立基线、再冻结阈值”：安全与数据完整性从一开始就是硬 Gate；
-  p50/p95/p99 延迟、误差、抖动和掉帧阈值在单臂仿真和初始真机基线后确认。
+  p50/p95/p99 延迟、误差、抖动和掉帧阈值在 NV-4 双臂仿真和初始真机基线后确认。
+- NV-4 纯仿真计划推荐 side-local fault isolation：单侧 Tracker/IK/Glove 故障只
+  hold/disarm 对应链；SteamVR universe、mapping、Session 或 Isaac 共享故障才全局
+  暂停。该策略已经项目负责人确认并交由 ADR-0007 冻结；真机双臂仍在 NV-8 使用
+  coupled deadman。
 
 ## 3. 当前项目基线与架构差距
 
@@ -154,13 +175,23 @@
   Glove/retarget/supervision 链和双 q27 runner。coaxial-mount tabletop v14 已在
   Workstation2 通过 90/90，覆盖原 68 项 scripted physical Gate，以及桌沿安装、
   左右分侧 q7 准备位、`link6` 圆柱—小臂轴、FixedJoint anchor、Hand 2 基座盘心/
-  平行度、`link4 → link5` 小臂近水平、掌面向下和端口假设轴朝外；右侧实际 Glove
-  live 已打通。旧
+  平行度、`link4 → link5` 小臂近水平、掌面向下和端口假设轴朝外；左右实际 Glove
+  已分别完成 live，尚未在同一 Session 内同时连接和控制。旧
   corrected-J7 rotation/SE(3) 报告已降为历史证据。仍需关闭当前定义的 Tracker
   rotation 人工复验、Glove 可复现实验材料、deliberate contact/异常穿透、合并 q27
   self-collision 最终决策，以及后续 measured Workcell/attachment。
 - 当前仍没有 ROS 2 package、真机 robot adapter、通用 recorder、延迟分解或独立
   精度评估。
+- 当前 3540 行 NV-2 runner 仍以完整 scripted、单侧 Glove live、右 Tracker live
+  三个互斥分支运行，Tracker stream/role、IK 和报告硬编码为右侧。NV-4 将其收敛为
+  side-neutral 双侧 tick；详细边界见
+  [002：NV-4 原生双臂双手 Isaac 主线迭代计划](002-nv4-native-dual-arm-dual-hand-simulation-mainline-plan.md)。
+- 当前右臂真人证据只分别覆盖 XYZ-only 和冻结平移的 RPY-only；同时开启平移与旋转的
+  relative SE(3) 路径虽已存在，但尚未通过真人复合轨迹 Gate。
+- 两枚 Tracker 与两只 Glove 已配置，但这只关闭设备完整性待决项。两枚 Tracker 是否
+  来自同一个 OpenVR runtime、Standing universe、setup revision 与 `vive_tracking`
+  仍由 NV-4B 实测；两只 Glove 的 q20 路径不要求共享空间原点，但左右 identity、
+  frame、layout 与 calibration 必须独立可追溯。
 
 ### 3.3 已知资料冲突
 
@@ -188,13 +219,14 @@
 | Tracking 工具套装最小测试 | NV-1 | 设备清单、位姿日志、静止/运动/遮挡报告 |
 | 双 NERO + 物理 Hand 2 数字孪生 | NV-2 | source lock、Session、结构/物理/运动验证 |
 | Wuji Glove 遥控仿真 Hand 2 | NV-2 | Glove fixture/live contract、retarget q20、左右隔离验证 |
-| server-client 单臂数字孪生遥操作 | NV-3 | loopback contract、右臂 headless/GUI 验证 |
-| ROS 2 单臂数字孪生遥操作 | NV-4 | ROS graph、QoS/namespace contract、等价性报告 |
-| ROS 2 单臂 NERO 真机遥操作 | NV-5 | 安全清单、shadow、小范围真人操作证据 |
-| 真机精度与延迟统计 | NV-6 | 原始记录、分析产物、基线与阈值审批 |
-| 双臂数字孪生和真机验证 | NV-7 | 双流、双标定、同步/碰撞/失联验证 |
-| 成熟 pipeline 与效率分析 | NV-8 | 一键部署、soak/fault suite、最终验证报告 |
-| 新材料、skill、MCP 需求 | NV-X5，贯穿 NV-0~NV-8 | 材料缺口登记与工具形态评审记录 |
+| server-client 右臂数字孪生回归 | NV-3 | loopback contract、右臂 XYZ/GUI 生命周期与 IK 分类诊断交接基线 |
+| 默认双臂双手数字孪生主线 | NV-4 | 双 Tracker/双 Glove、四流统一 tick、隔离/故障/轻量化报告 |
+| ROS 2 双流数字孪生等价性 | NV-5 | ROS graph、QoS/namespace contract、无 ROS ↔ ROS 等价性报告 |
+| ROS 2 右侧 NERO 真机遥操作 | NV-6 | 安全清单、shadow、小范围真人操作证据 |
+| 右臂真机精度与延迟统计 | NV-7 | 原始记录、分析产物、基线与阈值审批 |
+| 左臂隔离和双臂真机验证 | NV-8 | 双流、双标定、同步/碰撞/失联验证 |
+| 成熟 pipeline 与效率分析 | NV-9 | 一键部署、soak/fault suite、最终验证报告 |
+| 新材料、skill、MCP 需求 | NV-X5，贯穿 NV-0～NV-9 | 材料缺口登记与工具形态评审记录 |
 
 ## 6. 目标架构
 
@@ -242,9 +274,13 @@ flowchart LR
     REC --> MET["Metrics / Validation Report"]
 ```
 
-ROS 2 是 transport/deployment 边界，不是 domain 类型，也不作为伪造的 simulator
-backend。Isaac 和 NERO 真机分别实现同一个执行 port；外部 SDK/ROS 消息不能越过
-adapter 边界进入 application。
+NV-4 将 Tracker→Arm 与 Glove→Hand 两条链按 `left`/`right` 各实例化一次，在同一个
+simulation tick 计算四路 decision、组合左右 q27，并在一次 physics step 前提交。
+Base Station 只参与共享 `vive_tracking`，不进入左右 application route。
+
+ROS 2 是 NV-5 之后的 transport/deployment 边界，不是 domain 类型，也不作为伪造的
+simulator backend。Isaac 和 NERO 真机分别实现同一个执行 port；外部 SDK/ROS 消息
+不能越过 adapter 边界进入 application。
 
 ### 6.2 依赖方向
 
@@ -294,18 +330,37 @@ USD 原有的 world-fixed `root_joint`、移除其 `ArticulationRootAPI`，再 a
 joint name 与 USD joint path 验证 q7/q20 分区。四个逻辑 route 与两棵物理
 articulation 是两个不同层次的事实。
 
-当前 Session v1 不足以表达跨进程 ROS graph 和真实设备。默认采用兼容性加法演进：
+当前 Session v1 不足以表达跨进程输入编排、ROS graph 和真实设备。Session 继续作为
+五层场景与资产的唯一组合根；默认采用兼容性加法演进：
 
 1. 保留 Session v1 解析和现有 golden。
-2. 增加 device/execution binding，表达 NERO 序列号、CAN interface、固件、adapter
-   和反馈能力。
-3. 增加 `DeploymentSpec v1`，引用 producer/executor Session，声明：
-   - node/process；
-   - stream ID 与左右臂路由；
-   - transport、ROS namespace/domain/remap/QoS；
-   - supervisor、calibration、recorder 和 safety profile；
-   - shared-host port/domain ownership。
-4. 多臂配置以 instance/stream ID 显式映射。
+2. NV-4 增加 middleware-neutral 的 `DeploymentSpec v1`，恰好引用一个
+   ResolvedSession，只声明 process/producer lifecycle、本机 Tracker/Glove
+   binding、stream endpoint、tracking setup、calibration artifact 和输出位置。
+   Session v1 的 `runtime.control_layouts` 继续拥有 route/layout，
+   `runtime.transport_contract` 独立选择 composite wire contract；唯一的
+   `runtime.compatibility_profile` 升为 native-dual-teleop composite leaf，通过引用
+   复用现有 tabletop qualification profile，并引用 relative mapping/retarget、
+   IK/supervisor、freshness 和 recorder policy；
+   DeploymentSpec 只能把本机事实绑定到已声明的 logical role/policy ID，不能复制
+   或重定义五层数值。
+   默认提交一个 `native_dual_live` 以及 `left_single_live`、`right_single_live`
+   两个诊断 spec；单侧 spec 仍引用同一个双侧 Session，非活动侧绑定显式 hold/rest
+   fixture，不遗漏 route，也不把 `side` 重新做成 runner 分支。
+3. ADR-0007 显式修订 ADR-0003 第 4 节：多进程 live run 从 DeploymentSpec 启动，
+   process instance/local binding 不再由 Session 定义；Session 仍是场景/资产组合根并
+   拥有五层运行、传输和控制合同。这是第五层与部署编排边界的显式修订，不是隐藏的
+   第六资产层。
+4. NV-5 发布 `DeploymentSpec v2`，以加法方式增加：
+   - ROS node/executable binding；
+   - ROS namespace/domain/remap/QoS；
+   - ROS command ownership 与 recorder transport binding；
+   - shared-host ROS domain ownership。
+   同时提供 v1→v2 migration/hash 兼容测试，不向 strict v1 原地增加未知字段。
+5. NV-6 真机前增加独立、版本化的 local `DeviceExecutionBinding`，表达 NERO
+   序列号、CAN interface、固件、adapter 和反馈能力；DeploymentSpec v2 只引用其
+   logical binding ID，不为这些本机字段原地扩 schema。
+6. 多臂配置以 instance/stream ID 显式映射。
 
 ### 6.4 Python 版本方案
 
@@ -316,7 +371,7 @@ NV-0 第 0 步已选择并验证以下方案：
 - Isaac Sim 6.0.1 与系统 ROS 2 Jazzy 使用 Python 3.12。
 - Isaac vendor environment 不安装项目依赖；runner 从受控 checkout 加载项目源码，
   避免用项目的 NumPy/SciPy 约束覆盖 Isaac 自带 ABI。
-- 跨进程能力仍通过版本化 contract/DeploymentSpec 编排，不共享环境内 SDK 对象。
+- 跨进程能力仍通过版本化 contract/DeploymentSpec family 编排，不共享环境内 SDK 对象。
 
 ## 7. Canonical 契约预案
 
@@ -324,8 +379,9 @@ NV-0 第 0 步已选择并验证以下方案：
 
 | 契约 | 最低内容 |
 |---|---|
-| `TrackedRigidBodySample` | schema、stream/device/serial/role、sequence、tracking frame、position m、active quaternion wxyz、tracking state/quality、device/host time、clock domain |
-| `ClutchEvent` | source、button/deadman identity、press/release edge、host time、target stream、epoch request |
+| `TrackedRigidBodySample v2` | schema、stream/device/serial/role、producer instance、transport epoch、tracking setup revision、sequence、tracking frame、position m、active quaternion wxyz、tracking state/quality、device/host time、clock domain |
+| `TrackingLifecycleEvent` | stream/producer instance、old/new transport epoch、tracking setup revision、start/rebind/reset/stop 原因、host monotonic time |
+| `ClutchEvent`（NV-6+） | source、button/deadman identity、press/release edge、host time、target stream、epoch request |
 | `CalibrationSnapshot` | calibration ID、tracker serial、operator anchor、robot TCP anchor、axis map、translation scale、frame chain、采样窗口、残差、配置 hash |
 | `CartesianPoseIntent` | stream/side、target frame、position、quaternion、source time、calibration ID、quality、mapping version |
 | `CartesianPoseCommand` | 监督后的 TCP target、可选 twist/acceleration limits、sequence、deadline、safety profile、target instance |
@@ -337,7 +393,12 @@ NV-0 第 0 步已选择并验证以下方案：
 | `HandFeedback` | side/instance、Hand 2 q20 position/velocity、simulation time、fault/status |
 | `BimanualCommandEnvelope` | group sequence、左右 stream command、最大允许 skew、coupling policy、deadline |
 | `TimingTrace` | acquire、map、supervise、publish、receive、send-to-backend、feedback 各阶段单调时间 |
-| `RunManifest` | source/config/session/deployment hash、OS/GPU/driver/Isaac/ROS/RMW/SteamVR、设备序列号、固件、标定、阈值、通道和 artifact checksum |
+| `RunManifest` | source/config/session/deployment/local-binding hash、环境与启用能力版本、设备 identity hash、tracking setup、标定、阈值、endpoint/channel 和 artifact checksum |
+
+`RunManifest` 字段按启用能力出现：NV-4 至少记录 OS/GPU/driver/Isaac/SteamVR、
+DeploymentSpec、设备 identity、tracking setup/calibration 与 artifact；ROS/RMW
+只在 NV-5 以后必填，NERO firmware/CAN 只在 NV-6 以后必填。未启用能力保持显式
+`null/not-applicable`，不得伪造版本值。
 
 ### 7.1 契约不变量
 
@@ -347,8 +408,13 @@ NV-0 第 0 步已选择并验证以下方案：
   并明确 ZYX convention 和奇异区处理。
 - `source_time`、host monotonic time、ROS time、simulation time 和 wall clock 不混用。
 - 同一 calibration ID 只对应一个 tracker anchor、robot anchor 和 axis/scale mapping。
-- 新 calibration epoch 的首个命令必须是 identity-relative clutch；旧 epoch 数据拒绝。
-- sequence 必须在 session/stream 内单调；跨进程重启用新 session UUID。
+- 新 calibration epoch 的首个仿真 intent 必须由连续 `running` 后的 identity-relative
+  自动 reference 产生；NV-6+ 真机必须由显式 clutch 建立。旧 epoch 数据拒绝。
+- sequence 必须在 stream/transport epoch 内单调。只有受 Deployment launcher 管理的
+  lifecycle event 可建立新 epoch 并重置 receiver sequence；未管理的 sequence 回退
+  fail closed。
+- receiver 只接受与当前授权 `transport_epoch` 和 `tracking_setup_revision` 一致的
+  sample；新 epoch/revision 建立后迟到的旧 datagram 必须拒绝。
 - stale command 不排队补发；command deadline 过期即拒绝。
 - `ArmFeedback.effort` 的含义按 NERO/ROS 原始合同记录，不能推断为外部接触力。
 - Glove 的 `hand_joint_angles` 是 21 DoF 人手模型结果，不是 Hand 2 q20；NV-2 使用
@@ -356,15 +422,23 @@ NV-0 第 0 步已选择并验证以下方案：
   retargeter 生成 q20。
 - 四个 Session control group 均显式 commanded；不存在遗漏 route、runner 特判或
   “默认全零手指命令”暗中驱动。
-- Glove/retarget 数据 stale、低置信度、错误 side、错误 layout 或非 finite 时，
-  对应手进入 hold/reject；不会影响未配置为 coupled 的 NERO q7 scripted smoke。
+- Glove/retarget 数据 stale、错误 side、错误 layout 或非 finite 时，对应手进入
+  hold/reject；低置信度按冻结的 confidence policy 标记 degraded/hold/reject，不把
+  官方 `0.90` 说明静默解释成所有 skeleton 帧的统一硬拒绝阈值。该侧手部故障不会
+  影响未配置为 coupled 的 NERO q7。
+- 当前实现/live 报告的 `<0.90 → DEGRADED` 与已接受 ADR-0006 的 `<0.90 → reject`
+  存在明确冲突。项目负责人已确认保留当前 live 语义；ADR-0007 必须显式
+  supersede ADR-0006 的 confidence 阈值段落。
 
-### 7.2 最小 server-client 与 ROS 2 映射
+### 7.2 原生双侧运行与后续 ROS 2 映射
 
 - NV-3 首选 strict JSON + IPv4 loopback UDP，延续现有小型、可测、无 broker 的模式。
 - 新协议使用独立 schema 名，不扩写 `wujihand.hand_command.v2`。
 - datagram 设严格字段集合、大小上限、finite/unit/frame/layout/sequence/time 校验。
-- NV-4 将相同语义映射为 ROS 2 IDL；标准 `PoseStamped` 可作为观察接口，但不能单独
+- NV-4 继续使用 canonical contract 和 loopback UDP，不建立 ROS graph。双 Tracker
+  使用显式的左右 serial/stream/role/endpoint；双 Glove 保持 side-specific canonical
+  observation 和 q20 layout。
+- NV-5 将相同语义映射为 ROS 2 IDL；标准 `PoseStamped` 可作为观察接口，但不能单独
   承载 quality、calibration、deadline 和 safety state。
 - raw pose/高频 command 使用 `KEEP_LAST(1)`、有界 lifespan/deadline，并基于实测决定
   best-effort 或 reliable；不得因 reliable backlog 执行陈旧命令。
@@ -397,9 +471,10 @@ workcell_world
 虚拟 Hand 2 的 `hand_base` 是法兰下的物理 attachment；手臂 target frame 仍为
 NERO flange/TCP，手部 target 则是独立 q20 layout。两个 target 不互相冒充。
 
-### 8.2 Clutch-relative SE(3)
+### 8.2 Reference-relative SE(3)
 
-按下 clutch 时记录：
+建立 reference 时记录；NV-3/NV-4 由连续 `running` 自动触发，NV-6+ 真机由显式
+clutch/deadman 触发：
 
 - 操作 Tracker anchor `T_tracking_tracker_anchor`；
 - 当前安全 TCP anchor `T_base_tcp_anchor`；
@@ -423,13 +498,17 @@ T_base_tcp_intent = T_base_tcp_anchor * delta_robot
 - linear/angular velocity；
 - acceleration/jerk；
 - reachable/IK/singularity；
-- self/inter-arm/workcell clearance；
-- tracker quality、age 和 deadman；
+- tracker quality、age，以及 NV-6+ 真机 deadman；
 - robot status、mode 和 feedback freshness。
 
-### 8.3 安全状态机
+NV-4 对 self/inter-arm/external-collider 只做 scene-adapter detection/report 与
+qualification Gate，不在 live tick 中主动改写 q7 或进行避碰规划。NV-6 对 measured
+workcell 的静态 keep-out 启用 supervisor，NV-8 再冻结双臂 active clearance/coupled
+执行策略。
 
-建议状态：
+### 8.3 真机安全状态机（NV-6+）
+
+真机建议状态：
 
 ```text
 DISARMED
@@ -445,19 +524,31 @@ DISARMED
 - clutch 必须在 Tracker 稳定、机器人反馈新鲜、目标位于安全包络且 deadman 有效时建立。
 - `DEGRADED_HOLD` 只短暂保持最后安全目标，不做“自动回零”。
 - 超过失联阈值、按钮释放、calibration 改变或 robot fault 后进入 `DISARMED`。
+- SteamVR reset 或 Base/room setup 变化使当前 tracking setup revision、全局 mapping
+  calibration ID 和左右 reference epoch 一起失效；重新验证 mapping 后才能重新
+  clutch。
 - 急停、碰撞、通信异常或控制模式异常进入 `ESTOP_LATCHED`；恢复需要人工检查，
   不能由新数据包自动清除。
-- 数值阈值在 NV-3/NV-4 基线后冻结；首次真机前必须写入显式 safety profile。
+- 数值阈值在 NV-4C/E 左右独立与四流并发基线后冻结；首次真机前必须写入显式
+  safety profile。
+
+NV-3/NV-4 仿真不伪造上述 deadman 状态机，沿用
+`WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE`：GUI 生命周期独立，
+稳定恢复后以当前 link7 自动建立新 reference。NV-5 ROS 仿真必须保持同一语义。
 
 ### 8.4 双臂默认安全语义
 
 - 左右臂各自拥有 supervisor、calibration、feedback watchdog 和 workspace。
-- 双臂同时运行时默认使用 coupled deadman：任一操作流丢失或任一机器人重大 fault，
-  两臂先 hold 并共同 disarm。
-- 单臂独立模式只用于隔离调试，必须显式选择，不能成为双臂默认。
-- 两臂命令进入 `BimanualCommandEnvelope`，记录 command skew；超过阈值时不发送半组
-  新命令。
-- inter-arm keep-out 和最小间距在仿真中先验证；无相机版本不得声称具备动态障碍避让。
+- NV-4 纯仿真已冻结 side-local isolation：单侧 Tracker/IK 故障只 hold/disarm
+  对应臂，单侧 Glove 故障只影响对应 Hand 2；SteamVR universe、全局 mapping、
+  Session 或 Isaac fault 才共同暂停。ADR-0007 负责正式记录该决策。
+- NV-4 每个 physics tick 记录左右与 arm/hand command skew，但不为了仿真新增 ROS
+  bundle 或网络原子消息。
+- NV-8 双臂真机默认使用 coupled deadman：任一操作流丢失或任一机器人重大 fault，
+  两臂先 hold 并共同 disarm；恢复必须重新 arm。
+- NV-4 先以 detection/report-only 验证 inter-arm contact/penetration；NV-8 真机前再
+  把批准的 inter-arm keep-out 和最小间距提升为 runtime supervision。无相机版本不得
+  声称具备动态障碍避让。
 
 ## 9. 配置、来源与 artifact 计划
 
@@ -488,16 +579,24 @@ DISARMED
 
 - NV-2 功能仿真 Gate 可使用显式 `simulation_nominal` 桌面和 mount，仅用于装配、
   命令隔离与基础物理 bring-up，不支持物理精度、间隙或安全包络结论。
-- 桌面尺寸、台高、两底座位姿、安全边界和观察相机的正式 revision 均来自现场测量表，
-  并在 NV-5 前替换 nominal revision。
+- 桌面尺寸、台高、两底座位姿、安全边界和观察视角/相机语义 frame 的正式 revision
+  均来自现场测量表，并在 NV-6 真机前替换 nominal revision；这不表示本版本安装
+  视觉传感器。
 - 测量原始记录、工具、单位、测量人和日期进入 provenance。
-- 标称场景用于资产 bring-up；双臂/精度结果使用 measured workcell revision。
+- 标称场景用于资产 bring-up 与 NV-4 双臂功能仿真；NV-7 精度结论和 NV-8 双臂真机
+  使用现场 measured workcell revision。
 
 ### 9.4 本地敏感配置
 
 - Tracker serial、NERO serial、CAN interface、ROS_DOMAIN_ID、个人路径和现场 IP 放入
   `configs/local/` 或环境变量。
 - 提交内容使用占位 schema、匿名化映射或设备 identity hash。
+- NV-4 的 committed DeploymentSpec 只保存 logical side/role、process/endpoint
+  binding、tracking setup/calibration 引用和输出位置；完整 Tracker/Glove identity
+  由 local binding 提供。relative mapping、retarget、IK/supervisor、freshness 和
+  recorder policy 由 Session 唯一 native-dual-teleop compatibility leaf 引用；
+  transport contract 仍是 Session 独立字段。DeploymentSpec 只引用 logical
+  role/policy ID。各内容 hash 进入 RunManifest，且不复制到前四层。
 
 ## 10. 里程碑与 Gate
 
@@ -523,7 +622,7 @@ DISARMED
 判定规则：
 
 - 两项都通过：记录 `PROCEED`，进入 0B。
-- 任一项不通过：记录 `PAUSED`，立即停止 NV-0 后续工作及 NV-1~NV-8；把失败证据、
+- 任一项不通过：记录 `PAUSED`，立即停止 NV-0 后续工作及 NV-1～NV-9；把失败证据、
   影响范围和少量可选路线提交给项目负责人，对齐后再更新计划。此时不直接修改
   Python 版本约束、兼容代码或环境架构。
 
@@ -531,11 +630,10 @@ DISARMED
 
 1. 盘点 Ubuntu、kernel、NVIDIA driver、GPU、CUDA、Isaac、磁盘、USB 和显示会话。
 2. 运行 Isaac Compatibility Checker 和空场景 GUI/headless 自检。
-3. 在 `~/swy/` 下建立经 0A 确认的项目环境、ROS 2 Jazzy workspace、派生资产和
-   artifact 目录；安装并核对 ROS 2 Jazzy、RMW 和 DDS。
-4. 验证 Isaac ROS bridge，盘点 SteamVR/OpenVR、VIVE 设备、两台 NERO、USB-CAN、
-   固件和连接状态；NERO
-   盘点保持只读。
+3. 在 `~/swy/` 下建立经 0A 确认的项目环境、派生资产和 artifact 目录。ROS 2 Jazzy
+   workspace、RMW 和 DDS 推迟到 NV-5。
+4. 盘点 SteamVR/OpenVR、VIVE 设备、两台 NERO、USB-CAN、固件和连接状态；NERO
+   盘点保持只读，不验证 Isaac ROS bridge。
 5. 恢复 source lock，执行商定的 fast、ruff、mypy 基线。
 
 **输出**
@@ -543,20 +641,21 @@ DISARMED
 - `docs/validation/<date>-isaac-6.0.1-python-3.12-compatibility.md`，明确
   `PROCEED` 或 `PAUSED`。
 - 环境清单和版本矩阵。
-- 共享机目录、端口、ROS domain 和 artifact 约定。
+- 共享机目录、非 ROS 端口和 artifact 约定。
 - NERO/VIVE 只读设备清单。
 - `docs/validation/<date>-lenovo-piper2-baseline.md`。
 
 **Gate NV-0**
 
 - 0A 明确为 `PROCEED`。
-- 经确认的项目、Isaac 和 ROS 环境可分别启动，fast 基线无未解释失败。
+- 经确认的项目和 Isaac 环境可分别启动，fast 基线无未解释失败。
 - 关键环境、设备和外部来源已有版本记录。
 
 **材料与工具评审**
 
 优先请求目标机安装记录、Isaac 安装来源、两台 NERO 固件、USB-CAN 型号和工作台资料。
-若环境核验会重复执行，再评估 `isaac6-ros2-jazzy-environment-check` skill。
+若环境核验会重复执行，再评估 `isaac6-environment-check` skill；ROS/Jazzy 检查到
+NV-5 再决定是否扩展。
 
 ### NV-1：VIVE 最小跟踪垂直切片
 
@@ -568,13 +667,15 @@ DISARMED
 **工作**
 
 1. 安装并固定 SteamVR/OpenVR 版本，在关闭 HMD requirement 的模式下完成
-   Base Station 2.0 与 Tracker/dongle 配对。
+   Tracker 与 Watchman dongle 配对，并确认 Base Station 2.0 作为共享 tracking
+   reference 出现在同一个 SteamVR Standing universe。
 2. 记录 Base Station 布局、反光源、遮挡区和 SteamVR room/tracking origin。
 3. 以 serial 为设备主键、role 为可变配置，禁止依赖 OpenVR 临时 device index。
 4. 实现/验证 read-only VIVE input adapter，输出 `TrackedRigidBodySample`。
 5. 采集静止、慢速平移、绕三轴转动、快速运动、部分遮挡、完全丢失和重新捕获样例。
 6. 核对 HTC Tracker frame、OpenVR frame 与项目 active `wxyz` 约定。
-7. 验证 controller/pogo/button 事件，选择仿真 clutch 与真机 deadman 的候选输入。
+7. 验证可用的 controller/pogo/button 事件并记录能力；它只作为调试输入和 NV-6
+   真机 deadman 候选，缺失不阻断 NV-3/NV-4 自动 reference。
 8. 统计采样频率、stationary jitter、短期 drift、dropout、reacquisition、timestamp
    monotonicity 和 CPU 占用。
 9. 保存脱敏 fixture 和 golden，后续无硬件测试使用录制数据。
@@ -592,7 +693,7 @@ DISARMED
 - position/quaternion finite、单位/frame/时间域明确。
 - 三轴方向人工检查通过。
 - 丢失和重捕获被显式报告，不产生伪造的连续姿态。
-- clutch/deadman 事件可与 pose stream 对齐。
+- 可用按钮事件可与 pose stream 对齐；无按钮配置被明确记录且不伪装为 deadman。
 
 **材料与工具评审**
 
@@ -646,9 +747,9 @@ observation 与 Hand 2 retargeting 驱动。
   `0.005 rad` 容差内有界收敛。该证据没有引入 deliberate unknown
   penetration/contact probe，不能替代后续接触与近景资格验证。
 - Wuji SDK 2026.7.21 已在 Python 3.12 环境验证左右 `21×3 → q20` 求解；专用网口
-  `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`，右侧 live Glove→Isaac 已现场执行，
-  最近一次 2400 帧中接收 2399 帧、拒绝 0 帧；identity、正式 calibration revision
-  与脱敏 replay 仍待冻结。
+  `enx6c1ff7cd0e76` 已配置 `192.168.1.10/24`。左右 live Glove→Isaac 已分别现场
+  执行，各 9000 帧中接收 8999 帧、拒绝 0 帧；同时连接/控制、identity、正式
+  calibration revision 与脱敏 replay 仍待冻结。
 - 当前 link6 Binding 表示对齐和 Hand 2 基座同轴装配已通过 profile、五层 Session、
   全仓测试与 Workstation2 Isaac tabletop v14；Workcell-owned 接口近景已冻结。旧
   corrected-J7 Lula 上的 rotation/SE(3) 结果不再代表当前定义，需使用固定来源
@@ -669,7 +770,8 @@ observation 与 Hand 2 retargeting 驱动。
 
 **工作**
 
-1. 锁定并审计 NERO URDF/mesh、NERO 手册、SDK 和 ROS driver 来源。
+1. 锁定并审计 NERO URDF/mesh、NERO 手册和 SDK 来源；ROS driver 精确来源推迟到
+   NV-5/NV-6，不作为 NV-2 功能仿真 Gate。
 2. 通过固定 recipe 导入 NERO USD，验证 scale、link/joint、axis、limit、inertia、
    collision、articulation root 和 tool flange。
 3. 固定本体二维码页、手册、URDF、SDK 来源；把 1.5 kg/J2 `±102°` 与
@@ -727,15 +829,16 @@ observation 与 Hand 2 retargeting 驱动。
 - 左右 q20 fixture 可分别完成逐指/手型小幅运动，另一只手与两臂 q7 不受影响；
   feedback finite 且在 Hand 2 canonical limits 内。历史 scripted physical v2 已覆盖
   双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v14 重验。
-- 可用 Wuji Glove 的 `hand_skeleton` live 流至少完成一侧
+- Wuji Glove 的 `hand_skeleton` live 流已分别完成左右
   `Glove → canonical 21×3 → Hand2 retarget q20 → Isaac` 自由空间 smoke；
-  另一侧路径用相同 contract/fixture 验证。若现场有双侧 Glove，则补双侧 live smoke。
-  当前右侧 live 已执行；另一侧继续由相同 contract/fixture 覆盖，设备 identity、
-  正式 calibration revision 和脱敏 replay 待冻结。
-- stale、低置信度、错误 side/layout、NaN 或 retarget 失败不得产生新 q20 command。
-  无硬件 controller/composition 测试已证明这些输入不会创建新的 input-derived
-  `HandIntent`；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回
-  rest。真人 live failure injection 随 live Gate 补验。
+  两次运行各接收 8999/9000 帧、拒绝 0 帧。该证据只证明单侧分别运行，不证明两只
+  Glove 同时连接或四流联合控制；同时运行进入 NV-4 Gate。设备 identity、正式
+  calibration revision 和脱敏 replay 仍待冻结。
+- stale、错误 side/layout、NaN 或 retarget 失败不得产生新 q20 command。低 confidence
+  的 finite 完整帧按当前行为记录为 degraded，`0.90` 作为 success 阈值；是否进一步
+  hold/reject 在 NV-4A 对齐后冻结。该实现事实尚未 supersede ADR-0006 的旧 reject
+  条款；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回 rest；
+  真人 live failure injection 随 live Gate 补验。
 - 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v14 已通过。
 - 两底座位于同一桌沿，左右 `link6` 圆柱轴沿 `link4 → link5` 小臂方向，Hand 2
   指向桌内且掌面朝下；
@@ -758,20 +861,23 @@ Hand 2 装配示意、Glove side/序列号、Wuji SDK 版本和有效标定产�
 版本复用，评估 `qualify-wuji-glove-input` skill。只有资料授权、更新和持续检索需求
 达到阈值时，再建设对应只读 MCP。
 
-### NV-3：最小 server-client 右臂仿真遥操作
+### NV-3：最小 server-client 右臂仿真回归基线
 
 **目标**
 
 在 ROS 2 之前建立最小、可测试的 Tracker producer → loopback transport → Isaac
-consumer 右臂闭环，冻结 canonical Cartesian 语义。
+consumer 右臂闭环，冻结 canonical Cartesian 语义和已验证生命周期；它是 NV-4
+双侧化的回归基线，不再扩展成长期单臂模式树。
 
-**执行状态（2026-07-29，IN_PROGRESS）**
+**执行状态（2026-07-29，HANDOFF_BASELINE / 余项转入 NV-4）**
 
 - 真人 Tracker → 右 NERO 的 x/y/z 方向已在 Workstation2 GUI 人工通过；roll/pitch/yaw
   仍待固定来源 Lula 下复验。
 - Workstation2 simulation-only calibration 已升级到
   `vive_tracker_workcell_workstation2_v2`：平移增益为 `1.0`，轴映射、rotation
   scale 和逐轴 `±0.08 m` target 限幅不变；旧 v1 作为 `0.25` 历史实验来源保留。
+  v2 在 NV-4 中保持不可变，只作为回归基线；默认 live 将由新 v3 承载逐轴
+  `±0.4 m`。
 - GUI consumer 已取消 stdin/回车阻塞，并把窗口生命周期与
   `WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE` 控制状态解耦。
   持续失联或连续 IK 失败只撤销当前 reference epoch；恢复时以右臂当前 link7 pose
@@ -784,40 +890,49 @@ consumer 右臂闭环，冻结 canonical Cartesian 语义。
   failure 和 UDP reject 均为 0。interactive report v2 将继续记录 target step/rate、
   solver candidate/FK residual、canonical 仿真 q7 限位余量和 supervisor
   clamp/rate-limit，以关闭 XYZ 的 reachability/singularity/joint-limit 归因。
+- 当前真人 XYZ 与 RPY 是分离测试；未验证平移和旋转同时启用的 relative SE(3)
+  复合轨迹，明确转入 NV-4A/C。
 - 当前 UDP receiver 在单次生命周期内仍要求 sequence 严格递增。producer restart
   后显式 transport epoch、完整 recorder/feedback contract、RPY 人工测试及其 fault
   matrix 尚未完成，因此 NV-3 不升级为通过。
 
 **工作**
 
-1. 冻结 `TrackedRigidBodySample`、`ClutchEvent`、`CartesianPoseIntent`、
-   `CartesianPoseCommand`、`ArmFeedback` 和 `ArmSafetyDecision` schema。
+1. 冻结 `TrackedRigidBodySample`、reference lifecycle、`CartesianPoseIntent`、
+   `CartesianPoseCommand`、`ArmFeedback` 和 `ArmSafetyDecision` schema；为 NV-6+
+   保留 `ClutchEvent`，但不在当前仿真伪造输入。
 2. 新建独立于现有 Hand 2 v2 的 arm pose wire contract。
 3. 实现 relative SE(3) mapping、axis mapping、translation scale 和 calibration epoch。
-4. 建立 Cartesian supervisor：freshness、quality、deadman、workspace、step、
-   velocity/acceleration、feedback、IK/reachability/singularity 和 hold/disarm。
+4. 建立 Cartesian supervisor：freshness、quality、reference epoch、workspace、step、
+   velocity/acceleration、feedback、IK/reachability/singularity 和 hold/disarm；
+   deadman Gate 留给 NV-6+。
 5. Isaac adapter 消费 canonical Cartesian command，在仿真内求解 NERO q7。
 6. 使用录制 Tracker fixture、合成轨迹和真人 Tracker 三种 producer。
 7. 建立 non-blocking timing/command/feedback 记录；队列溢出必须计数。
-8. 先 headless、后 GUI；先静态 clutch、后三轴/三向小幅运动，再组合轨迹。
+8. 先 headless、后 GUI；先静止自动 reference、后三轴/三向小幅运动，再组合轨迹。
 9. 执行 malformed、reordered、duplicate、future、stale、lost-tracking 和 consumer
    restart 故障测试。
 
 **输出**
 
-- ADR：canonical Cartesian contracts、clutch 和 safety state machine。
+- ADR：canonical Cartesian contracts、仿真自动 reference 与未来真机 clutch 边界。
 - 受测 loopback sender/receiver。
-- 右臂 Isaac teleop Session/Deployment 草案。
+- 右臂 canonical/runtime 回归 artifact，以及形成 NV-4 DeploymentSpec 的输入。
 - 合成和真人 Tracker 仿真验证报告。
 
-**Gate NV-3**
+**NV-3 → NV-4 handoff sub-Gate**
 
-- 启动时不 clutch 不运动；释放 deadman 或失联后按规则 hold/disarm。
-- 新 epoch 首包、sequence、deadline、frame 和 quaternion 校验 fail closed。
-- 小幅 x/y/z 与 roll/pitch/yaw 方向全部人工通过。
-- unreachable、singular 或越界 target 不送入 articulation。
-- command/feedback 全程可追溯到输入 sample 和 calibration ID。
-- 形成第一版 sim latency/jitter/dropout 基线，提交 NV-4/NV-5 阈值评审。
+- Tracker 未连续 `running`、尚未建立 reference 时不运动；失联后按规则 hold 并撤销
+  reference。
+- 已有 stream/identity/sequence/deadline/frame/quaternion 校验保持 fail closed。
+- 右侧小幅 x/y/z 方向人工基本通过；reference 生命周期和 GUI persistent 行为可复验。
+- tracking、IK、limit 和 supervisor 原因具备分类诊断，不再用 GUI 退出或回 home 恢复。
+- roll/pitch/yaw 人工闭环、managed producer restart、完整 recorder/feedback
+  contract、XYZ+RPY 组合控制和 IK release threshold 明确转入 NV-4A/B/C/E，不伪装为 NV-3
+  已通过。
+
+以上交接子 Gate 有证据后即可进入 NV-4A；NV-3 的转移余项由 NV-4 Gate 关闭，不要求
+继续维护一个正式单臂 live 产品入口。
 
 **材料与工具评审**
 
@@ -825,15 +940,163 @@ consumer 右臂闭环，冻结 canonical Cartesian 语义。
 manipulator controller 文档。若 Cartesian contract 的生成/校验会被多个输入设备复用，
 评估制作 `scaffold-teleop-contract` skill。
 
-### NV-4：ROS 2 Jazzy 右臂仿真遥操作
+### NV-4：原生双 Tracker + 双 Glove 双臂双手 Isaac 主线
 
 **目标**
 
-把 NV-3 的 canonical pipeline 映射到 ROS 2 Jazzy，并保持安全语义和可测行为等价。
+以现有双 q27 五层组合为基础，新增专用 live Session 并升级为默认双臂双手数字孪生
+主线：两枚 Tracker 分别控制左右 NERO 的 relative SE(3)，两只 Glove 分别控制左右
+Hand 2；四条链在一个 simulation tick 汇合。qualification Session 保持不变，两个
+Session 复用同一 Assembly、Workcell、实例 Binding 与四 route。整个阶段保持
+ROS-free。
+
+详细实施计划、轻量化边界和已确认决策见
+[002：NV-4 原生双臂双手 Isaac 主线迭代计划](002-nv4-native-dual-arm-dual-hand-simulation-mainline-plan.md)。
+
+**当前进度（2026-07-29）**
+
+- NV-4B～E 的非人工软件实现已完成：strict Deployment/local binding、native-dual
+  live Session/profile、单 OpenVR owner 双 stream、受管 epoch/revision、
+  side-neutral 双臂、双 Glove composition 和统一四流 tick 均已落地。
+- 默认、左单侧、右单侧三个 Deployment 复用同一个 live Session；单侧 spec 的
+  非活动侧仍为显式 hold/rest fixture。
+- 本机无硬件回归为 `606 passed, 4 skipped, 11 deselected`；Workstation2 隔离副本
+  为 `608 passed, 2 skipped, 11 deselected`，两端 Ruff/mypy 通过。
+- Workstation2 已部署到 `/home/lenovo/swy/wujihand_nv4`，原有脏目录未覆盖。右侧
+  Deployment 在 `verify_artifacts=True` 下闭合；默认双侧因本机 binding 缺少
+  `tracker_left` 明确失败。
+- 当前 HIL 阻塞是 SteamVR 仅枚举一枚且状态为 `disconnected` 的 Tracker；两只
+  Glove 可同时连接/订阅/关闭，但有界预检未收到 skeleton 帧。未启动 Isaac GUI，
+  未生成任何真实机械臂命令。
+- NV-4F 的真人四流验证、故障/遮挡/组合 SE(3)、旧分支删除和 runner 轻量化仍未完成。
+
+**进入条件**
+
+- NV-1 中 VIVE canonical contract、`running/calibrating/lost` 语义和单 Tracker
+  fixture 可复用。
+- NV-2 中两棵 q27、四 route、54 logical DoF 及左右 Glove 单独 live 子 Gate 已通过。
+- NV-3 当前右臂 XYZ、reference lifecycle 和 IK 诊断形成回归基线；RPY 与 IK 失败率
+  作为 NV-4A 明确未关闭项进入，不伪装为通过。
+- 现场已配置两枚 Tracker、各自 Watchman dongle 与两只 Glove；默认主线硬要求
+  `2 Tracker + 2 Glove`，但设备配置不替代共同 tracking universe 与双连接资格。
 
 **工作**
 
-1. 冻结 ROS package/IDL 布局和 DeploymentSpec。
+1. 固定当前 Session/source/mapping、右臂行为和左右 Glove 单独 live 证据；保持
+   mapping v2 文件与 hash 不变，并依次重验右臂 XYZ-only、RPY-only、XYZ+RPY
+   relative SE(3) 复合轨迹。
+2. 用一个 middleware-neutral `DeploymentSpec v1` 恰好引用专用五层 live
+   ResolvedSession，只拥有 process/managed producer lifecycle、左右本机 device/
+   UDP endpoint、tracking setup/calibration artifact 与输出位置。该 Session 与现有
+   qualification Session 复用前四层和四 route，并以单一
+   `runtime.compatibility_profile` 引用 native-dual-teleop composite leaf；该 leaf
+   再引用既有 tabletop qualification 与 mapping/retarget/IK/supervisor/freshness policy；
+   `runtime.transport_contract` 独立选择 composite wire contract。补 strict loader、
+   reference closure、stable hash 和 golden，不增加第二 profile 字段，也不与
+   DeploymentSpec/local binding 重复数值。
+3. 验证两台 BS2 在同一 SteamVR Standing universe、不同 channel 和同一操作体积内
+   工作；左右/高低/近共线只作为首个视场候选。两枚 Tracker 同时走过工作区左、
+   中央、右侧与交叉轨迹，并分别遮挡每台 Base，记录 dropout/calibrating/reacquisition。
+   同时验证两枚 pose 来自同一 runtime owner、setup revision 与规范
+   `vive_tracking`；不一致即暂停，不增加双 tracking world 拼接补丁。
+4. 主 runner 是唯一 Deployment launcher/owner，通过独立 runtime process supervisor
+   启动、监控和关闭 OpenVR producer，日常不要求第二个手工 producer 命令。最终由一个
+   producer 建立两条 serial-addressed Tracker stream；NV-4B 可由同一 launcher 暂管
+   两个旧 producer 迁移，但不能作为最终 Gate 形态。共享一个
+   `vive_tracking` delta axes → `workcell_world` delta axes mapping，左右
+   reference/solver/supervisor 独立。当前 v2 不是绝对世界外参。
+   `TrackedRigidBodySample v2` 和 `TrackingLifecycleEvent` 显式携带 transport epoch /
+   tracking setup revision，receiver 不靠 sequence 猜测 producer 生命周期。
+   新建 versioned mapping v3，沿用 v2 proper rotation/rotation policy，translation
+   scale 为 `1.0`、X/Y/Z 各 `±0.4 m`；其 `simulation_only` scope 和约
+   `0.693 m` 最大角点位移进入 manifest。
+5. 把右臂 live 提取为 side-neutral arm controller，分别创建左右 Lula solver；
+   在 v3 下分别完成左右 XYZ-only、RPY-only、XYZ+RPY 复合轨迹，再验证双 Tracker
+   同时运动和 IK 故障归因。
+6. 在同一 SDK manager 生命周期内建立左右 Glove adapter/retarget/supervisor；
+   完成左右分别及同时 q20 控制。
+7. 每个 physics tick 先把四条输入链分别转为有效的 `new/hold/rest/disarm` action，
+   再形成左右 q27 target 并在同一 tick 提交，最后执行一次 `world.step()`；单侧坏帧
+   不阻断另一侧，记录 sample age、command/feedback skew 和所有 hold/rebuild 原因。
+8. 将 scripted geometry/contact/reset/screenshot/headless 资格逻辑移出 live 主线，
+   复用同一 scene adapter；为 qualified free-space penetration 与 deliberate contact
+   固定 link-pair/time/depth/duration 口径和阈值；删除互斥 live、side 和临时数值
+   CLI 分支。
+9. 提交 `native_dual_live`、`left_single_live`、`right_single_live`
+   DeploymentSpec。左右单侧诊断均为活动侧 Tracker+Glove、非活动侧显式 hold/rest，
+   只通过 `--deployment` 切换并复用同一双侧 Session/组件。
+10. 执行两 Base 遮挡、交叉手势、单侧 tracking/UDP/IK/Glove 故障、managed/unmanaged
+   producer restart、SteamVR reset、四流联合 smoke 和 10 分钟 GUI 短稳定性 smoke。
+
+**输出**
+
+- ADR-0007：默认双侧主线、统一 Standing universe、DeploymentSpec/five-layer 边界和
+  仿真故障策略。
+- Session-owned native-dual-teleop composite compatibility leaf / transport contract、
+  默认双侧及左右单侧诊断 DeploymentSpec/local binding schema、双 Tracker input、
+  side-neutral arm controller、双 Glove composition、统一双 q27 tick。
+- 保持 v2 不变的 Workstation2 mapping v3，以及 v2/v3 回归与 provenance 记录。
+- 默认 live runner、独立 qualification 入口和 before/after CLI/行数报告。
+- 双 Base/双 Tracker、双 Glove、双臂双手 GUI/headless/fault/短稳定性验证报告。
+
+**Gate NV-4**
+
+- 同一 resolved Session 仍为两棵 q27、四 route、54 logical DoF，无五层旁路。
+- 两枚 Tracker 在同一 OpenVR runtime/Standing universe/setup revision 内以同一个
+  `vive_tracking` 稳定输出，serial/stream/role/endpoint 无串线；Base 不按侧绑定
+  Tracker。设备已配置本身不作为该项证据。
+- 两枚 Tracker 同时覆盖工作区左/中央/右和交叉轨迹；分别遮挡每台 Base 的 continuity、
+  dropout、`calibrating` 与 reacquisition 达到 NV-4B/F 后冻结的阈值。
+- 每侧仅在连续 `running` 后按当前 Tracker/current link7 自动建 reference；此前不动。
+  reference rebuild 不依赖 stdin/button，不退出 GUI、不回初态。
+- 左右臂各自的 XYZ-only、RPY-only、XYZ+RPY relative SE(3) 复合轨迹通过；左右
+  Glove 分别及同时通过，四流联合 smoke 通过。在其他三路固定的隔离 fixture 中，
+  单侧 arm 不改变 hand command；invalid Glove 不产生 input-derived q20、不污染
+  对侧，但本侧安全 hold/rest 与对侧有效输入仍可更新。
+- 单侧 tracking、UDP、IK 或 Glove 故障不退出 GUI、不回初态、不污染另一侧；共享故障
+  按冻结策略暂停。
+- IK failure 按侧分类统计；release threshold 使用 NV-4C/E 的左右独立与四流并发
+  基线，经人工确认后冻结；孤立失败保持最后有效目标，连续 5 次失败只撤销本侧
+  reference 并自动重建，不退出 GUI。
+- Session/DeploymentSpec/device/calibration/tracking-setup/source/artifact hash 闭合；
+  Deployment/local binding 不复制 Session-owned mapping/IK/supervisor 数值；managed
+  producer restart 进入新 transport epoch，未管理的 sequence 回退 fail closed。
+- SteamVR reset 或 Base/room setup 变化使旧 setup revision、mapping calibration 与
+  两侧 reference 同时失效，重新验证后才可恢复。
+- managed restart 或 SteamVR reset 后，旧 epoch/revision 的迟到 datagram 由 fixture
+  与 fault test 证明会被拒绝。
+- qualified free-space 轨迹无超过冻结阈值的未解释 inter-articulation/external
+  penetration；deliberate contact 的 link pair、side、时间、最大深度/持续时间有
+  预期边界和证据，不外推为真机 clearance。
+- 最终运行图恰好一个 OpenVR runtime owner/producer 输出左右两条 stream；两个 legacy
+  producer 只作迁移证据，例外发布必须显式批准和记录。
+- 一个日常命令解析 DeploymentSpec/Session、管理 OpenVR producer 并进入 Isaac GUI；
+  不要求手工启动第二个 producer 终端。
+- 默认入口不要求琐碎 mode/side/scale 参数，旧互斥 live 分支已删除，runner 认知面
+  实际下降且正确能力无回归；全仓 production LOC 作为解释性预算指标。
+- mapping v2 与历史 hash 不变；默认 live 引用 simulation-only v3，其 1:1、
+  X/Y/Z 各 `±0.4 m` 和约 `0.693 m` 角点位移均显式记录，不宣称完整可达或安全。
+- `left_single_live`、`right_single_live` 分别完成单臂 + 单手诊断，非活动侧行为
+  显式；没有恢复 `--side` 或 live mode 树。
+- 运行不 import/start ROS 2、DDS、CAN 或真实机器人 adapter。
+
+**材料与工具评审**
+
+优先确认两枚 Tracker/Watchman dongle identity、两只 Glove 的同时连接能力、Base
+channel/安装记录、左右 Tracker-to-handle 外参和当前 Glove confidence 策略。只有
+双 Tracker/Glove 资格流程稳定复用后，再决定扩展项目 skill；本阶段不建设 ROS 工具。
+
+### NV-5：ROS 2 Jazzy 双流仿真等价性
+
+**目标**
+
+把 NV-4 的默认双侧 canonical pipeline 映射到 ROS 2 Jazzy，并保持安全语义和可测
+行为等价。可先用单流隔离诊断，但最终 Gate 是左右双流。
+
+**工作**
+
+1. 冻结 ROS package/IDL 布局与 `DeploymentSpec v2`；提供 v1→v2 migration、strict
+   parse 和 hash 兼容测试，不修改 NV-4 已冻结的 v1 schema。
 2. 建立节点：
    - VIVE tracker node；
    - calibration/mapping/supervision node；
@@ -841,9 +1104,9 @@ manipulator controller 文档。若 Cartesian contract 的生成/校验会被多
    - feedback bridge；
    - recorder/metrics node；
    - safety/command-owner service。
-3. ROS topic/service/action 全部放入版本化 namespace；右臂使用
-   `/teleop/right/...`，vendor 接口通过 adapter/remap 隔离。
-4. 根据 NV-3 数据冻结 QoS depth、reliability、deadline、lifespan 和 liveliness。
+3. ROS topic/service/action 全部放入版本化 namespace；至少包含
+   `/teleop/left/...`、`/teleop/right/...`，vendor 接口通过 adapter/remap 隔离。
+4. 根据 NV-3/NV-4 数据冻结 QoS depth、reliability、deadline、lifespan 和 liveliness。
 5. 处理 Isaac 6 Python 3.12 与系统 Jazzy Python 3.12 的 ROS library/RMW 选择。
 6. 使用同一录制 fixture 分别跑 UDP 和 ROS 2 pipeline，比较 command 结果和新增开销。
 7. 验证 ROS graph 中只有一个 command owner；测试 RViz/demo/测试发布器冲突拒绝。
@@ -852,14 +1115,17 @@ manipulator controller 文档。若 Cartesian contract 的生成/校验会被多
 
 **输出**
 
-- ROS 2 message/package、launch 和 Deployment 配置。
+- ROS 2 message/package、launch 和 DeploymentSpec v2 ROS binding/migration。
 - UDP ↔ ROS 语义对照和 golden contract。
-- ROS 2 单臂仿真指南、组件文档和验证报告。
+- ROS 2 双流仿真指南、组件文档和验证报告。
 
-**Gate NV-4**
+**Gate NV-5**
 
-- 与 NV-3 相同输入产生等价、受限的 TCP intent/command。
-- ROS 2 不执行陈旧 backlog，loss/restart 后必须重新 clutch。
+- DeploymentSpec v1→v2 migration 结果确定、可重复；v1 与 v2 均 strict parse，
+  source hash、migrated hash 和 local-binding hash 可追溯。
+- 与 NV-4 相同双侧输入产生等价、受限的 TCP intent/command。
+- ROS 2 不执行陈旧 backlog；NV-5 仿真 loss/restart 后建立新自动 reference epoch，
+  NV-6+ 真机才要求显式重新 clutch。
 - namespace、QoS、domain 和 command owner contract 有自动测试。
 - ROS 增量延迟、jitter、CPU 和 drop 指标完整。
 - 真机前 safety profile、速度/范围和初始性能阈值经人工批准。
@@ -870,16 +1136,16 @@ manipulator controller 文档。若 Cartesian contract 的生成/校验会被多
 message 定义、RMW/FastDDS 配置。若同类 Jazzy/Isaac 环境排障重复出现，扩展 NV-0
 环境 skill。
 
-### NV-5：ROS 2 右侧 NERO 真机遥操作
+### NV-6：ROS 2 右侧 NERO 真机遥操作
 
 **目标**
 
-在裸法兰、低速、小范围、人工监护条件下，让 NV-4 的 canonical command 经 vendor
+在裸法兰、低速、小范围、人工监护条件下，让 NV-5 的 canonical command 经 vendor
 ROS 2 adapter 控制右侧 NERO。
 
 **进入条件**
 
-- NV-0~NV-4 全部通过。
+- NV-0/NV-1/NV-4/NV-5 Gate 已通过；NV-2/NV-3 中影响真机的转移债务已关闭。
 - 右臂固定牢固，工作区风险评估完成，现场清空。
 - 独立急停/断能手段可触达，并有第二人观察。
 - 固件、limits、CAN、ROS namespace 和 robot status 已只读核验。
@@ -906,7 +1172,7 @@ ROS 2 adapter 控制右侧 NERO。
 - ADR：NERO 真机控制模式、急停/恢复和 command ownership。
 - 右臂真机组件文档、操作指南和验证报告。
 
-**Gate NV-5**
+**Gate NV-6**
 
 - 未 clutch/deadman、失联、越界、fault 或 stale feedback 时均无新运动命令。
 - 人工急停和软件 stop 行为经原厂说明约束下验证，恢复不会自动重新 arm。
@@ -925,7 +1191,7 @@ ROS 2 adapter 控制右侧 NERO。
 评估模板、TCP/法兰定义。若真机检查会重复执行，制作只读/检查型
 `prepare-nero-teleop-session` skill。
 
-### NV-6：单臂精度、延迟与执行效率基线
+### NV-7：右臂精度、延迟与执行效率基线
 
 **目标**
 
@@ -977,7 +1243,7 @@ ROS 2 adapter 控制右侧 NERO。
 - 单臂基线报告，明确测量不确定度和独立 ground truth 限制。
 - 经项目负责人确认的最终单臂/双臂 release thresholds。
 
-**Gate NV-6**
+**Gate NV-7**
 
 - 每个报告数值可回溯到 run ID、配置、设备、标定和原始通道。
 - p50/p95/p99 不从平均值推断。
@@ -991,40 +1257,44 @@ ROS 2 adapter 控制右侧 NERO。
 模板。若基准可复用于其他机械臂，评估 `benchmark-pose-teleoperation` skill；若需持续
 聚合多机 run 数据，再评估只读实验结果 MCP，而不是先建服务。
 
-### NV-7：双臂 ROS 2 仿真与真机遥操作
+### NV-8：左臂隔离与双臂 ROS 2 真机遥操作
 
 **目标**
 
-把已通过的右臂管线扩展为显式左右双流，先仿真、再逐臂真机、最后同时真机。
+复用 NV-4/NV-5 已通过的显式左右双流，先让左臂独立重复右臂真机 Gate，再逐步进入
+双臂同时真机。双臂数字孪生不再在本阶段重复建设。
 
 **工作**
 
-1. 为两枚操作 Tracker 固定 serial → `left`/`right` stream mapping。
-2. 左右 calibration、anchor、scale、workspace 和 supervisor 完全分离。
-3. 引入 `BimanualCommandEnvelope`、最大 skew 和 coupled deadman。
+1. 复用 NV-4 已验证的 Standing universe 拓扑、relative mapping schema 与左右独立
+   serial/reference/solver/supervisor，不直接复用 simulation-only v2 数值作为真机
+   标定；真机前建立 measured tracking/workcell calibration revision，并按侧测量
+   robot base/TCP 外参。
+2. 引入真机 `BimanualCommandEnvelope`、最大 skew 和 coupled deadman。
+3. 左右各自具有独立 workspace、feedback watchdog、hardware binding 和 safety
+   profile。
 4. ROS namespace 至少包含 `/teleop/left`、`/teleop/right`；两套 vendor driver 使用
    独立 node namespace、CAN interface、service/topic remap。
 5. 审计 vendor driver 是否使用绝对 `/control/*`/`/feedback/*` 名称；通过 launch
    remap 或薄 adapter 消除冲突，并用 graph contract 测试保证只有一个 owner。
-6. 仿真中验证独立运动、同步运动、交叉轨迹、inter-arm clearance 和一侧失联。
-7. 真机先只接左臂重复 NV-5 小范围 Gate，再连接两臂但只使能一臂。
-8. 两臂都通过独立 Gate 后，执行最小同时运动；逐步扩大但不超过已批准包络。
-9. 记录左右 command skew、feedback skew、DDS/CPU/GPU 负载和 coupled disarm 行为。
-10. 使用额外测量 Tracker 时分别统计左右精度，并注明实际测量覆盖范围。
+6. 真机先只接左臂重复 NV-6 的 shadow、单轴和 fault Gate，再连接两臂但只使能一臂。
+7. 两臂都通过独立 Gate 后，执行最小同时运动；逐步扩大但不超过 NV-7 批准包络。
+8. 记录左右 command skew、feedback skew、DDS/CPU/GPU 负载和 coupled disarm 行为。
+9. 使用额外测量 Tracker 时分别统计左右精度，并注明实际测量覆盖范围。
 
 **输出**
 
 - 双臂 Deployment、stream/namespace/device mapping。
-- 双臂仿真验证、左臂真机隔离验证和双臂真机验证。
+- 左臂真机隔离验证和双臂真机验证。
 - 双臂安全/同步/故障矩阵及性能报告。
 
-**Gate NV-7**
+**Gate NV-8**
 
 - 左右命令、反馈、标定和日志无串线。
 - 任一重大 fault/丢流按默认 coupled policy 使两臂 hold/disarm。
 - 超过 command skew 或 clearance 阈值时不执行半组新命令。
 - 双臂同时运动不出现 topic/service/CAN/instance 名称冲突。
-- 仿真与真机均满足 NV-6 冻结的最终阈值，或有明确批准的差异解释。
+- 真机满足 NV-7 冻结的最终阈值，或有明确批准的差异解释。
 
 **材料与工具评审**
 
@@ -1032,7 +1302,7 @@ ROS 2 adapter 控制右侧 NERO。
 双臂安全区标识。若 vendor ROS 双实例 remap 需要长期维护，优先做项目 skill/launch
 模板；持续查询需求成熟后再评估设备 MCP。
 
-### NV-8：成熟化、soak、故障注入与版本发布
+### NV-9：成熟化、soak、故障注入与版本发布
 
 **目标**
 
@@ -1040,8 +1310,10 @@ ROS 2 adapter 控制右侧 NERO。
 
 **工作**
 
-1. 完成 Deployment/Session/local config schema 和 source/artifact locks。
-2. 提供单臂仿真、单臂真机、双臂仿真、双臂真机的一键编排入口；仍保留分节点诊断。
+1. 对 NV-5 已完成的 DeploymentSpec v1/v2 migration 做兼容性 soak/发布复验，并完成
+   Session、local config schema 和 source/artifact locks。
+2. 正式一键入口收敛为默认双臂仿真、右臂真机分阶段放行、双臂真机；单侧仿真只保留
+   diagnostic/fixture，不再作为并列产品部署入口。仍保留分节点诊断。
 3. 建立 preflight：环境、source hash、设备、serial、CAN、ROS graph、mode、feedback、
    safety profile、workcell 和 recorder。
 4. 建立 postflight：安全停止、失能、artifact flush、manifest/checksum 和 summary。
@@ -1053,10 +1325,10 @@ ROS 2 adapter 控制右侧 NERO。
 9. 完成材料/skill/MCP 复盘，只保留确有复用价值且有维护责任人的工具。
 10. 进行最终范围、证据和安全评审。
 
-**Gate NV-8 / 版本完成**
+**Gate NV-9 / 版本完成**
 
-- NV-0~NV-7 Gate 全部有正式证据。
-- 四种部署入口可从干净 shell 按指南复现。
+- NV-0～NV-8 Gate 全部有正式证据。
+- 三类正式部署入口可从干净 shell 按指南复现；单侧仿真 fixture 可独立诊断复验。
 - source/config/session/deployment/calibration/run hash 闭合。
 - 快速、contract、integration、Isaac、ROS、hardware、soak 和 fault matrix 均有结果。
 - 所有未执行或未达标项在发布边界中明确列出。
@@ -1141,33 +1413,42 @@ ROS 2 adapter 控制右侧 NERO。
 flowchart TD
     N0["NV-0 兼容性 Gate 与环境基线"] --> N1["NV-1 VIVE 最小跟踪"]
     N0 --> N2["NV-2 双 NERO + 物理 Hand2 + Glove 数字孪生"]
-    N1 --> N3["NV-3 UDP 单臂仿真"]
+    N1 --> N3["NV-3 UDP 右臂仿真回归"]
     N2 --> N3
-    N3 --> N4["NV-4 ROS 2 单臂仿真"]
-    N4 --> N5["NV-5 单臂真机"]
-    N5 --> N6["NV-6 单臂基准与阈值"]
-    N6 --> N7["NV-7 双臂仿真与真机"]
-    N7 --> N8["NV-8 成熟化与发布"]
+    N3 --> N4["NV-4 原生双臂双手 Isaac 主线"]
+    N4 --> N5["NV-5 ROS 2 双流仿真等价性"]
+    N5 --> N6["NV-6 右臂真机"]
+    N6 --> N7["NV-7 右臂基准与阈值"]
+    N7 --> N8["NV-8 左臂与双臂真机"]
+    N8 --> N9["NV-9 成熟化与发布"]
 ```
 
-NV-0 的 0A 失败时整条路径暂停。NV-0 通过后，NV-1 与 NV-2 可并行；其余阶段按图中
-Gate 顺序推进。
+NV-0 的 0A 失败时整条路径暂停。NV-0 通过后，NV-1 与 NV-2 可并行。图中箭头表示
+下游所需 artifact/子 Gate，不要求上游所有无关项目先整体标为完成：满足 NV-4 明列的
+进入条件后即可启动 NV-4A，即使 NV-2 的 deliberate contact/self-collision/measured
+hardware 等非入口项仍为 `PARTIAL`。所有转移债务必须在 NV-9 发布前关闭或形成明确
+批准的发布边界。
 
 ## 13. 计划中的正式文档交付
 
 实现过程中至少产生：
 
-- `docs/decisions/0004-...`：Cartesian contract、ROS/deployment 和 Python runtime 方案。
-- `docs/decisions/0005-...`：NERO 模型、限位和 source-of-truth。
-- `docs/decisions/0006-...`：NV-2 物理 Hand 2、Glove retarget 与 Session v1 命令边界。
-- `docs/decisions/0007-...`：VIVE frame、relative SE(3)、clutch 和标定。
-- `docs/decisions/0008-...`：NERO 真机控制模式、安全状态机和恢复。
+- 已有 `docs/decisions/0004-...`：VIVE input component qualification。
+- 已有 `docs/decisions/0005-...`：NERO 模型、限位和 source-of-truth。
+- 已有 `docs/decisions/0006-...`：NV-2 物理 Hand 2、Glove retarget 与 Session v1
+  命令边界。
+- 计划 `docs/decisions/0007-...`：原生双侧主线、统一 Standing universe、
+  DeploymentSpec/five-layer 修订与仿真故障策略。
+- 计划 `docs/decisions/0008-...`：Cartesian/VIVE frame、relative SE(3)、reference、
+  标定和 producer lifecycle。
+- 计划 `docs/decisions/0009-...`：ROS DeploymentSpec v2/migration、IDL、namespace 与 QoS。
+- 计划 `docs/decisions/0010-...`：NERO 真机控制模式、安全状态机和恢复。
 - `docs/architecture/`：单/双臂进程、ROS graph、clock 和部署视图。
 - `docs/reference/`：NERO q7、frame tree、wire/ROS schema、QoS、安全 profile。
 - `docs/components/`：VIVE input、NERO Isaac twin、ROS teleop、
   NERO robot adapter、recorder/metrics。
 - `docs/guides/`：环境准备、数字孪生、单臂、双臂、标定、基准、排障和安全停机。
-- `docs/validation/`：NV-0~NV-8 各阶段证据。
+- `docs/validation/`：NV-0～NV-9 各阶段证据。
 
 ## 14. 风险登记
 
@@ -1175,11 +1456,14 @@ Gate 顺序推进。
 |---|---|---|
 | Isaac 6.0.1 vendor 依赖与项目 worker ABI 漂移 | 后续功能可能在 vendor 环境触发新兼容问题 | 环境隔离；每个 Isaac runner 做版本化 smoke，不向 vendor venv 安装项目依赖 |
 | Tracker 遮挡、反光、安装松动 | 抖动、跳变、误指令 | 视场/附件/减振评审、quality gate、hold/disarm |
+| 把两台 Base 错当成左右 Tracker 专属坐标源 | 双臂坐标不一致、错误标定 | 固定为一个 Standing universe 和一个全局 mapping；Base 布局只由覆盖测试放行 |
+| 两只 Glove 只分别通过、同时连接未验证 | 默认四流主线启动或关闭异常 | NV-4 单独执行 SDK manager 双连接、双订阅、双 retarget 和关闭顺序 Gate |
+| 双 IK 放大当前右臂失败问题 | 频繁 reference rebuild、操作中断 | 保留按侧 target/FK/limit 诊断；先基线再冻结 release threshold |
 | NERO 资料限位冲突 | 模型与真机方向/范围错误 | NV-2 仿真只采用固定 URDF；真机资料或只读回读不兼容时暂停对齐，不计算跨修订“保守交集” |
 | NERO URDF 派生 USD 质量不足 | IK/碰撞结果失真 | 固定 import recipe，验证关节、惯量和碰撞 |
 | Glove 21 DoF 与 Hand 2 q20 混用 | 错指、错方向或越界命令 | 只使用 named 21 点 canonical observation，经目标为 Hand2/side 的 retargeter 和 layout Gate |
 | Hand 2 完整物理 USD 接触不稳定 | 仿真发散或影响臂链 | 小幅自由空间 bring-up、drive/碰撞审计、基础接触 smoke、独立 reset |
-| vendor ROS topic 使用绝对名称 | 双臂串线/多 owner | NV-4/NV-7 graph contract、namespace/remap、薄 adapter |
+| vendor ROS topic 使用绝对名称 | 双臂串线/多 owner | NV-5/NV-8 graph contract、namespace/remap、薄 adapter |
 | `move_p` 高频覆盖不平滑 | 延迟、振荡、跟随差 | 低速 bring-up、实测；不达标再评审其他模式 |
 | 真机缺少视觉避障 | 无法识别人和动态障碍 | 隔离工作区、低速、keep-out、实体急停和观察员 |
 | 双臂物理碰撞 | 设备损坏 | 仿真先行、inter-arm margin、逐臂放行、coupled disarm |
@@ -1193,12 +1477,20 @@ Gate 顺序推进。
 
 | 决策 | 结论 |
 |---|---|
-| OS / ROS 2 | Ubuntu 24.04 / Jazzy |
-| VIVE inventory | Tracker 3.0、Base Station 2.0、Watchman dongle；无 HMD/controller，HMD requirement 已关闭 |
+| OS / ROS 2 | Ubuntu 24.04；Jazzy 推迟到 NV-5，不阻断 NV-4 |
+| VIVE inventory | Tracker 3.0、Base Station 2.0、Watchman dongle；无 HMD/controller，HMD requirement 已关闭。NV-4 VIVE HIL 明确需要 `2×Base + 2×Tracker + 2×Watchman dongle` |
+| 双 Base 拓扑 | 两台 BS2 共同服务一个 SteamVR Standing universe；不按侧绑定 Tracker |
 | 第 0 步 | 先验证 Isaac 6.0.1 / Python 3.12；失败即暂停并对齐 |
 | Python runtime | 基础包 3.11/3.12；worker 保留 3.11 基线；Isaac/ROS 使用 3.12 隔离环境 |
-| 首个对象 | 右 NERO |
-| 控制语义 | clutch-relative SE(3)，默认 translation scale 1.0、配置化 |
+| 控制对象演进 | NV-3 以右 NERO 建回归；NV-4 默认双 NERO + 双 Hand 2 |
+| 控制语义 | reference-relative SE(3)；NV-3/NV-4 自动 reference，NV-6+ 真机显式 clutch/deadman；translation scale 1.0、配置化 |
+| NV-4 主线 | `run_isaac_nero_hand2_dual_twin.py` 默认升级为双 Tracker + 双 Glove 四流控制；无 ROS 2 |
+| NV-4 设备完整性 | 默认主线硬要求 2 Tracker + 2 Glove；已配置不等于 runtime/坐标/双连接 Gate 已通过 |
+| NV-4 mapping | v2 保持 1:1、逐轴 `±0.08 m` 回归；新 simulation-only v3 为 1:1、X/Y/Z 各 `±0.4 m`，约 `0.693 m` 最大角点位移由现有 IK 故障逻辑承接 |
+| NV-4 单侧诊断 | `left_single_live` / `right_single_live` DeploymentSpec 复用双侧 Session；活动侧 live、非活动侧显式 hold/rest，不增加 runner side/mode 分支 |
+| NV-4 组合控制 Gate | XYZ-only、RPY-only、XYZ+RPY relative SE(3) 分别验收，不用两个单项替代组合测试 |
+| NV-4 仿真故障 | 单侧 Tracker/IK/Glove 故障只影响对应侧；共享 universe/mapping/Session/Isaac 故障共同暂停 |
+| Glove confidence | finite 完整低置信度帧可标为 degraded，`0.90` 为 success 阈值；ADR-0007 显式 supersede ADR-0006 的旧硬拒绝条款 |
 | Hand 2 仿真表示 | 左右均使用官方完整物理 USD；保留 articulation/rigid body/collision/q20 drive |
 | Hand 2 命令 | NV-2 沿用 Session v1，左右 q20 与左右 NERO q7 均显式 commanded；不新增 inactive/Session v2 |
 | Glove→Hand2 | `hand_skeleton` canonical 21×3 m → Hand2/side retarget → q20 rad；不直通 21 DoF 人手角 |
@@ -1218,30 +1510,35 @@ Gate 顺序推进。
 | 待决项 | 决定时间 | 所需证据 |
 |---|---|---|
 | Ubuntu point release、driver、Isaac build 细节 | NV-0 | 目标机盘点 |
-| NERO/ROS/URDF/SDK 精确 commit | NV-0/NV-2 | source audit、license、可复现性 |
-| DeploymentSpec 最终 schema | NV-3 前 | ADR、v1 兼容测试 |
-| VIVE serial/role/button 映射 | NV-1 | 实物盘点与事件测试 |
-| Glove device identity、SDK user 与标定 revision | NV-2 | 专用 NIC 静态 IPv4、live inventory、side 核对、SDK/标定 manifest |
+| NERO URDF/mesh/manual/SDK 精确 revision | NV-2 | source audit、license、可复现性 |
+| ROS driver 精确 commit 与 vendor interface | NV-5/NV-6 | ROS source lock、IDL/topic/service、真机 firmware mapping |
+| NV-4 DeploymentSpec v1 与五层边界 | NV-4 实现前 | 002 对齐、ADR、session/deployment/local hash 测试 |
+| DeploymentSpec v2 ROS schema/migration | NV-5 前 | v1→v2 migration、IDL/namespace/QoS/launch 与 hash 兼容测试 |
+| Local DeviceExecutionBinding schema | NV-6 前 | NERO serial/CAN/firmware/adapter/feedback capability 与 local-binding hash |
+| 双 VIVE serial/role/endpoint 映射 | NV-4 | 两 Tracker inventory、同一 Standing universe 与同时采集 |
+| Glove device identity、SDK user 与标定 revision | NV-4 | 双连接 inventory、side 核对、SDK/标定 manifest |
 | 合并 q27 articulation 的 self-collision policy | NV-2 最终 Gate | 默认关闭的 headless/GUI/contact 结果；若启用则需 NERO collision filtering 与重新资格验证 |
 | NERO canonical limits/zero/direction | NV-2 | 二维码页、手册、URDF、SDK、固件、实机反馈；仿真限位已冻结为保守 URDF，真机结论待逐臂回读 |
-| 精确左右 mount 与安全包络 | NV-2/NV-5 | 现场测量和风险评估 |
-| Isaac IK/controller 选择 | NV-3 | NERO 模型、可达性、稳定性基准 |
-| QoS 与 stale/hold/disarm 数值 | NV-4 前 | NV-3 延迟/掉帧数据 |
-| 首次真机速度/加速度/范围 | NV-5 前 | 仿真基线、原厂限制、人工审批 |
-| 最终 latency/accuracy thresholds | NV-7 前 | NV-6 多次运行基线 |
-| 是否需要 CPV 子迭代 | NV-6 后 | `move_p` 指标与风险评审 |
+| 精确左右 mount 与安全包络 | NV-2/NV-6 | 现场测量和风险评估 |
+| Isaac IK/controller 与 failure threshold | NV-4C/E | NERO 模型、左右独立与四流并发诊断、可达性和稳定性基准 |
+| 真机 tracking/workcell mapping revision | NV-6 前 | measured workcell、tracking setup、base/TCP 外参及残差 |
+| QoS 与 ROS stale/hold/disarm 数值 | NV-5 前 | NV-3/NV-4 延迟、双流 skew 和掉帧数据 |
+| 首次真机速度/加速度/范围 | NV-6 前 | 双臂仿真基线、原厂限制、人工审批 |
+| 最终 latency/accuracy thresholds | NV-8 前 | NV-7 多次运行基线 |
+| 是否需要 CPV 子迭代 | NV-7 后 | `move_p` 指标与风险评审 |
 | 新 skill/MCP 是否立项 | 每个阶段 Gate | 材料缺口、复用频率、维护与权限评审 |
 
 ## 16. 整体 Definition of Done
 
 只有同时满足下列条件，才能宣布 NERO-VIVE R1 完成：
 
-1. NV-0 记录为 `PROCEED`，NV-1~NV-8 均有 Gate 证据。
+1. NV-0 记录为 `PROCEED`，NV-1～NV-9 均有 Gate 证据。
 2. 两台 NERO 与左右 Tracker 的 identity、stream、namespace、标定和日志可追溯且无串线。
 3. 失联、通信/机器人 fault、node restart 和急停恢复均按批准的状态机 fail closed。
-4. 单/双臂仿真和真机满足批准后的安全、延迟、精度和稳定性阈值。
+4. 默认双臂仿真、右臂真机分阶段放行和双臂真机满足批准后的安全、延迟、精度与
+   稳定性阈值；单侧仿真 fixture 保持可诊断复验。
 5. NERO 真机保持裸法兰；Isaac 中左右物理 Hand 2 均可由正确 side/layout 的
-   Glove/fixture q20 路径驱动，且未接入 Hand 2 真机。
+   Glove q20 路径分别和同时驱动，且未接入 Hand 2 真机。
 6. 来源、模型、配置、标定、环境和运行 artifact 已版本化，可从干净 shell 复现。
 7. 测试矩阵无未解释失败，正式文档与实现一致。
 8. 材料缺口已关闭或明确延期；新增 skill/MCP 有复用依据和维护责任。
@@ -1305,6 +1602,12 @@ release/commit/hash。
 - 《VIVE Tracker (3.0) Developer Guidelines》V1.0，“Mechanical Consideration”
   “Coordinate System”“Software Components”“SteamVR Integration”：
   [https://developer.vive.com/documents/824/HTC_Vive_Tracker_3.0_Developer_Guidelines_v1.0_01182021.pdf](https://developer.vive.com/documents/824/HTC_Vive_Tracker_3.0_Developer_Guidelines_v1.0_01182021.pdf)
+- Valve OpenVR Driver API，“Chaperone”：
+  [https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#chaperone](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#chaperone)
+- HTC，“Tips for setting up the base stations”：
+  [https://www.vive.com/us/support/vive-pro-eye/category_howto/tips-for-setting-up-the-base-stations.html](https://www.vive.com/us/support/vive-pro-eye/category_howto/tips-for-setting-up-the-base-stations.html)
+- HTC，“Configuring the base station channels”：
+  [https://www.vive.com/au/support/vive-pro/category_howto/configuring-the-base-station-channels.html](https://www.vive.com/au/support/vive-pro/category_howto/configuring-the-base-station-channels.html)
 
 ### 17.4 NVIDIA / ROS 2
 
