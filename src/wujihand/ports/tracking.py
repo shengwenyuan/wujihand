@@ -60,6 +60,10 @@ class TrackingPoll:
                 event.stream_id != self.sample.stream_id
                 or event.device_serial != self.sample.device_serial
                 or event.logical_role != self.sample.logical_role
+                or event.producer_instance != self.sample.producer_instance
+                or event.transport_epoch != self.sample.transport_epoch
+                or event.tracking_setup_revision
+                != self.sample.tracking_setup_revision
                 or event.clock_domain != self.sample.clock_domain
             ):
                 raise ValueError("clutch event identity and clock must match the tracking sample")

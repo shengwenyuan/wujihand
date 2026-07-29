@@ -9,12 +9,15 @@ from wujihand.domain import (
     CLUTCH_EVENT_SCHEMA,
     HOST_MONOTONIC_CLOCK_DOMAIN,
     TRACKED_RIGID_BODY_SAMPLE_SCHEMA,
+    TRACKING_LIFECYCLE_EVENT_SCHEMA,
     TRACKING_POSITION_UNIT,
     TRACKING_QUATERNION_CONVENTION,
     TRACKING_QUATERNION_ORDER,
     ClutchEdge,
     ClutchEvent,
     TrackedRigidBodySample,
+    TrackingLifecycleEvent,
+    TrackingLifecycleKind,
     TrackingState,
 )
 from wujihand.ports import TrackerInventoryItem, TrackingInputPort, TrackingPoll
@@ -25,6 +28,9 @@ def running_sample(**overrides: object) -> TrackedRigidBodySample:
         "stream_id": "vive.right.operator",
         "device_serial": "LHR-24B6E288",
         "logical_role": "operator_tracker_right",
+        "producer_instance": "openvr_fixture",
+        "transport_epoch": 4,
+        "tracking_setup_revision": "standing_fixture_v1",
         "sequence": 7,
         "tracking_frame": "vive_tracking",
         "position_m": (0.25, -0.5, 1.2),
@@ -45,6 +51,9 @@ def lost_sample(**overrides: object) -> TrackedRigidBodySample:
         "stream_id": "vive.right.operator",
         "device_serial": "LHR-24B6E288",
         "logical_role": "operator_tracker_right",
+        "producer_instance": "openvr_fixture",
+        "transport_epoch": 4,
+        "tracking_setup_revision": "standing_fixture_v1",
         "sequence": 8,
         "tracking_frame": "vive_tracking",
         "position_m": None,
@@ -120,6 +129,9 @@ def test_non_running_states_are_explicitly_non_actionable(
     (
         ("schema", "wrong.v1", "schema"),
         ("stream_id", "bad stream", "stream_id"),
+        ("producer_instance", "bad producer", "producer_instance"),
+        ("transport_epoch", -1, "sequence"),
+        ("tracking_setup_revision", "", "tracking_setup_revision"),
         ("sequence", True, "sequence"),
         ("sequence", -1, "sequence"),
         ("tracking_state", "running", "TrackingState"),
@@ -163,6 +175,9 @@ def test_clutch_event_has_matching_identity_and_monotonic_epoch_semantics() -> N
         stream_id="vive.right.operator",
         device_serial="LHR-24B6E288",
         logical_role="operator_tracker_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=4,
+        tracking_setup_revision="standing_fixture_v1",
         input_id="tracker.system_button",
         edge=ClutchEdge.PRESSED,
         sequence=3,
@@ -173,6 +188,9 @@ def test_clutch_event_has_matching_identity_and_monotonic_epoch_semantics() -> N
         stream_id=pressed.stream_id,
         device_serial=pressed.device_serial,
         logical_role=pressed.logical_role,
+        producer_instance=pressed.producer_instance,
+        transport_epoch=pressed.transport_epoch,
+        tracking_setup_revision=pressed.tracking_setup_revision,
         input_id=pressed.input_id,
         edge=ClutchEdge.RELEASED,
         sequence=4,
@@ -208,6 +226,9 @@ def test_clutch_event_rejects_invalid_fields(
         "stream_id": "vive.right.operator",
         "device_serial": "LHR-24B6E288",
         "logical_role": "operator_tracker_right",
+        "producer_instance": "openvr_fixture",
+        "transport_epoch": 4,
+        "tracking_setup_revision": "standing_fixture_v1",
         "input_id": "tracker.system_button",
         "edge": ClutchEdge.PRESSED,
         "sequence": 3,
@@ -225,6 +246,9 @@ def test_release_edge_cannot_request_a_new_epoch() -> None:
             stream_id="vive.right.operator",
             device_serial="LHR-24B6E288",
             logical_role="operator_tracker_right",
+            producer_instance="openvr_fixture",
+            transport_epoch=4,
+            tracking_setup_revision="standing_fixture_v1",
             input_id="tracker.system_button",
             edge=ClutchEdge.RELEASED,
             sequence=4,
@@ -275,6 +299,9 @@ def test_tracking_poll_is_atomic_immutable_and_identity_checked() -> None:
         stream_id=sample.stream_id,
         device_serial=sample.device_serial,
         logical_role=sample.logical_role,
+        producer_instance=sample.producer_instance,
+        transport_epoch=sample.transport_epoch,
+        tracking_setup_revision=sample.tracking_setup_revision,
         input_id="tracker.system_button",
         edge=ClutchEdge.PRESSED,
         sequence=3,
@@ -291,6 +318,9 @@ def test_tracking_poll_is_atomic_immutable_and_identity_checked() -> None:
         stream_id="vive.left.operator",
         device_serial=sample.device_serial,
         logical_role=sample.logical_role,
+        producer_instance=sample.producer_instance,
+        transport_epoch=sample.transport_epoch,
+        tracking_setup_revision=sample.tracking_setup_revision,
         input_id="tracker.system_button",
         edge=ClutchEdge.PRESSED,
         sequence=4,
@@ -299,6 +329,46 @@ def test_tracking_poll_is_atomic_immutable_and_identity_checked() -> None:
     )
     with pytest.raises(ValueError, match="identity"):
         TrackingPoll(sample=sample, clutch_events=(wrong_stream,))
+
+
+def test_tracking_lifecycle_event_freezes_managed_epoch_transitions() -> None:
+    started = TrackingLifecycleEvent(
+        producer_instance="openvr_fixture",
+        tracking_setup_revision="standing_fixture_v1",
+        stream_ids=("vive.left", "vive.right"),
+        kind=TrackingLifecycleKind.STARTED,
+        reason="launcher_start",
+        sequence=0,
+        old_transport_epoch=None,
+        new_transport_epoch=4,
+        host_time_ns=100,
+    )
+    rebound = TrackingLifecycleEvent(
+        producer_instance=started.producer_instance,
+        tracking_setup_revision=started.tracking_setup_revision,
+        stream_ids=started.stream_ids,
+        kind=TrackingLifecycleKind.REBOUND,
+        reason="managed_restart",
+        sequence=1,
+        old_transport_epoch=4,
+        new_transport_epoch=5,
+        host_time_ns=200,
+    )
+
+    assert started.schema == TRACKING_LIFECYCLE_EVENT_SCHEMA
+    assert rebound.new_transport_epoch == 5
+    with pytest.raises(ValueError, match="inconsistent"):
+        TrackingLifecycleEvent(
+            producer_instance=started.producer_instance,
+            tracking_setup_revision=started.tracking_setup_revision,
+            stream_ids=started.stream_ids,
+            kind=TrackingLifecycleKind.STOPPED,
+            reason="launcher_stop",
+            sequence=2,
+            old_transport_epoch=5,
+            new_transport_epoch=6,
+            host_time_ns=300,
+        )
 
 
 def test_tracker_inventory_is_strict_immutable_and_has_no_device_index() -> None:

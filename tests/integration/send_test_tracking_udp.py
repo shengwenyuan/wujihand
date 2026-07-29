@@ -71,6 +71,9 @@ def main() -> int:
                     stream_id="vive.right",
                     device_serial=args.serial,
                     logical_role="operator_right",
+                    producer_instance="tracking_udp_test",
+                    transport_epoch=0,
+                    tracking_setup_revision="standing_test_v1",
                     sequence=sequence,
                     tracking_frame="vive_tracking",
                     position_m=(

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 import importlib
 import math
 import re
@@ -204,6 +205,9 @@ class OpenVrTrackerAdapter:
         stream_id: str,
         logical_role: str,
         *,
+        producer_instance: str,
+        transport_epoch: int,
+        tracking_setup_revision: str,
         tracking_frame: str = "vive_tracking",
         clutch_button_id: int | None = None,
         clutch_input_id: str = "tracker_clutch",
@@ -216,6 +220,17 @@ class OpenVrTrackerAdapter:
         )
         self.stream_id = _identifier(stream_id, field="stream_id")
         self.logical_role = _identifier(logical_role, field="logical_role")
+        self.producer_instance = _identifier(
+            producer_instance,
+            field="producer_instance",
+        )
+        if type(transport_epoch) is not int or transport_epoch < 0:
+            raise ValueError("transport_epoch must be a non-negative integer")
+        self.transport_epoch = transport_epoch
+        self.tracking_setup_revision = _identifier(
+            tracking_setup_revision,
+            field="tracking_setup_revision",
+        )
         self.tracking_frame = _identifier(tracking_frame, field="tracking_frame")
         self.clutch_input_id = _identifier(clutch_input_id, field="clutch_input_id")
         if clock_domain != HOST_MONOTONIC_CLOCK_DOMAIN:
@@ -330,7 +345,23 @@ class OpenVrTrackerAdapter:
         )
         if timestamp <= self._last_host_time_ns:
             raise ValueError("host_time_ns must increase strictly between polls")
+        poses = system.getDeviceToAbsoluteTrackingPose(
+            module.TrackingUniverseStanding,
+            0.0,
+            (),
+        )
+        return self._poll_snapshot(timestamp=timestamp, poses=poses)
 
+    def _poll_snapshot(
+        self,
+        *,
+        timestamp: int,
+        poses: Sequence[_OpenVrTrackedPose],
+    ) -> TrackingPoll:
+        """Normalize this stream from one owner-acquired OpenVR pose array."""
+
+        if timestamp <= self._last_host_time_ns:
+            raise ValueError("host_time_ns must increase strictly between polls")
         resolved = self._resolve_serial()
         if resolved is None:
             self._previous_quaternion = None
@@ -347,11 +378,6 @@ class OpenVrTrackerAdapter:
             )
 
         device_index, device_class = resolved
-        poses = system.getDeviceToAbsoluteTrackingPose(
-            module.TrackingUniverseStanding,
-            0.0,
-            (),
-        )
         if device_index >= len(poses):
             raise RuntimeError("OpenVR pose array does not contain the resolved device")
         pose = poses[device_index]
@@ -398,6 +424,9 @@ class OpenVrTrackerAdapter:
                     stream_id=self.stream_id,
                     device_serial=cast(str, self.tracker_serial),
                     logical_role=self.logical_role,
+                    producer_instance=self.producer_instance,
+                    transport_epoch=self.transport_epoch,
+                    tracking_setup_revision=self.tracking_setup_revision,
                     sequence=self._sample_sequence,
                     tracking_frame=self.tracking_frame,
                     position_m=position,
@@ -437,12 +466,7 @@ class OpenVrTrackerAdapter:
         """Release the OpenVR runtime; repeated calls are harmless."""
 
         module = self._openvr
-        self._openvr = None
-        self._system = None
-        self._selected = None
-        self._started = False
-        self._previous_quaternion = None
-        self._button_pressed = None
+        self._detach_runtime()
         if module is not None:
             module.shutdown()
 
@@ -469,6 +493,28 @@ class OpenVrTrackerAdapter:
         self._openvr = module
         self._system = system
         return module, system
+
+    def _attach_runtime(
+        self,
+        module: _OpenVrModule,
+        system: _OpenVrSystem,
+    ) -> None:
+        if self._openvr is not None or self._system is not None:
+            raise RuntimeError("OpenVR runtime is already attached")
+        self._openvr = module
+        self._system = system
+
+    def _detach_runtime(self) -> None:
+        self._openvr = None
+        self._system = None
+        self._selected = None
+        self._started = False
+        self._sample_sequence = 0
+        self._clutch_sequence = 0
+        self._last_host_time_ns = -1
+        self._previous_quaternion = None
+        self._button_pressed = None
+        self._last_raw_record = None
 
     def _require_started(self) -> tuple[_OpenVrModule, _OpenVrSystem]:
         if (
@@ -585,6 +631,9 @@ class OpenVrTrackerAdapter:
             stream_id=self.stream_id,
             device_serial=self.tracker_serial,
             logical_role=self.logical_role,
+            producer_instance=self.producer_instance,
+            transport_epoch=self.transport_epoch,
+            tracking_setup_revision=self.tracking_setup_revision,
             sequence=self._sample_sequence,
             tracking_frame=self.tracking_frame,
             position_m=None,
@@ -625,6 +674,9 @@ class OpenVrTrackerAdapter:
             stream_id=self.stream_id,
             device_serial=self.tracker_serial,
             logical_role=self.logical_role,
+            producer_instance=self.producer_instance,
+            transport_epoch=self.transport_epoch,
+            tracking_setup_revision=self.tracking_setup_revision,
             input_id=self.clutch_input_id,
             edge=edge,
             sequence=self._clutch_sequence,
@@ -669,9 +721,213 @@ class OpenVrTrackerAdapter:
         return TrackingPoll(sample=sample, clutch_events=clutch_events)
 
 
+@dataclass(frozen=True, slots=True)
+class OpenVrTrackerStreamConfig:
+    """One serial-addressed canonical stream owned by a shared runtime."""
+
+    tracker_serial: str
+    stream_id: str
+    logical_role: str
+    tracking_frame: str = "vive_tracking"
+    clutch_button_id: int | None = None
+    clutch_input_id: str = "tracker_clutch"
+
+    def __post_init__(self) -> None:
+        for field in (
+            "tracker_serial",
+            "stream_id",
+            "logical_role",
+            "tracking_frame",
+            "clutch_input_id",
+        ):
+            object.__setattr__(
+                self,
+                field,
+                _identifier(getattr(self, field), field=field),
+            )
+        if self.clutch_button_id is not None and (
+            type(self.clutch_button_id) is not int
+            or not 0 <= self.clutch_button_id < 64
+        ):
+            raise ValueError(
+                "clutch_button_id must be an integer in [0, 63] or None"
+            )
+
+
+class OpenVrMultiTrackerAdapter:
+    """Own one OpenVR runtime and normalize all configured streams per snapshot."""
+
+    def __init__(
+        self,
+        streams: Sequence[OpenVrTrackerStreamConfig],
+        *,
+        producer_instance: str,
+        transport_epoch: int,
+        tracking_setup_revision: str,
+        clock_domain: str = HOST_MONOTONIC_CLOCK_DOMAIN,
+    ) -> None:
+        try:
+            configs = tuple(streams)
+        except TypeError as exc:
+            raise ValueError("streams must be a sequence") from exc
+        if not configs or any(
+            type(config) is not OpenVrTrackerStreamConfig for config in configs
+        ):
+            raise ValueError(
+                "streams must contain at least one OpenVrTrackerStreamConfig"
+            )
+        for field in ("tracker_serial", "stream_id", "logical_role"):
+            values = tuple(getattr(config, field) for config in configs)
+            if len(set(values)) != len(values):
+                raise ValueError(f"streams must have unique {field} values")
+        self.streams = configs
+        self.producer_instance = _identifier(
+            producer_instance,
+            field="producer_instance",
+        )
+        if type(transport_epoch) is not int or transport_epoch < 0:
+            raise ValueError("transport_epoch must be a non-negative integer")
+        self.transport_epoch = transport_epoch
+        self.tracking_setup_revision = _identifier(
+            tracking_setup_revision,
+            field="tracking_setup_revision",
+        )
+        if clock_domain != HOST_MONOTONIC_CLOCK_DOMAIN:
+            raise ValueError(
+                f"clock_domain must be {HOST_MONOTONIC_CLOCK_DOMAIN!r}"
+            )
+        self.clock_domain = clock_domain
+        self._channels = tuple(
+            OpenVrTrackerAdapter(
+                config.tracker_serial,
+                config.stream_id,
+                config.logical_role,
+                producer_instance=self.producer_instance,
+                transport_epoch=self.transport_epoch,
+                tracking_setup_revision=self.tracking_setup_revision,
+                tracking_frame=config.tracking_frame,
+                clutch_button_id=config.clutch_button_id,
+                clutch_input_id=config.clutch_input_id,
+                clock_domain=clock_domain,
+            )
+            for config in configs
+        )
+        self._openvr: _OpenVrModule | None = None
+        self._system: _OpenVrSystem | None = None
+        self._started = False
+        self._last_host_time_ns = -1
+
+    @property
+    def last_raw_records(self) -> Mapping[str, Mapping[str, JsonValue] | None]:
+        """Return isolated raw records keyed by canonical stream ID."""
+
+        return {
+            channel.stream_id: channel.last_raw_record
+            for channel in self._channels
+        }
+
+    def inventory(self) -> tuple[TrackerInventoryItem, ...]:
+        """List stable identities from the one owned OpenVR runtime."""
+
+        self._ensure_runtime()
+        return self._channels[0].inventory()
+
+    def start(self) -> tuple[TrackerInventoryItem, ...]:
+        """Resolve every configured serial before allowing any stream to poll."""
+
+        if self._started:
+            raise RuntimeError("OpenVR multi-tracker adapter is already started")
+        self._ensure_runtime()
+        try:
+            selected = tuple(channel.start() for channel in self._channels)
+        except Exception:
+            self.close()
+            raise
+        self._started = True
+        self._last_host_time_ns = -1
+        return selected
+
+    def poll(
+        self,
+        *,
+        host_time_ns: int | None = None,
+    ) -> tuple[TrackingPoll, ...]:
+        """Read one pose array and normalize every stream at the same timestamp."""
+
+        module, system = self._require_started()
+        timestamp = (
+            time.monotonic_ns()
+            if host_time_ns is None
+            else validate_host_time_ns(host_time_ns)
+        )
+        if timestamp <= self._last_host_time_ns:
+            raise ValueError("host_time_ns must increase strictly between polls")
+        poses = system.getDeviceToAbsoluteTrackingPose(
+            module.TrackingUniverseStanding,
+            0.0,
+            (),
+        )
+        for channel in self._channels:
+            resolved = channel._resolve_serial()
+            if resolved is not None and resolved[0] >= len(poses):
+                raise RuntimeError(
+                    "OpenVR pose array does not contain a resolved device"
+                )
+        polls = tuple(
+            channel._poll_snapshot(timestamp=timestamp, poses=poses)
+            for channel in self._channels
+        )
+        self._last_host_time_ns = timestamp
+        return polls
+
+    def close(self) -> None:
+        """Release all stream state and shut down the shared runtime once."""
+
+        module = self._openvr
+        self._openvr = None
+        self._system = None
+        self._started = False
+        self._last_host_time_ns = -1
+        for channel in self._channels:
+            channel._detach_runtime()
+        if module is not None:
+            module.shutdown()
+
+    def __enter__(self) -> OpenVrMultiTrackerAdapter:
+        self.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    def _ensure_runtime(self) -> tuple[_OpenVrModule, _OpenVrSystem]:
+        if self._openvr is not None and self._system is not None:
+            return self._openvr, self._system
+        module = _load_openvr_runtime()
+        try:
+            system = module.init(module.VRApplication_Background)
+            for channel in self._channels:
+                channel._attach_runtime(module, system)
+        except Exception:
+            for channel in self._channels:
+                channel._detach_runtime()
+            module.shutdown()
+            raise
+        self._openvr = module
+        self._system = system
+        return module, system
+
+    def _require_started(self) -> tuple[_OpenVrModule, _OpenVrSystem]:
+        if not self._started or self._openvr is None or self._system is None:
+            raise RuntimeError("start() must succeed before poll()")
+        return self._openvr, self._system
+
+
 __all__ = [
     "JsonValue",
+    "OpenVrMultiTrackerAdapter",
     "OpenVrTrackerAdapter",
+    "OpenVrTrackerStreamConfig",
     "RawOpenVrRecord",
     "matrix34_to_pose_m_wxyz",
 ]

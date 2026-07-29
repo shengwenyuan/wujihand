@@ -20,6 +20,9 @@ def sample(sequence: int, host_time_ns: int) -> TrackedRigidBodySample:
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         sequence=sequence,
         tracking_frame="vive_tracking",
         position_m=(0.1 * sequence, 0.0, 0.0),
@@ -41,6 +44,9 @@ def calibrating_sample(
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         sequence=sequence,
         tracking_frame="vive_tracking",
         position_m=None,
@@ -61,6 +67,9 @@ def test_tracking_receiver_keeps_newest_monotonic_loopback_sample() -> None:
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         tracking_frame="vive_tracking",
     ) as receiver, UdpTrackingSampleSender(receiver.port) as sender:
         sender.send(sample(0, 100))
@@ -84,6 +93,9 @@ def test_tracking_receiver_batch_preserves_transient_calibrating_state() -> None
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         tracking_frame="vive_tracking",
     ) as receiver, UdpTrackingSampleSender(receiver.port) as sender:
         sender.send(sample(0, 100))
@@ -109,6 +121,9 @@ def test_calibrating_between_running_packets_prevents_reference_readiness() -> N
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         tracking_frame="vive_tracking",
         stable_after_s=0.000_000_2,
         max_sample_gap_s=0.25,
@@ -118,6 +133,9 @@ def test_calibrating_between_running_packets_prevents_reference_readiness() -> N
         stream_id="vive.right",
         device_serial="LHR-24B6E288",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=1,
+        tracking_setup_revision="standing_fixture_v1",
         tracking_frame="vive_tracking",
     ) as receiver, UdpTrackingSampleSender(receiver.port) as sender:
         sender.send(sample(0, 100))

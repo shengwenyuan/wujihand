@@ -75,6 +75,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stream-id", default="vive.right")
     parser.add_argument("--logical-role", default="operator_right")
     parser.add_argument("--tracking-frame", default="vive_tracking")
+    parser.add_argument("--producer-instance", default="openvr_single_tracker")
+    parser.add_argument("--transport-epoch", type=int, default=0)
+    parser.add_argument(
+        "--tracking-setup-revision",
+        default="steamvr_standing_unqualified",
+    )
     parser.add_argument("--poll-hz", type=_poll_hz, default=90.0)
     parser.add_argument("--duration-s", type=_duration_s, default=300.0)
     return parser
@@ -86,6 +92,9 @@ def main() -> int:
         tracker_serial=args.serial,
         stream_id=args.stream_id,
         logical_role=args.logical_role,
+        producer_instance=args.producer_instance,
+        transport_epoch=args.transport_epoch,
+        tracking_setup_revision=args.tracking_setup_revision,
         tracking_frame=args.tracking_frame,
     )
     sender = UdpTrackingSampleSender(args.udp_port)

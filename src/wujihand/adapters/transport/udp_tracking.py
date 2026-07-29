@@ -74,6 +74,9 @@ class UdpTrackingSampleReceiver:
         stream_id: str,
         device_serial: str,
         logical_role: str,
+        producer_instance: str,
+        transport_epoch: int,
+        tracking_setup_revision: str,
         tracking_frame: str,
     ) -> None:
         if type(port) is not int or not 0 <= port <= 65535:
@@ -82,6 +85,8 @@ class UdpTrackingSampleReceiver:
             ("stream_id", stream_id),
             ("device_serial", device_serial),
             ("logical_role", logical_role),
+            ("producer_instance", producer_instance),
+            ("tracking_setup_revision", tracking_setup_revision),
             ("tracking_frame", tracking_frame),
         ):
             if not isinstance(value, str) or not value or len(value) > 128:
@@ -89,6 +94,11 @@ class UdpTrackingSampleReceiver:
         self.stream_id = stream_id
         self.device_serial = device_serial
         self.logical_role = logical_role
+        if type(transport_epoch) is not int or transport_epoch < 0:
+            raise ValueError("transport_epoch must be a non-negative integer")
+        self.producer_instance = producer_instance
+        self.transport_epoch = transport_epoch
+        self.tracking_setup_revision = tracking_setup_revision
         self.tracking_frame = tracking_frame
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._socket.bind((TRACKING_LOOPBACK, port))
@@ -147,6 +157,10 @@ class UdpTrackingSampleReceiver:
                 sample.stream_id != self.stream_id
                 or sample.device_serial != self.device_serial
                 or sample.logical_role != self.logical_role
+                or sample.producer_instance != self.producer_instance
+                or sample.transport_epoch != self.transport_epoch
+                or sample.tracking_setup_revision
+                != self.tracking_setup_revision
                 or sample.tracking_frame != self.tracking_frame
                 or sample.host_time_ns > now
             ):
@@ -176,6 +190,41 @@ class UdpTrackingSampleReceiver:
             self.last_sequence = selected[-1].sequence
             self.accepted += 1
         return tuple(selected)
+
+    def authorize_epoch(
+        self,
+        *,
+        producer_instance: str,
+        transport_epoch: int,
+        tracking_setup_revision: str,
+    ) -> None:
+        """Authorize one launcher-observed epoch and reject queued old packets."""
+
+        for field, value in (
+            ("producer_instance", producer_instance),
+            ("tracking_setup_revision", tracking_setup_revision),
+        ):
+            if not isinstance(value, str) or not value or len(value) > 128:
+                raise ValueError(f"{field} must be a bounded non-empty string")
+        if type(transport_epoch) is not int or transport_epoch < 0:
+            raise ValueError("transport_epoch must be a non-negative integer")
+        if (
+            producer_instance == self.producer_instance
+            and transport_epoch == self.transport_epoch
+            and tracking_setup_revision == self.tracking_setup_revision
+        ):
+            return
+        while True:
+            try:
+                self._socket.recvfrom(MAX_TRACKING_DATAGRAM_BYTES + 1)
+            except BlockingIOError:
+                break
+            self.rejected += 1
+        self.producer_instance = producer_instance
+        self.transport_epoch = transport_epoch
+        self.tracking_setup_revision = tracking_setup_revision
+        self.last_host_time_ns = -1
+        self.last_sequence = -1
 
     def close(self) -> None:
         self._socket.close()

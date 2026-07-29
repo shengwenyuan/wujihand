@@ -8,8 +8,10 @@ import pytest
 
 from wujihand.adapters.storage import (
     decode_clutch_event_json,
+    decode_tracking_lifecycle_event_json,
     decode_tracking_sample_json,
     encode_clutch_event_json,
+    encode_tracking_lifecycle_event_json,
     encode_tracking_sample_json,
     read_tracking_samples_jsonl,
     write_tracking_samples_jsonl,
@@ -18,6 +20,8 @@ from wujihand.domain.tracking import (
     ClutchEdge,
     ClutchEvent,
     TrackedRigidBodySample,
+    TrackingLifecycleEvent,
+    TrackingLifecycleKind,
     TrackingState,
 )
 
@@ -27,6 +31,9 @@ def _sample(**overrides: object) -> TrackedRigidBodySample:
         "stream_id": "operator_tracker_right",
         "device_serial": "sanitized-tracker-1",
         "logical_role": "operator_right",
+        "producer_instance": "openvr_fixture",
+        "transport_epoch": 2,
+        "tracking_setup_revision": "standing_fixture_v1",
         "sequence": 2,
         "tracking_frame": "vive_tracking",
         "position_m": (0.1, 0.2, 0.3),
@@ -47,6 +54,9 @@ def _event() -> ClutchEvent:
         stream_id="operator_tracker_right",
         device_serial="sanitized-tracker-1",
         logical_role="operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=2,
+        tracking_setup_revision="standing_fixture_v1",
         input_id="tracker_clutch",
         edge=ClutchEdge.PRESSED,
         sequence=0,
@@ -81,6 +91,27 @@ def test_invalid_tracking_sample_round_trip_never_invents_pose() -> None:
 
 def test_clutch_event_json_round_trip_preserves_edge_and_epoch_request() -> None:
     assert decode_clutch_event_json(encode_clutch_event_json(_event())) == _event()
+
+
+def test_lifecycle_event_json_round_trip_preserves_epoch_transition() -> None:
+    event = TrackingLifecycleEvent(
+        producer_instance="openvr_fixture",
+        tracking_setup_revision="standing_fixture_v1",
+        stream_ids=("vive.left", "vive.right"),
+        kind=TrackingLifecycleKind.STARTED,
+        reason="launcher_start",
+        sequence=0,
+        old_transport_epoch=None,
+        new_transport_epoch=2,
+        host_time_ns=10,
+    )
+
+    assert (
+        decode_tracking_lifecycle_event_json(
+            encode_tracking_lifecycle_event_json(event)
+        )
+        == event
+    )
 
 
 @pytest.mark.parametrize(

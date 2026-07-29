@@ -11,6 +11,8 @@ from wujihand.domain.tracking import (
     ClutchEdge,
     ClutchEvent,
     TrackedRigidBodySample,
+    TrackingLifecycleEvent,
+    TrackingLifecycleKind,
     TrackingState,
 )
 
@@ -21,6 +23,9 @@ _SAMPLE_FIELDS: Final = frozenset(
         "stream_id",
         "device_serial",
         "logical_role",
+        "producer_instance",
+        "transport_epoch",
+        "tracking_setup_revision",
         "sequence",
         "tracking_frame",
         "position_m",
@@ -40,12 +45,30 @@ _EVENT_FIELDS: Final = frozenset(
         "stream_id",
         "device_serial",
         "logical_role",
+        "producer_instance",
+        "transport_epoch",
+        "tracking_setup_revision",
         "input_id",
         "edge",
         "sequence",
         "host_time_ns",
         "clock_domain",
         "epoch_request",
+    }
+)
+_LIFECYCLE_FIELDS: Final = frozenset(
+    {
+        "schema",
+        "producer_instance",
+        "tracking_setup_revision",
+        "stream_ids",
+        "kind",
+        "reason",
+        "sequence",
+        "old_transport_epoch",
+        "new_transport_epoch",
+        "host_time_ns",
+        "clock_domain",
     }
 )
 
@@ -102,6 +125,9 @@ def tracking_sample_to_mapping(sample: TrackedRigidBodySample) -> dict[str, obje
         "stream_id": sample.stream_id,
         "device_serial": sample.device_serial,
         "logical_role": sample.logical_role,
+        "producer_instance": sample.producer_instance,
+        "transport_epoch": sample.transport_epoch,
+        "tracking_setup_revision": sample.tracking_setup_revision,
         "sequence": sample.sequence,
         "tracking_frame": sample.tracking_frame,
         "position_m": None if sample.position_m is None else list(sample.position_m),
@@ -124,12 +150,35 @@ def clutch_event_to_mapping(event: ClutchEvent) -> dict[str, object]:
         "stream_id": event.stream_id,
         "device_serial": event.device_serial,
         "logical_role": event.logical_role,
+        "producer_instance": event.producer_instance,
+        "transport_epoch": event.transport_epoch,
+        "tracking_setup_revision": event.tracking_setup_revision,
         "input_id": event.input_id,
         "edge": event.edge.value,
         "sequence": event.sequence,
         "host_time_ns": event.host_time_ns,
         "clock_domain": event.clock_domain,
         "epoch_request": event.epoch_request,
+    }
+
+
+def tracking_lifecycle_event_to_mapping(
+    event: TrackingLifecycleEvent,
+) -> dict[str, object]:
+    """Convert one validated producer lifecycle event to JSON-native values."""
+
+    return {
+        "schema": event.schema,
+        "producer_instance": event.producer_instance,
+        "tracking_setup_revision": event.tracking_setup_revision,
+        "stream_ids": list(event.stream_ids),
+        "kind": event.kind.value,
+        "reason": event.reason,
+        "sequence": event.sequence,
+        "old_transport_epoch": event.old_transport_epoch,
+        "new_transport_epoch": event.new_transport_epoch,
+        "host_time_ns": event.host_time_ns,
+        "clock_domain": event.clock_domain,
     }
 
 
@@ -155,8 +204,21 @@ def encode_clutch_event_json(event: ClutchEvent) -> str:
     )
 
 
+def encode_tracking_lifecycle_event_json(
+    event: TrackingLifecycleEvent,
+) -> str:
+    """Encode one lifecycle event as a deterministic strict JSON object."""
+
+    return json.dumps(
+        tracking_lifecycle_event_to_mapping(event),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
 def decode_tracking_sample_json(data: str | bytes) -> TrackedRigidBodySample:
-    """Decode one line only when it exactly matches sample schema v1."""
+    """Decode one line only when it exactly matches sample schema v2."""
 
     payload = _decode_mapping(data, fields=_SAMPLE_FIELDS)
     try:
@@ -170,6 +232,9 @@ def decode_tracking_sample_json(data: str | bytes) -> TrackedRigidBodySample:
         stream_id=payload["stream_id"],  # type: ignore[arg-type]
         device_serial=payload["device_serial"],  # type: ignore[arg-type]
         logical_role=payload["logical_role"],  # type: ignore[arg-type]
+        producer_instance=payload["producer_instance"],  # type: ignore[arg-type]
+        transport_epoch=payload["transport_epoch"],  # type: ignore[arg-type]
+        tracking_setup_revision=payload["tracking_setup_revision"],  # type: ignore[arg-type]
         sequence=payload["sequence"],  # type: ignore[arg-type]
         tracking_frame=payload["tracking_frame"],  # type: ignore[arg-type]
         position_m=position,  # type: ignore[arg-type]
@@ -185,7 +250,7 @@ def decode_tracking_sample_json(data: str | bytes) -> TrackedRigidBodySample:
 
 
 def decode_clutch_event_json(data: str | bytes) -> ClutchEvent:
-    """Decode one line only when it exactly matches clutch event schema v1."""
+    """Decode one line only when it exactly matches clutch event schema v2."""
 
     payload = _decode_mapping(data, fields=_EVENT_FIELDS)
     try:
@@ -197,12 +262,43 @@ def decode_clutch_event_json(data: str | bytes) -> ClutchEvent:
         stream_id=payload["stream_id"],  # type: ignore[arg-type]
         device_serial=payload["device_serial"],  # type: ignore[arg-type]
         logical_role=payload["logical_role"],  # type: ignore[arg-type]
+        producer_instance=payload["producer_instance"],  # type: ignore[arg-type]
+        transport_epoch=payload["transport_epoch"],  # type: ignore[arg-type]
+        tracking_setup_revision=payload["tracking_setup_revision"],  # type: ignore[arg-type]
         input_id=payload["input_id"],  # type: ignore[arg-type]
         edge=edge,
         sequence=payload["sequence"],  # type: ignore[arg-type]
         host_time_ns=payload["host_time_ns"],  # type: ignore[arg-type]
         clock_domain=payload["clock_domain"],  # type: ignore[arg-type]
         epoch_request=payload["epoch_request"],  # type: ignore[arg-type]
+    )
+
+
+def decode_tracking_lifecycle_event_json(
+    data: str | bytes,
+) -> TrackingLifecycleEvent:
+    """Decode one strict managed-producer lifecycle event."""
+
+    payload = _decode_mapping(data, fields=_LIFECYCLE_FIELDS)
+    try:
+        kind = TrackingLifecycleKind(payload["kind"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("kind is not a supported lifecycle value") from exc
+    stream_ids = payload["stream_ids"]
+    if not isinstance(stream_ids, list):
+        raise ValueError("stream_ids must be a JSON array")
+    return TrackingLifecycleEvent(
+        schema=payload["schema"],  # type: ignore[arg-type]
+        producer_instance=payload["producer_instance"],  # type: ignore[arg-type]
+        tracking_setup_revision=payload["tracking_setup_revision"],  # type: ignore[arg-type]
+        stream_ids=tuple(stream_ids),
+        kind=kind,
+        reason=payload["reason"],  # type: ignore[arg-type]
+        sequence=payload["sequence"],  # type: ignore[arg-type]
+        old_transport_epoch=payload["old_transport_epoch"],  # type: ignore[arg-type]
+        new_transport_epoch=payload["new_transport_epoch"],  # type: ignore[arg-type]
+        host_time_ns=payload["host_time_ns"],  # type: ignore[arg-type]
+        clock_domain=payload["clock_domain"],  # type: ignore[arg-type]
     )
 
 
@@ -255,12 +351,15 @@ def read_clutch_events_jsonl(path: str | Path) -> tuple[ClutchEvent, ...]:
 __all__ = [
     "clutch_event_to_mapping",
     "decode_clutch_event_json",
+    "decode_tracking_lifecycle_event_json",
     "decode_tracking_sample_json",
     "encode_clutch_event_json",
+    "encode_tracking_lifecycle_event_json",
     "encode_tracking_sample_json",
     "read_clutch_events_jsonl",
     "read_tracking_samples_jsonl",
     "tracking_sample_to_mapping",
+    "tracking_lifecycle_event_to_mapping",
     "write_clutch_events_jsonl",
     "write_tracking_samples_jsonl",
 ]

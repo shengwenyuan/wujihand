@@ -65,6 +65,9 @@ class _FakeAdapter:
         stream_id: str,
         logical_role: str,
         *,
+        producer_instance: str,
+        transport_epoch: int,
+        tracking_setup_revision: str,
         tracking_frame: str = "vive_tracking",
         clutch_button_id: int | None = None,
         clutch_input_id: str = "tracker_clutch",
@@ -72,6 +75,9 @@ class _FakeAdapter:
         self.tracker_serial = tracker_serial
         self.stream_id = stream_id
         self.logical_role = logical_role
+        self.producer_instance = producer_instance
+        self.transport_epoch = transport_epoch
+        self.tracking_setup_revision = tracking_setup_revision
         self.tracking_frame = tracking_frame
         self.clutch_button_id = clutch_button_id
         self.clutch_input_id = clutch_input_id
@@ -107,6 +113,9 @@ class _FakeAdapter:
             stream_id=self.stream_id,
             device_serial=cast(str, self.tracker_serial),
             logical_role=self.logical_role,
+            producer_instance=self.producer_instance,
+            transport_epoch=self.transport_epoch,
+            tracking_setup_revision=self.tracking_setup_revision,
             sequence=self.sequence,
             tracking_frame=self.tracking_frame,
             position_m=(0.1, 0.2, 0.3) if valid else None,
@@ -125,6 +134,9 @@ class _FakeAdapter:
                     stream_id=self.stream_id,
                     device_serial=cast(str, self.tracker_serial),
                     logical_role=self.logical_role,
+                    producer_instance=self.producer_instance,
+                    transport_epoch=self.transport_epoch,
+                    tracking_setup_revision=self.tracking_setup_revision,
                     input_id=self.clutch_input_id,
                     edge=ClutchEdge.PRESSED,
                     sequence=0,

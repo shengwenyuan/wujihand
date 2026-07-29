@@ -256,6 +256,9 @@ def run_inventory(
         tracker_serial=None,
         stream_id="vive.inventory",
         logical_role="qualification",
+        producer_instance="vive_qualification",
+        transport_epoch=0,
+        tracking_setup_revision="steamvr_standing_unqualified",
     )
     try:
         devices = adapter.inventory()
@@ -285,6 +288,9 @@ def run_capture(
         tracker_serial=config.serial,
         stream_id=config.stream_id,
         logical_role=config.logical_role,
+        producer_instance="vive_qualification",
+        transport_epoch=0,
+        tracking_setup_revision="steamvr_standing_unqualified",
         tracking_frame=config.tracking_frame,
         clutch_button_id=config.clutch_button_id,
         clutch_input_id=config.clutch_input_id,

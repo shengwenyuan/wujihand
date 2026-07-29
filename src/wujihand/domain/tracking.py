@@ -1,9 +1,9 @@
-"""Device-independent rigid-body tracking and clutch event contracts.
+"""Device-independent rigid-body tracking and lifecycle contracts.
 
-Schema v1 fixes position units to metres, quaternions to active scalar-first
-``wxyz`` rotations, and host timestamps to a monotonic clock.  Invalid tracking
-never carries a stale or partial pose: consumers must observe the explicit
-tracking state instead.
+Schema v2 fixes position units to metres, quaternions to active scalar-first
+``wxyz`` rotations, host timestamps to a monotonic clock, and every sample to
+one managed producer/setup/transport epoch. Invalid tracking never carries a
+stale or partial pose: consumers must observe the explicit tracking state.
 """
 
 from __future__ import annotations
@@ -19,8 +19,9 @@ from typing import Final, cast
 from .pose import validate_host_time_ns, validate_unit_quaternion_wxyz
 
 
-TRACKED_RIGID_BODY_SAMPLE_SCHEMA: Final = "wujihand.tracked_rigid_body_sample.v1"
-CLUTCH_EVENT_SCHEMA: Final = "wujihand.clutch_event.v1"
+TRACKED_RIGID_BODY_SAMPLE_SCHEMA: Final = "wujihand.tracked_rigid_body_sample.v2"
+CLUTCH_EVENT_SCHEMA: Final = "wujihand.clutch_event.v2"
+TRACKING_LIFECYCLE_EVENT_SCHEMA: Final = "wujihand.tracking_lifecycle_event.v1"
 TRACKING_POSITION_UNIT: Final = "m"
 TRACKING_QUATERNION_ORDER: Final = "wxyz"
 TRACKING_QUATERNION_CONVENTION: Final = "active"
@@ -47,6 +48,15 @@ class ClutchEdge(str, Enum):
     RELEASED = "released"
 
 
+class TrackingLifecycleKind(str, Enum):
+    """Managed producer lifecycle transitions visible to consumers."""
+
+    STARTED = "started"
+    REBOUND = "rebound"
+    RESET = "reset"
+    STOPPED = "stopped"
+
+
 def _validate_token(value: object, *, field: str) -> str:
     if type(value) is not str or _TOKEN.fullmatch(value) is None:
         raise ValueError(f"{field} must be a bounded transport-safe identifier")
@@ -57,6 +67,26 @@ def _validate_sequence(value: object) -> int:
     if type(value) is not int or value < 0:
         raise ValueError("sequence must be a non-negative integer")
     return value
+
+
+def _validate_optional_sequence(value: object, *, field: str) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer or None")
+    return value
+
+
+def _validate_token_sequence(value: object, *, field: str) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes, bytearray)) or not isinstance(value, Iterable):
+        raise ValueError(f"{field} must contain unique identifiers")
+    result = tuple(
+        _validate_token(item, field=f"{field}[{index}]")
+        for index, item in enumerate(value)
+    )
+    if not result or len(set(result)) != len(result):
+        raise ValueError(f"{field} must contain unique identifiers")
+    return result
 
 
 def _validate_optional_time_ns(value: object, *, field: str) -> int | None:
@@ -121,6 +151,9 @@ class TrackedRigidBodySample:
     stream_id: str
     device_serial: str
     logical_role: str
+    producer_instance: str
+    transport_epoch: int
+    tracking_setup_revision: str
     sequence: int
     tracking_frame: str
     position_m: tuple[float, float, float] | None
@@ -147,6 +180,24 @@ class TrackedRigidBodySample:
             self,
             "logical_role",
             _validate_token(self.logical_role, field="logical_role"),
+        )
+        object.__setattr__(
+            self,
+            "producer_instance",
+            _validate_token(self.producer_instance, field="producer_instance"),
+        )
+        object.__setattr__(
+            self,
+            "transport_epoch",
+            _validate_sequence(self.transport_epoch),
+        )
+        object.__setattr__(
+            self,
+            "tracking_setup_revision",
+            _validate_token(
+                self.tracking_setup_revision,
+                field="tracking_setup_revision",
+            ),
         )
         object.__setattr__(self, "sequence", _validate_sequence(self.sequence))
         object.__setattr__(
@@ -226,6 +277,9 @@ class ClutchEvent:
     stream_id: str
     device_serial: str
     logical_role: str
+    producer_instance: str
+    transport_epoch: int
+    tracking_setup_revision: str
     input_id: str
     edge: ClutchEdge
     sequence: int
@@ -241,6 +295,8 @@ class ClutchEvent:
             "stream_id",
             "device_serial",
             "logical_role",
+            "producer_instance",
+            "tracking_setup_revision",
             "input_id",
         ):
             object.__setattr__(
@@ -248,6 +304,11 @@ class ClutchEvent:
                 field,
                 _validate_token(getattr(self, field), field=field),
             )
+        object.__setattr__(
+            self,
+            "transport_epoch",
+            _validate_sequence(self.transport_epoch),
+        )
         if type(self.edge) is not ClutchEdge:
             raise ValueError("edge must be a ClutchEdge")
         object.__setattr__(self, "sequence", _validate_sequence(self.sequence))
@@ -259,15 +320,108 @@ class ClutchEvent:
             raise ValueError("only a PRESSED edge may request a new epoch")
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TrackingLifecycleEvent:
+    """One explicit managed-producer epoch transition."""
+
+    producer_instance: str
+    tracking_setup_revision: str
+    stream_ids: tuple[str, ...]
+    kind: TrackingLifecycleKind
+    reason: str
+    sequence: int
+    old_transport_epoch: int | None
+    new_transport_epoch: int | None
+    host_time_ns: int
+    clock_domain: str = HOST_MONOTONIC_CLOCK_DOMAIN
+    schema: str = TRACKING_LIFECYCLE_EVENT_SCHEMA
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.schema) is not str
+            or self.schema != TRACKING_LIFECYCLE_EVENT_SCHEMA
+        ):
+            raise ValueError(
+                f"schema must be {TRACKING_LIFECYCLE_EVENT_SCHEMA!r}"
+            )
+        object.__setattr__(
+            self,
+            "producer_instance",
+            _validate_token(self.producer_instance, field="producer_instance"),
+        )
+        object.__setattr__(
+            self,
+            "tracking_setup_revision",
+            _validate_token(
+                self.tracking_setup_revision,
+                field="tracking_setup_revision",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "stream_ids",
+            _validate_token_sequence(self.stream_ids, field="stream_ids"),
+        )
+        if type(self.kind) is not TrackingLifecycleKind:
+            raise ValueError("kind must be a TrackingLifecycleKind")
+        object.__setattr__(self, "reason", _validate_token(self.reason, field="reason"))
+        object.__setattr__(self, "sequence", _validate_sequence(self.sequence))
+        object.__setattr__(
+            self,
+            "old_transport_epoch",
+            _validate_optional_sequence(
+                self.old_transport_epoch,
+                field="old_transport_epoch",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "new_transport_epoch",
+            _validate_optional_sequence(
+                self.new_transport_epoch,
+                field="new_transport_epoch",
+            ),
+        )
+        object.__setattr__(self, "host_time_ns", validate_host_time_ns(self.host_time_ns))
+        object.__setattr__(self, "clock_domain", _validate_clock_domain(self.clock_domain))
+
+        if self.kind is TrackingLifecycleKind.STARTED:
+            valid_epochs = (
+                self.old_transport_epoch is None
+                and self.new_transport_epoch is not None
+            )
+        elif self.kind in {
+            TrackingLifecycleKind.REBOUND,
+            TrackingLifecycleKind.RESET,
+        }:
+            valid_epochs = (
+                self.old_transport_epoch is not None
+                and self.new_transport_epoch is not None
+                and self.old_transport_epoch != self.new_transport_epoch
+            )
+        else:
+            valid_epochs = (
+                self.old_transport_epoch is not None
+                and self.new_transport_epoch is None
+            )
+        if not valid_epochs:
+            raise ValueError(
+                "lifecycle kind and old/new transport epochs are inconsistent"
+            )
+
+
 __all__ = [
     "CLUTCH_EVENT_SCHEMA",
     "HOST_MONOTONIC_CLOCK_DOMAIN",
     "TRACKED_RIGID_BODY_SAMPLE_SCHEMA",
+    "TRACKING_LIFECYCLE_EVENT_SCHEMA",
     "TRACKING_POSITION_UNIT",
     "TRACKING_QUATERNION_CONVENTION",
     "TRACKING_QUATERNION_ORDER",
     "ClutchEdge",
     "ClutchEvent",
     "TrackedRigidBodySample",
+    "TrackingLifecycleEvent",
+    "TrackingLifecycleKind",
     "TrackingState",
 ]

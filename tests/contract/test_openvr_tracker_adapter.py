@@ -11,7 +11,11 @@ import numpy as np
 import pytest
 
 import wujihand.adapters.input.openvr_tracker as openvr_adapter
-from wujihand.adapters.input.openvr_tracker import OpenVrTrackerAdapter
+from wujihand.adapters.input.openvr_tracker import (
+    OpenVrMultiTrackerAdapter,
+    OpenVrTrackerAdapter,
+    OpenVrTrackerStreamConfig,
+)
 from wujihand.domain import ClutchEdge, TrackingState
 from wujihand.domain.pose import quaternion_wxyz_to_rotation_matrix
 from wujihand.ports import TrackingInputPort
@@ -70,6 +74,7 @@ class _FakeSystem:
         self.controller_states: dict[int, _FakeControllerState] = {
             2: _FakeControllerState()
         }
+        self.pose_calls = 0
 
     def getTrackedDeviceClass(self, device_index: int) -> int:
         device = self.devices.get(device_index)
@@ -101,6 +106,7 @@ class _FakeSystem:
         assert origin == self.module.TrackingUniverseStanding
         assert predicted_seconds_to_photons_from_now == 0.0
         assert tracked_device_pose_array == ()
+        self.pose_calls += 1
         return self.poses
 
     def getControllerState(
@@ -222,6 +228,9 @@ def _adapter(*, clutch_button_id: int | None = 2) -> OpenVrTrackerAdapter:
         SERIAL,
         "vive.right",
         "operator_right",
+        producer_instance="openvr_fixture",
+        transport_epoch=3,
+        tracking_setup_revision="standing_fixture_v1",
         clutch_button_id=clutch_button_id,
         clutch_input_id="grip",
     )
@@ -249,7 +258,14 @@ def test_openvr_is_not_imported_at_module_import_time() -> None:
 def test_inventory_without_serial_exposes_no_transient_device_index(
     fake_openvr: _FakeOpenVr,
 ) -> None:
-    adapter = OpenVrTrackerAdapter(None, "inventory", "qualification")
+    adapter = OpenVrTrackerAdapter(
+        None,
+        "inventory",
+        "qualification",
+        producer_instance="openvr_fixture",
+        transport_epoch=3,
+        tracking_setup_revision="standing_fixture_v1",
+    )
 
     inventory = adapter.inventory()
 
@@ -489,6 +505,76 @@ def test_close_is_idempotent(fake_openvr: _FakeOpenVr) -> None:
     assert fake_openvr.shutdown_calls == 1
     with pytest.raises(RuntimeError, match=r"start\(\)"):
         adapter.poll()
+
+
+def test_multi_tracker_owner_reads_one_pose_array_for_two_serial_streams(
+    fake_openvr: _FakeOpenVr,
+) -> None:
+    second_serial = "LHR-TEST-TRACKER-LEFT"
+    fake_openvr.system.devices[3] = {
+        "serial": second_serial,
+        "class": fake_openvr.TrackedDeviceClass_GenericTracker,
+        "model": "VIVE Tracker",
+        "manufacturer": "HTC",
+        "connected": True,
+    }
+    fake_openvr.system.poses[2] = _z_pose(
+        15.0,
+        position=(1.0, 2.0, 3.0),
+    )
+    fake_openvr.system.poses[3] = _z_pose(
+        -20.0,
+        position=(-1.0, -2.0, -3.0),
+    )
+    owner = OpenVrMultiTrackerAdapter(
+        (
+            OpenVrTrackerStreamConfig(
+                tracker_serial=second_serial,
+                stream_id="vive.left",
+                logical_role="operator_left",
+            ),
+            OpenVrTrackerStreamConfig(
+                tracker_serial=SERIAL,
+                stream_id="vive.right",
+                logical_role="operator_right",
+            ),
+        ),
+        producer_instance="openvr_dual_fixture",
+        transport_epoch=7,
+        tracking_setup_revision="standing_fixture_v1",
+    )
+
+    selected = owner.start()
+    polls = owner.poll(host_time_ns=100)
+
+    assert [item.serial for item in selected] == [second_serial, SERIAL]
+    assert fake_openvr.init_calls == 1
+    assert fake_openvr.system.pose_calls == 1
+    assert [poll.sample.stream_id for poll in polls] == [
+        "vive.left",
+        "vive.right",
+    ]
+    assert {poll.sample.host_time_ns for poll in polls} == {100}
+    assert {poll.sample.producer_instance for poll in polls} == {
+        "openvr_dual_fixture"
+    }
+    assert {poll.sample.transport_epoch for poll in polls} == {7}
+    assert polls[0].sample.position_m == pytest.approx((-1.0, -2.0, -3.0))
+    assert polls[1].sample.position_m == pytest.approx((1.0, 2.0, 3.0))
+
+    fake_openvr.system.poses[3] = _z_pose(
+        0.0,
+        valid=False,
+        tracking_result=fake_openvr.TrackingResult_Running_OutOfRange,
+    )
+    second = owner.poll(host_time_ns=200)
+    assert second[0].sample.tracking_state is TrackingState.OUT_OF_RANGE
+    assert second[1].sample.tracking_state is TrackingState.RUNNING
+    assert fake_openvr.system.pose_calls == 2
+
+    owner.close()
+    owner.close()
+    assert fake_openvr.shutdown_calls == 1
 
 
 def _assert_json_types(value: object) -> None:
