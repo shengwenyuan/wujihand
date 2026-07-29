@@ -765,6 +765,21 @@ Hand 2 装配示意、Glove side/序列号、Wuji SDK 版本和有效标定产�
 在 ROS 2 之前建立最小、可测试的 Tracker producer → loopback transport → Isaac
 consumer 右臂闭环，冻结 canonical Cartesian 语义。
 
+**执行状态（2026-07-29，IN_PROGRESS）**
+
+- 真人 Tracker → 右 NERO 的 x/y/z 方向已在 Workstation2 GUI 人工通过；roll/pitch/yaw
+  仍待固定来源 Lula 下复验。
+- GUI consumer 已取消 stdin/回车阻塞，并把窗口生命周期与
+  `WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE` 控制状态解耦。
+  持续失联或连续 IK 失败只撤销当前 reference epoch；恢复时以右臂当前 link7 pose
+  自动建立新 epoch。合成流已在同一 Isaac Sim 6.0.1 GUI 会话完成两次 epoch。
+- headless 资格路径仍使用连续 running 稳定门、有限帧和明确退出码；本次拆分未修改
+  五层 Session、simulation-only 坐标映射、rotation opt-in、link6 Binding 或 Lula
+  frame。
+- 当前 UDP receiver 在单次生命周期内仍要求 sequence 严格递增。producer restart
+  后显式 transport epoch、完整 recorder/feedback contract、RPY 人工测试及其 fault
+  matrix 尚未完成，因此 NV-3 不升级为通过。
+
 **工作**
 
 1. 冻结 `TrackedRigidBodySample`、`ClutchEvent`、`CartesianPoseIntent`、

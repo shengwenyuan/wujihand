@@ -303,12 +303,38 @@ OpenVR 的 `Calibrating_InProgress/OutOfRange` 是显式非 actionable 状态，
 `bPoseIsValid`、相邻帧曾为 `Running_OK` 或 UDP 仍连通而改写成 running。Tracker
 producer 持续发送 running 和非 running 的 canonical sample；状态切换日志中的
 `udp=sent` 与 `actionable=false` 分别表示“传输仍连续”和“该帧不可用于新命令”。
-Isaac consumer 在建立 reference 前逐包检查输入，并要求默认 `0.25 s` 连续
-`Running_OK`；任一 observed calibrating/out-of-range/lost sample 都重置启动稳定窗口，
-超过现有 freshness 阈值的样本空窗同样重置，且不会被同一次 UDP drain 中更新的
-running 包遮蔽。reference 建立后，短暂非 running 仍只 hold 最后目标且不刷新有效
-输入时间戳，持续超过 freshness 窗才要求新 reference。该状态门属于 application
-teleoperation，不进入或改写五层配置。
+
+Isaac consumer 明确分为两种生命周期：
+
+| 模式 | reference 与结束条件 |
+|---|---|
+| `--gui --tracker-live` | 交互会话；首个 fresh canonical `Running_OK` 自动建立 reference，不等待回车，也不使用启动稳定窗；窗口由操作者关闭 |
+| headless `--tracker-live` | 有界资格验证；默认要求 `0.25 s` 连续 `Running_OK`，执行 `--tracker-frames` 后给出通过/失败并退出 |
+
+GUI 控制状态机位于 application teleoperation：
+
+```text
+WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE
+                         ^                    |
+                         +---- fresh RUNNING--+
+```
+
+短暂非 running 或无新包只保持最后目标且不刷新有效输入时间；持续超过 freshness
+窗口后停止生成新右臂命令并等待。恢复时以右臂当时的 q7 feedback 计算 link7 pose，
+再用当前 Tracker pose 建立新的 relative epoch，因此不会跳回启动姿态。连续 5 次 IK
+失败也只撤销当前映射 epoch 并回到等待状态，不结束 GUI。`--tracker-frames` 在 GUI
+模式下忽略；交互报告不执行 Gate 判定，`passed` 为 `null`。
+
+headless 路径继续逐包检查启动稳定窗；任一 calibrating/out-of-range/lost sample
+或超过 freshness 阈值的空窗都会重置窗口，且不会被同一次 UDP drain 中较新的
+running 包遮蔽。旧 `--tracker-auto-reference` 只作为命令兼容选项保留，两个模式都
+已经自动建立 reference。
+
+上述状态机不进入或改写五层配置；simulation-only calibration、rotation opt-in、
+Lula `link7` frame 和 JointCommandSupervisor 边界保持不变。当前 UDP transport 仍
+要求同一 receiver 生命周期内 sequence 严格递增；若 producer 进程重启并从 0
+重新编号，应同时重启 consumer。跨 producer restart 的 transport epoch 是独立后续
+需求，不与物理遮挡后的 tracking reacquisition 混为一谈。
 
 依据为 Valve OpenVR `Driver_API_Documentation.md` 的 “Poses / ETrackingResult”：
 [`Calibrating_*` 尚未完全就绪且不应使用，只有 `Running_OK` 表示已校准的有效姿态](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#poses)。
@@ -322,6 +348,8 @@ teleoperation，不进入或改写五层配置。
 | `tests/unit/test_wuji_hand2_retarget_adapter.py` | `(21,3) m → q20 rad`、side、freshness、confidence 与 reset |
 | `tests/unit/test_glove_hand2_simulation_controller.py` | input/retarget/supervisor composition、失败语义与 q27 partition |
 | `tests/unit/test_live_readiness.py` | 快速 live 与完整 scripted 的显式 q27 就绪策略 |
+| `tests/unit/test_tracker_arm_teleoperation.py` | relative SE(3)、短暂 HOLD、失联后当前 pose 重建 reference 与 IK 失败恢复 |
+| `tests/contract/test_tracker_interactive_runner.py` | GUI 路径无 stdin 阻塞并由 `SimulationApp.is_running()` 持续驱动 |
 | `tests/contract/test_hand_observation_jsonl_fixture.py` | strict canonical JSONL contract |
 | `tests/unit/test_hand_observation_replay_adapter.py` | SDK-independent bounded replay 与时间重基准 |
 | `tests/integration/isaac_nero_dual_asset_smoke.py` | 历史 NERO-only pre-composition 双 q7 smoke |
@@ -334,6 +362,7 @@ artifacts/validation/nv2/nero-dual-asset-smoke.json
 artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json
 artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
 artifacts/validation/input-smoke/tracker-right-nero/reference-readiness-current-lula-v1.json
+artifacts/validation/input-smoke/tracker-right-nero/tracker-bounded-lifecycle-v1.json
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-corrected-flange-final-v3.json  # 已撤销 J7 定义下的历史证据
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-se3-corrected-flange-final-v2.json       # 已撤销 J7 定义下的历史证据
 artifacts/validation/nv2/nero-dual-hand2-tabletop-v6.json       # 历史 84/84 基线

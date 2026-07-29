@@ -144,12 +144,30 @@ OpenVR `TrackingResult` 是逐帧状态，不是由应用自行锁存的一次�
 仍在发送，也不能产生新控制目标。producer 的状态日志会分别打印
 `udp=sent` 和 `actionable=<true|false>`，避免把“持续传输”误读成“持续有效姿态”。
 
-建立 Tracker → NERO reference 时，consumer 默认要求 `0.25 s` 连续 running。稳定
-窗口内观察到任一非 running sample 或超过既有 freshness 阈值的样本空窗都从零
-重新计时；UDP receiver 的 batch drain 会保留中间状态，不能让同批次较新的 running
-包掩盖 calibrating。reference 建立后，短暂非 running 只 hold 最后目标且不刷新
-freshness；持续异常才 disarm 并要求新 reference。不得通过把 calibrating 重标成
-running 来保持运动。
+Tracker → NERO consumer 有两个不同目的的入口：
+
+- GUI 交互入口在首个 fresh canonical running sample 自动建立 reference，不等待
+  回车；遮挡或持续 calibrating 后只撤销控制 reference，Isaac 窗口继续运行，恢复
+  running 时以右臂当前 link7 pose 自动建立新 epoch；
+- headless 资格验证默认要求 `0.25 s` 连续 running，并在有限
+  `--tracker-frames` 后判定和退出。
+
+headless 稳定窗口内观察到任一非 running sample 或超过既有 freshness 阈值的样本
+空窗都从零重新计时；UDP receiver 的 batch drain 会保留中间状态，不能让同批次较新
+的 running 包掩盖 calibrating。两个入口在 reference 建立后都沿用同一规则：短暂
+非 running 只 hold 最后目标且不刷新 freshness；持续异常才 disarm 并要求新
+reference。不得通过把 calibrating 重标成 running 来保持运动。
+
+GUI 入口的状态顺序应为：
+
+```text
+WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE -> TRACKING
+```
+
+`--tracker-frames` 在 GUI 模式下忽略。旧 `--tracker-auto-reference` 已是兼容空操作，
+新命令不需要携带。关闭 Isaac 窗口结束交互会话；headless 才产生资格验证
+`passed=true/false`。同一 UDP receiver 仍要求 sequence 严格递增；若整个 producer
+进程重启并把 sequence 归零，需要同步重启 consumer。
 
 Valve OpenVR 官方依据见
 [`Driver API Documentation` 的 “Poses / ETrackingResult”](https://github.com/ValveSoftware/openvr/blob/master/docs/Driver_API_Documentation.md#poses)。

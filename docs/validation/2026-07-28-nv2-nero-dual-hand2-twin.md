@@ -478,6 +478,49 @@ IK `120/120`、失败 `0`、UDP rejected datagram `0`，最终 `passed=true`，�
 SHA-256
 `3db53e6eb805358caca1840c023cfcef676fe82d006c4bf41f72d3b8597c380e`。
 
+### 2026-07-29 GUI 生命周期修正与复验
+
+实际 GUI 退出问题与 mapping、rotation、link6 表示或 Lula frame 无关。失败日志显示
+runner 在 Isaac 主循环内阻塞等待 `input()`；约 50 秒没有继续 `world.step()`，收到
+回车后虽成功建立 reference，Kit 随即结束。修正只拆分 composition root 的运行模式：
+
+- GUI live 首个 fresh canonical running sample 自动建立 reference，不再读取 stdin；
+- application controller 独立维护
+  `WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE`；
+- 持续失联或连续 5 次 IK 失败只停止当前 Tracker 控制 epoch，GUI 继续步进；
+- 恢复时从右臂当前 q7 feedback 计算 link7 reference，避免回到初始 q7；
+- headless 路径仍保留连续 running 稳定门、有限帧和资格退出码。
+
+Workstation2 的 Isaac Sim 6.0.1 GUI 使用单调 sequence 的合成 canonical 流完成两次
+reference epoch。观测到：
+
+```text
+epoch=1: WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE
+epoch=2: WAITING_REFERENCE -> TRACKING -> HOLD -> WAITING_REFERENCE
+```
+
+两个 TRACKING 区间均持续报告 `ik=ok`；第一次失联后 GUI 在等待状态持续运行，第二段
+running 输入无需回车即建立 `epoch=2`。对应 Kit 日志为
+`kit_20260729_150449.log`。该次会话最终由远端 SIGINT 终止，未把它包装成
+qualification artifact；结论只覆盖 GUI 生命周期和重捕获，不替代真人 RPY 方向
+复验。
+
+同一代码的 headless 有界回归未携带旧 `--tracker-auto-reference`，在连续
+`0.255555395 s`、24 个 sample 后自动建立 reference，完成 `120/120` 帧、
+IK `120/120`、失败 `0`、UDP reject `0`，`passed=true`，并记录
+`five_layer_configuration_modified=false`。这确认交互生命周期拆分没有改变
+headless Gate。
+
+有界回归证据已保存为
+`artifacts/validation/input-smoke/tracker-right-nero/tracker-bounded-lifecycle-v1.json`，
+SHA-256
+`34e24040bfa93c58e02553510965bb424279e6ffd584fd4c86374432d88a6647`。
+
+测试还确认 transport 的既有边界：重新启动合成 producer 会把 sequence 归零，同一
+receiver 会按防重放规则拒绝这些包；使用连续单调 sequence 即可正常建立第二个 epoch。
+本轮不放宽 transport ordering，跨 producer restart 的显式 stream/session epoch
+另行设计。
+
 以下 rotation/SE(3) 数据来自已经撤销的 corrected-J7 Lula 定义，只用于说明当时
 测试发生过，不能作为当前 fixed-source Lula 的通过证据。XYZ 人工方向结论不依赖
 该 J7 修正，仍然有效；rotation 必须按当前定义重新人工验证。
