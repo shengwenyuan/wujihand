@@ -1,0 +1,18 @@
+schema: wujihand.tracker_workcell_mapping.v1
+mapping_id: vive_tracker_workcell_workstation2_v4
+tracking_frame: vive_tracking
+workcell_frame: world
+# Workstation2 right-side HIL observation on 2026-07-29:
+# operator right = Tracker +Z, table-inward = Tracker +X, up = Tracker +Y.
+# X and Y both reverse v3; the resulting matrix remains a proper rotation.
+tracker_to_workcell:
+  - [0.0, 0.0, 1.0]  # Workcell +X = Tracker +Z
+  - [1.0, 0.0, 0.0]  # Workcell +Y = Tracker +X
+  - [0.0, 1.0, 0.0]  # Workcell +Z = Tracker +Y
+translation_scale: 1.0
+max_translation_delta_m: 0.4
+rotation_scale: 1.0
+max_rotation_delta_deg: 15.0
+relative_rotation_semantics: workcell_spatial_delta
+scope: simulation_only
+provenance: workstation2_right_hil_xy_sign_correction_2026_07_29

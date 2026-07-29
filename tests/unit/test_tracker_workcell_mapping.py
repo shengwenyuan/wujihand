@@ -12,12 +12,13 @@ ROOT = Path(__file__).parents[2]
 PROFILE_V1 = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v1.yaml"
 PROFILE_V2 = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
 PROFILE_V3 = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v3.yaml"
+PROFILE_V4 = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v4.yaml"
 
 
 def test_workstation2_tracker_mapping_profile_is_proper_and_bounded() -> None:
-    mapping = load_tracker_workcell_mapping(PROFILE_V3)
+    mapping = load_tracker_workcell_mapping(PROFILE_V4)
 
-    assert mapping.mapping_id == "vive_tracker_workcell_workstation2_v3"
+    assert mapping.mapping_id == "vive_tracker_workcell_workstation2_v4"
     assert mapping.tracking_frame == "vive_tracking"
     assert mapping.workcell_frame == "world"
     assert mapping.scope == "simulation_only"
@@ -26,11 +27,11 @@ def test_workstation2_tracker_mapping_profile_is_proper_and_bounded() -> None:
     np.testing.assert_allclose(matrix.T @ matrix, np.eye(3), atol=1e-12)
     assert np.linalg.det(matrix) == pytest.approx(1.0)
     np.testing.assert_allclose(
-        matrix @ np.asarray((0.0, 0.0, -1.0)),
+        matrix @ np.asarray((0.0, 0.0, 1.0)),
         np.asarray((1.0, 0.0, 0.0)),
     )
     np.testing.assert_allclose(
-        matrix @ np.asarray((-1.0, 0.0, 0.0)),
+        matrix @ np.asarray((1.0, 0.0, 0.0)),
         np.asarray((0.0, 1.0, 0.0)),
     )
     np.testing.assert_allclose(
@@ -76,8 +77,33 @@ def test_workstation2_v3_changes_only_translation_clamp_and_revision() -> None:
     assert expanded.scope == baseline.scope == "simulation_only"
 
 
+def test_workstation2_v4_reverses_xy_without_changing_live_bounds() -> None:
+    prior = load_tracker_workcell_mapping(PROFILE_V3)
+    corrected = load_tracker_workcell_mapping(PROFILE_V4)
+
+    prior_rotation = np.asarray(prior.tracker_to_workcell)
+    corrected_rotation = np.asarray(corrected.tracker_to_workcell)
+    assert corrected.mapping_id == "vive_tracker_workcell_workstation2_v4"
+    assert corrected.provenance != prior.provenance
+    assert corrected_rotation[0] == pytest.approx(-prior_rotation[0])
+    assert corrected_rotation[1] == pytest.approx(-prior_rotation[1])
+    assert corrected_rotation[2] == pytest.approx(prior_rotation[2])
+    assert np.linalg.det(corrected_rotation) == pytest.approx(1.0)
+    assert corrected.translation_scale == prior.translation_scale
+    assert (
+        corrected.max_translation_delta_m
+        == prior.max_translation_delta_m
+    )
+    assert corrected.rotation_scale == prior.rotation_scale
+    assert (
+        corrected.max_rotation_delta_deg
+        == prior.max_rotation_delta_deg
+    )
+    assert corrected.scope == prior.scope == "simulation_only"
+
+
 def test_mapping_loader_rejects_unreviewed_scope(tmp_path: Path) -> None:
-    payload = PROFILE_V3.read_text(encoding="utf-8").replace(
+    payload = PROFILE_V4.read_text(encoding="utf-8").replace(
         "scope: simulation_only",
         "scope: hardware",
     )

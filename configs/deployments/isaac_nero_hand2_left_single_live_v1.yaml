@@ -9,8 +9,8 @@ tracking_setup:
   tracking_frame: vive_tracking
   qualification_status: pending
   mapping:
-    path: configs/calibrations/vive_tracker_workcell_workstation2_v3.yaml
-    expected_id: vive_tracker_workcell_workstation2_v3
+    path: configs/calibrations/vive_tracker_workcell_workstation2_v4.yaml
+    expected_id: vive_tracker_workcell_workstation2_v4
 processes:
   - process_id: openvr_producer
     component_id: openvr_dual_tracker_producer
