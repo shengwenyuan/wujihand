@@ -121,9 +121,9 @@
 - 操作语义为 reference-relative SE(3)，平移比例默认 `1.0`、可配置。NV-3/NV-4
   仿真沿用已通过的自动 reference：对应 Tracker 连续 `running` 后，以当前 Tracker /
   当前 link7 建立 epoch，不要求回车、按钮或伪 deadman。
-- 已验证的 Workstation2 mapping v2 保持 1:1、逐轴 `±0.08 m`，只作为不可变回归基线；
-  NV-4 新建 simulation-only v3，保持相同 proper 轴映射与 1:1 scale，将 X/Y/Z
-  mapping clamp 分别扩到 `±0.4 m`。约 `0.693 m` 的最大角点位移不代表完整可达或安全
+- Workstation2 只保留一个 simulation-only canonical mapping，采用 proper 轴映射与
+  1:1 scale，X/Y/Z mapping clamp 分别为 `±0.4 m`。约 `0.693 m` 的最大角点位移
+  不代表完整可达或安全
   包络，超出可达空间时继续由现有 IK hold/reference rebuild 逻辑处理。
 - XYZ-only 与 RPY-only 的分离测试不能替代组合控制资格；NV-4 必须单独通过
   XYZ+RPY relative SE(3) 真人复合轨迹。
@@ -172,10 +172,10 @@
   Python 3.12 的固定 Hand 2 Session 最小兼容证据。
 - NV-1 已建立 VIVE input adapter；NV-2 已建立 NERO/Hand 2 Asset 与 Binding、固定导入
   recipe、双根 Assembly、`simulation_nominal` Workcell、Session v1、canonical
-  Glove/retarget/supervision 链和双 q27 runner。coaxial-mount tabletop v14 已在
+  Glove/retarget/supervision 链和双 q27 runner。inward-port tabletop v15 已在
   Workstation2 通过 90/90，覆盖原 68 项 scripted physical Gate，以及桌沿安装、
   左右分侧 q7 准备位、`link6` 圆柱—小臂轴、FixedJoint anchor、Hand 2 基座盘心/
-  平行度、`link4 → link5` 小臂近水平、掌面向下和端口假设轴朝外；左右实际 Glove
+  平行度、`link4 → link5` 小臂近水平、掌面向下和接电侧朝桌内；左右实际 Glove
   已分别完成 live，尚未在同一 Session 内同时连接和控制。旧
   corrected-J7 rotation/SE(3) 报告已降为历史证据。仍需关闭当前定义的 Tracker
   rotation 人工复验、Glove 可复现实验材料、deliberate contact/异常穿透、合并 q27
@@ -717,32 +717,32 @@ observation 与 Hand 2 retargeting 驱动。
   表示，不再等待 visual-only 资产。
 - 双根 Assembly、nominal Workcell、Session v1 四个 logical route、canonical Glove
   observation/HandIntent 契约、supervision composition 及 q27 simulation adapter 已建立。
-- Workstation2 / Isaac Sim 6.0.1 上的 coaxial-mount tabletop v14 已通过 90/90：
+- Workstation2 / Isaac Sim 6.0.1 上的 inward-port tabletop v15 已通过 90/90：
   保留 scripted
   physical v2 的左右 q7、双侧五指/组合手型、隔离、finite/limits、reset/recovery
   68 项检查，并新增左右显式 q7 初态、reset 后回到该初态、`link6` 圆柱—小臂轴、
   FixedJoint anchor、Hand 2 基座盘心和盘面平行度、
-  `link4 → link5` 小臂近水平、手向桌内、掌面向下和端口假设轴朝外等 Gate。
+  `link4 → link5` 小臂近水平、手向桌内、掌面向下和接电侧朝桌内等 Gate。
 - prim 隔离确认目标圆柱属于 NERO `link6`，不是 Hand 2 根刚体或直角转接结构。
   NERO Binding profile 只在 live stage 中将 `link6` visual/collision/mass 由局部
   `+Y` 轴以 `Rz(-90°)` 对齐到小臂 local `+X`；J7/`link7` 与 Tracker Lula 均恢复
   固定来源定义。Assembly 使用 `[0.023, 0, -0.0235] m + Ry(+90°)` 抵消固定 J7
   origin 偏置并把 Hand 2 基座盘心耦合到 mesh-derived `link6 +X` 端面中心，同时
   保持手部工作朝向和盘面平行；该 simulation-nominal 映射不表示物理转接件。
-  Workcell 将两底座放到同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为 `+90°`。
+  Workcell 将两底座放到同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为 `-90°`，
+  使接电侧朝桌内。
   Session 引用的 typed
   qualification profile 保存左右 q7
-  `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]` 及 Isaac-only q7 drive gain
+  `[∓10°, +45°, 0°, +45°, +90°, 0°, 0°]` 及 Isaac-only q7 drive gain
   `stiffness=6500, damping=220.79402165819616`，没有修改通用 NERO profile 的全零机械初态或固定
   来源 URDF/USD。
-- v14 运行测得左右 `link6` 圆柱轴与小臂轴点积为
-  `0.999084/0.999098`，Hand 2 基座盘面平行点积为
-  `0.99999924/0.99999959`，盘心误差为 `28.4/20.8 µm`，FixedJoint anchor 误差
-  最大 `20.8 nm`；`link4 → link5` 小臂轴竖直分量绝对值为
-  `0.01965/0.01930`，左右手纵轴朝桌内点积约 `0.983263/0.983300`、掌面朝下
-  点积约 `0.998036/0.998050`。端口轴
-  `base local -X` 来源于固定 mesh 外凸特征推断，朝桌外
-  点积为 `1.0`，仍等待实物确认，不能写成现场实测。
+- v15 运行测得左右 `link6` 圆柱轴与小臂轴点积为
+  `0.999083/0.999097`，Hand 2 基座盘面平行点积为
+  `0.99999926/0.99999958`，盘心误差为 `28.0/21.2 µm`，FixedJoint anchor 误差
+  最大 `69.5 nm`；`link4 → link5` 小臂轴竖直分量绝对值为
+  `0.01966/0.01931`，左右手纵轴朝桌内点积约 `0.983277/0.983282`、掌面朝下
+  点积约 `0.998035/0.998048`。接电侧朝桌内由项目负责人实物确认；
+  `base local -X` 仍是固定 mesh 的表示轴，朝桌内点积为 `1.0`，不能写成接口轴实测。
 - 固定外部工作台 collider 已保留；每个 scripted hand baseline 与 reset 后均在
   `0.005 rad` 容差内有界收敛。该证据没有引入 deliberate unknown
   penetration/contact probe，不能替代后续接触与近景资格验证。
@@ -751,7 +751,7 @@ observation 与 Hand 2 retargeting 驱动。
   执行，各 9000 帧中接收 8999 帧、拒绝 0 帧；同时连接/控制、identity、正式
   calibration revision 与脱敏 replay 仍待冻结。
 - 当前 link6 Binding 表示对齐和 Hand 2 基座同轴装配已通过 profile、五层 Session、
-  全仓测试与 Workstation2 Isaac tabletop v14；Workcell-owned 接口近景已冻结。旧
+  全仓测试与 Workstation2 Isaac tabletop v15；Workcell-owned 接口近景已冻结。旧
   corrected-J7 Lula 上的 rotation/SE(3) 结果不再代表当前定义，需使用固定来源
   Lula 重新人工验证 Tracker rotation。
 - 真机对应仍需 `link6`/法兰螺孔 clocking 近景或接口图，以及两台设备 J7 轴、零位、
@@ -818,17 +818,17 @@ observation 与 Hand 2 retargeting 驱动。
 - Session 恰好解析四个显式 control group：`2 × q7` NERO 与 `2 × q20` Hand 2，
   共 54 logical DoF；左右命名、layout 和 command route 无碰撞。历史 scripted
   physical v2、tabletop v6 与 corrected-J7 tabletop v11 只作为历史基线；当前以
-  coaxial-mount tabletop v14 的 90/90 为准。
+  inward-port tabletop v15 的 90/90 为准。
 - Isaac stage 恰好形成两棵 q27 articulation；Hand 2 world root 不再生效，
   FixedJoint body targets 正确，且每侧 q7/q20 分区完整、互斥。命令后 reset 已重验
   两棵 q27 与稳定分区。
 - 两只 Hand 2 可见、侧别正确、随对应法兰运动；20 个主动关节、drive、collision、
   rigid body 与 articulation 在 Isaac 6.0.1 中可解释。
-- 两臂可分别执行小幅 scripted q7，另一臂不受影响；coaxial-mount tabletop v14
+- 两臂可分别执行小幅 scripted q7，另一臂不受影响；inward-port tabletop v15
   已通过。
 - 左右 q20 fixture 可分别完成逐指/手型小幅运动，另一只手与两臂 q7 不受影响；
   feedback finite 且在 Hand 2 canonical limits 内。历史 scripted physical v2 已覆盖
-  双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v14 重验。
+  双侧五指、双侧组合手型和 post-reset recovery；当前定义已由 tabletop v15 重验。
 - Wuji Glove 的 `hand_skeleton` live 流已分别完成左右
   `Glove → canonical 21×3 → Hand2 retarget q20 → Isaac` 自由空间 smoke；
   两次运行各接收 8999/9000 帧、拒绝 0 帧。该证据只证明单侧分别运行，不证明两只
@@ -839,11 +839,11 @@ observation 与 Hand 2 retargeting 驱动。
   hold/reject 在 NV-4A 对齐后冻结。该实现事实尚未 supersede ADR-0006 的旧 reject
   条款；最后有效命令只可在 supervisor freshness 窗内 hold，超时后渐进回 rest；
   真人 live failure injection 随 live Gate 补验。
-- 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v14 已通过。
+- 全部 feedback finite 且在批准后的 canonical limits 内；tabletop v15 已通过。
 - 两底座位于同一桌沿，左右 `link6` 圆柱轴沿 `link4 → link5` 小臂方向，Hand 2
   指向桌内且掌面朝下；
   `link4 → link5` 小臂近水平，显式 q7 初态与 reset 后反馈分别满足 qualification
-  threshold。tabletop v14 的 90/90 已通过，包含圆柱—小臂轴、FixedJoint anchor、
+  threshold。tabletop v15 的 90/90 已通过，包含圆柱—小臂轴、FixedJoint anchor、
   Hand 2 基座盘心与盘面平行度 Gate。
 - nominal 工作台的固定外部 collider 存在，初始状态、各 scripted baseline 与 reset 后
   均有界静置收敛；该部分已通过。接口近景已执行，但 deliberate
@@ -873,11 +873,9 @@ consumer 右臂闭环，冻结 canonical Cartesian 语义和已验证生命周�
 
 - 真人 Tracker → 右 NERO 的 x/y/z 方向已在 Workstation2 GUI 人工通过；roll/pitch/yaw
   仍待固定来源 Lula 下复验。
-- Workstation2 simulation-only calibration 已升级到
-  `vive_tracker_workcell_workstation2_v2`：平移增益为 `1.0`，轴映射、rotation
-  scale 和逐轴 `±0.08 m` target 限幅不变；旧 v1 作为 `0.25` 历史实验来源保留。
-  v2 在 NV-4 中保持不可变，只作为回归基线；默认 live 将由新 v3 承载逐轴
-  `±0.4 m`。
+- Workstation2 simulation-only calibration 已收敛为
+  `vive_tracker_workcell_workstation2`：平移增益为 `1.0`，X/Y/Z target 限幅各
+  `±0.4 m`，同一个 proper rotation 同时映射平移与空间相对旋转。
 - GUI consumer 已取消 stdin/回车阻塞，并把窗口生命周期与
   `WAITING_REFERENCE → TRACKING → HOLD → WAITING_REFERENCE` 控制状态解耦。
   持续失联或连续 IK 失败只撤销当前 reference epoch；恢复时以右臂当前 link7 pose
@@ -982,8 +980,8 @@ ROS-free。
 
 **工作**
 
-1. 固定当前 Session/source/mapping、右臂行为和左右 Glove 单独 live 证据；保持
-   mapping v2 文件与 hash 不变，并依次重验右臂 XYZ-only、RPY-only、XYZ+RPY
+1. 固定当前 Session/source/canonical mapping、右臂行为和左右 Glove 单独 live 证据；
+   依次重验右臂 XYZ-only、RPY-only、XYZ+RPY
    relative SE(3) 复合轨迹。
 2. 用一个 middleware-neutral `DeploymentSpec v1` 恰好引用专用五层 live
    ResolvedSession，只拥有 process/managed producer lifecycle、左右本机 device/
@@ -1004,14 +1002,15 @@ ROS-free。
    producer 建立两条 serial-addressed Tracker stream；NV-4B 可由同一 launcher 暂管
    两个旧 producer 迁移，但不能作为最终 Gate 形态。共享一个
    `vive_tracking` delta axes → `workcell_world` delta axes mapping，左右
-   reference/solver/supervisor 独立。当前 v2 不是绝对世界外参。
+   reference/solver/supervisor 独立。当前 canonical mapping 不是绝对世界外参。
    `TrackedRigidBodySample v2` 和 `TrackingLifecycleEvent` 显式携带 transport epoch /
    tracking setup revision，receiver 不靠 sequence 猜测 producer 生命周期。
-   新建 versioned mapping v3，沿用 v2 proper rotation/rotation policy，translation
-   scale 为 `1.0`、X/Y/Z 各 `±0.4 m`；其 `simulation_only` scope 和约
-   `0.693 m` 最大角点位移进入 manifest。
+   canonical mapping 统一持有 proper rotation/rotation policy，translation scale
+   为 `1.0`、X/Y/Z 各 `±0.4 m`；其 `simulation_only` scope 和约 `0.693 m`
+   最大角点位移进入 manifest。
 5. 把右臂 live 提取为 side-neutral arm controller，分别创建左右 Lula solver；
-   在 v3 下分别完成左右 XYZ-only、RPY-only、XYZ+RPY 复合轨迹，再验证双 Tracker
+   在 canonical mapping 下分别完成左右 XYZ-only、RPY-only、XYZ+RPY 复合轨迹，
+   再验证双 Tracker
    同时运动和 IK 故障归因。
 6. 在同一 SDK manager 生命周期内建立左右 Glove adapter/retarget/supervisor；
    完成左右分别及同时 q20 控制。
@@ -1035,7 +1034,7 @@ ROS-free。
 - Session-owned native-dual-teleop composite compatibility leaf / transport contract、
   默认双侧及左右单侧诊断 DeploymentSpec/local binding schema、双 Tracker input、
   side-neutral arm controller、双 Glove composition、统一双 q27 tick。
-- 保持 v2 不变的 Workstation2 mapping v3，以及 v2/v3 回归与 provenance 记录。
+- Workstation2 canonical mapping，以及单一入口、方向与 provenance 回归。
 - 默认 live runner、独立 qualification 入口和 before/after CLI/行数报告。
 - 双 Base/双 Tracker、双 Glove、双臂双手 GUI/headless/fault/短稳定性验证报告。
 
@@ -1074,7 +1073,7 @@ ROS-free。
   不要求手工启动第二个 producer 终端。
 - 默认入口不要求琐碎 mode/side/scale 参数，旧互斥 live 分支已删除，runner 认知面
   实际下降且正确能力无回归；全仓 production LOC 作为解释性预算指标。
-- mapping v2 与历史 hash 不变；默认 live 引用 simulation-only v3，其 1:1、
+- 默认 live 统一引用 simulation-only canonical mapping，其 1:1、
   X/Y/Z 各 `±0.4 m` 和约 `0.693 m` 角点位移均显式记录，不宣称完整可达或安全。
 - `left_single_live`、`right_single_live` 分别完成单臂 + 单手诊断，非活动侧行为
   显式；没有恢复 `--side` 或 live mode 树。

@@ -1,4 +1,4 @@
-# 2026-07-29 NV-4 Deployment 与 mapping v3 基础验证
+# 2026-07-29 NV-4 Deployment 与 canonical mapping 基础验证
 
 > 这是 NV-4 第一批基础切片的阶段快照；其“runner 尚未接入”等描述保留为当时事实。
 > 后续实现与目标机预检见
@@ -16,8 +16,7 @@
 
 本轮形成了一个不依赖 Isaac、SteamVR 或 Wuji SDK 的可验证基础：
 
-- mapping v2 文件保持 1:1、逐轴 `±0.08 m` 不变；
-- 新增 simulation-only mapping v3，沿用 v2 proper 轴旋转与 rotation policy，
+- canonical simulation-only mapping 使用 proper 轴旋转与统一 rotation policy，
   translation scale 为 `1.0`、X/Y/Z 各 `±0.4 m`，最大角点位移约 `0.693 m`；
 - mapper 的同一 sample 同时产生 translation 与 rotation target 已有单元测试，
   但真人 XYZ+RPY 复合轨迹仍未执行；

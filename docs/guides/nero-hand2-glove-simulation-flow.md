@@ -70,19 +70,19 @@ Isaac position targets → physics/render step → q27 feedback → JSON Gate/re
 | Asset | 一种 NERO 身份、左右 Hand 2 身份；canonical q7/q20 布局 | USD 路径、世界坐标、Glove SDK |
 | Binding | NERO 固定来源 URDF 的 Isaac 6.0.1 派生 USD；左右 Hand 2 完整物理 USD；joint/prim 映射 | 桌面位置、手臂间关系 |
 | Assembly | `link7 → hand_base` 固定连接，左右均为 `[0.023, 0, -0.0235] m + Ry(+90°)` | 世界中的桌子和底座位置 |
-| Workcell | `1.20 × 1.20 × 0.08 m` 固定桌；桌面 `z=0.80 m`；底座在 `x=±0.32, y=-0.52 m`，yaw `+90°` | 关节控制权和输入设备 |
+| Workcell | `1.20 × 1.20 × 0.08 m` 固定桌；桌面 `z=0.80 m`；底座在 `x=±0.32, y=-0.52 m`，yaw `-90°`，接电侧朝桌内 | 关节控制权和输入设备 |
 | Session | 组合以上四层，声明左右 q7/q20 四条 route，并引用 tabletop qualification profile | Glove serial/address 和实时帧 |
 
 当前 Session hash 是
-`abf48dd47d90e5feea76fadf628119bf6a769572ef705f3a0a86cc60a945037c`。
+`46f543efdaa3eff26227ed73150902c20027b90afdc19cb35e9d814098800601`。
 NERO 固定在 `agilexrobotics/agx_arm_urdf@f6642ce0…`，Hand 2 固定在
 `wuji-description v2026.6.27@aee64892…`；完整文件 hash 由
 `third_party/sources.lock.yaml` 管理。
 两侧 NERO 的仿真准备位分别为：
 
 ```text
-left  q7 = [-10°, -45°, 0°, -45°, -90°, 0°, 0°]
-right q7 = [+10°, -45°, 0°, -45°, -90°, 0°, 0°]
+left  q7 = [-10°, +45°, 0°, +45°, +90°, 0°, 0°]
+right q7 = [+10°, +45°, 0°, +45°, +90°, 0°, 0°]
 ```
 
 当前 q7 Isaac drive gain 是 `stiffness=6500`、`damping=220.79402165819616`；

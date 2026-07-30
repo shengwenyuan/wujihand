@@ -1,17 +1,17 @@
 # NERO 双实例 + 物理 Hand 2 Isaac 数字孪生
 
-状态：**PARTIAL / 部分完成（coaxial-mount tabletop v14 已在 Workstation2
+状态：**PARTIAL / 部分完成（inward-port tabletop v15 已在 Workstation2
 通过 90/90；左右 Glove live 均已现场打通，2026-07-29）**。
 
 当前组件已建立双 NERO、双侧完整物理 Hand 2、nominal 工作台和 Session v1 的五层组合。
-目标机 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。tabletop v14
+目标机 Isaac Sim 6.0.1 运行形成左右两棵独立的 q27 articulation。tabletop v15
 的 90 项检查全部通过：保留 scripted physical v2 的 68 项 q7、逐指/组合手型、
 隔离、finite/limits、reset/topology/recovery 检查，并增加 22 项 tabletop
 attachment anchor、基座端面中心/平行度、同侧桌沿 mount、左右准备位、手部朝向、
 小臂近水平及 `link6` 表示
 资格检查。
-结果不包含真实 NERO 或 Hand 2 运动，也不把 nominal 装配、端口轴假设和工作台数值
-解释为现场测量事实。
+结果不包含真实 NERO 或 Hand 2 运动。接电侧朝桌内来自项目负责人实物确认；端口
+local 轴、nominal 装配和工作台数值仍不解释为现场测量事实。
 
 NV-2 尚不能标记为完整完成：
 
@@ -35,7 +35,7 @@ NV-2 尚不能标记为完整完成：
 | 逻辑命令 | 已建立 | 左/右 NERO q7 + 左/右 Hand 2 q20，4 个显式 route、54 logical DoF |
 | Isaac 物理拓扑 | 已验证 | 左右各一棵 q27 articulation，共 2 棵 |
 | tabletop v6 | 历史通过 | 84/84：旧 attachment 定义的回归基线 |
-| coaxial-mount tabletop v14 | 通过 | 90/90；基座端面中心、平行度、attachment anchor 与圆柱—小臂轴 Gate 均通过 |
+| inward-port tabletop v15 | 通过 | 90/90；接电侧朝桌内、基座端面中心、平行度、attachment anchor 与圆柱—小臂轴 Gate 均通过 |
 | external collision settling | 部分通过 | fixed collider 与各 baseline/reset 后有界静置通过；deliberate contact/penetration 待执行 |
 | Glove canonical/retarget/supervision 代码边界 | 已建立并以 fake SDK/composition 测试 | 外部 SDK 类型不进入 domain/ports；invalid/missing 不创建新 input-derived intent |
 | 真实 Glove live 路径 | 左右均已执行 | 各 8999/9000 帧接收、0 帧拒绝；快速 live-only Gate 均通过 |
@@ -109,12 +109,12 @@ J7 轴、零位、符号、`link6` clocking 和螺孔方向只读核对。
 - nominal table top 高度 `0.80 m`；
 - 左右 NERO mount 位于同一近侧桌沿，分别为
   `[-0.32, -0.52, 0] m` 和 `[+0.32, -0.52, 0] m`；
-- 两个 mount 的 yaw 均为 `+90°`。
+- 两个 mount 的 yaw 均为 `-90°`，接电侧朝桌内。
 
-`base local -X` 被当前 qualification profile 作为端口方向；它来自固定 base mesh
-外凸特征推断，不是实物端口测量。上述 mount 数值也不是现场测量。它们足以关闭资产
-组合、关节隔离和基础功能仿真 Gate，但不能支持真实端口朝向、clearance、可达空间、
-精度或安全包络结论。实测 Workcell revision 留给物理对应和真机阶段。
+接电侧朝桌内由项目负责人通过当前实物确认；`base local -X` 仍是固定 base mesh
+外凸特征对应的表示轴，不是接口轴测量。上述 mount 位置与精确 yaw 也不是现场测量。
+它们足以关闭资产组合、关节隔离和基础功能仿真 Gate，但不能支持 clearance、
+可达空间、精度或安全包络结论。实测 Workcell revision 留给物理对应和真机阶段。
 
 ### Session
 
@@ -221,9 +221,9 @@ Wuji Glove hand_skeleton
 | Hand 2 right USD | `3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00` |
 | link6 geometry alignment profile | `0dafd7b44904e69cd8742df41088db81b6c5bbcbb49d186273ff645c571e63ae` |
 | Lula URDF | 固定来源 URDF：`c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278` |
-| tabletop qualification profile | `bd4bed117eaa1158c8df6fcb9b2472d0de964bad20c7faedeaadc44dac6fdafa` |
-| simulation nominal Workcell | `c507b8f7d0548156949d7d49a0bc5cb7ec1764f355ed4ee8b53ef241f06b40b8` |
-| full Session hash（v14） | `abf48dd47d90e5feea76fadf628119bf6a769572ef705f3a0a86cc60a945037c` |
+| tabletop qualification profile | `2c0b4b7d476d03ad63e04deda983523952925e56b7bd23ae771a252f12acd447` |
+| simulation nominal Workcell | `488e8ecee966199e87a7d06e978c523586d2af1e607a2f185f1491df2a07edf5` |
+| full Session hash（v15） | `46f543efdaa3eff26227ed73150902c20027b90afdc19cb35e9d814098800601` |
 
 ## 运行与验证入口
 
@@ -232,8 +232,8 @@ Wuji Glove hand_skeleton
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v15.json \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v15.png
 ```
 
 ### Glove 快速 live 入口
@@ -273,7 +273,7 @@ Tracker 的现场轴映射不属于 Asset、Binding、Assembly、Workcell 或 Se
 因此存放在五层之外的 simulation-only calibration：
 
 ```text
-configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml
+configs/calibrations/vive_tracker_workcell_workstation2.yaml
 ```
 
 其中 `tracker_to_workcell` 是唯一的 `3×3` 轴映射入口，同时用于平移和旋转。当前
@@ -285,11 +285,9 @@ Workcell +Y = Tracker -X
 Workcell +Z = Tracker +Y
 ```
 
-v2 将平移位移增益从历史 v1 的 `0.25` 提高为 `1.0`：在未触发限幅时，Tracker
-位移和 link7 target 位移为 1:1，因而平移速度增益也为 1:1。逐轴
-`±0.08 m` Workcell 限幅保持不变，所以最大 target 包络没有扩大；只是从参考点移动
-Tracker `8 cm` 即可能触发限幅，而 v1 需要 `32 cm`。v1 文件保留为历史实验来源，
-runner 默认使用 v2。
+canonical calibration 的平移位移和速度增益均为 `1.0`，逐轴 Workcell 限幅为
+`±0.4 m`，对角最大 target 位移约为 `0.693 m`。超过包络继续使用既有逐轴 clamp；
+包络内不可达目标仍交给 IK 故障逻辑。runner 与全部 Deployment 只引用该文件。
 
 rotation 使用 reference epoch 的空间相对量：
 
@@ -376,8 +374,8 @@ Lula `link7` frame 和 JointCommandSupervisor 边界保持不变。当前 UDP tr
 
 ```text
 artifacts/validation/nv2/nero-dual-asset-smoke.json
-artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json
-artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
+artifacts/validation/nv2/nero-dual-hand2-tabletop-v15.json
+artifacts/validation/nv2/nero-dual-hand2-right-interface-v15.png
 artifacts/validation/input-smoke/tracker-right-nero/reference-readiness-current-lula-v1.json
 artifacts/validation/input-smoke/tracker-right-nero/tracker-bounded-lifecycle-v1.json
 artifacts/validation/input-smoke/tracker-right-nero/synthetic-rotation-corrected-flange-final-v3.json  # 已撤销 J7 定义下的历史证据
@@ -392,41 +390,41 @@ artifacts/validation/nv2/nero-dual-hand2-physical.png           # v1 历史截�
 目标机执行时对应路径前缀为
 `/home/lenovo/swy/wujihand/`。
 
-当前 tabletop v14 报告的 90 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
+当前 tabletop v15 报告的 90 项检查全部为 `true`。报告确认命令后 reset 前后均恰好有两棵
 q27 root、q7/q20 partition 稳定、左右 q7 回到 Session qualification profile
 指定准备位，并可在 reset 后恢复左中指 PIP 命令。固定工作台 collider
 `/World/Workcell/simulation_nominal_table` 存在；初始、每个 scripted hand baseline
 及 reset 后的双 q27 静置均在 `0.005 rad` 容差内有界收敛。
 
-v14 的几何测量值来自 Isaac stage：
+v15 的几何测量值来自 Isaac stage：
 
 | Gate | left | right |
 |---|---:|---:|
-| `link6` 圆柱轴与 `link4 → link5` 小臂轴点积 | `0.999084` | `0.999098` |
-| Hand 2 基座端面与 `link6` 端面平行点积 | `0.99999924` | `0.99999959` |
-| Hand 2 基座中心—`link6` 端面中心误差 | `28.4 µm` | `20.8 µm` |
-| attachment anchor 误差 | `7.75 nm` | `20.8 nm` |
-| 端口假设轴朝桌外点积 | `1.0` | `1.0` |
-| `link4 → link5` 竖直分量绝对值 | `0.01965` | `0.01930` |
-| 手纵轴朝桌内点积 | `0.98326` | `0.98330` |
-| 掌面朝下点积 | `0.99804` | `0.99805` |
+| `link6` 圆柱轴与 `link4 → link5` 小臂轴点积 | `0.999083` | `0.999097` |
+| Hand 2 基座端面与 `link6` 端面平行点积 | `0.99999926` | `0.99999958` |
+| Hand 2 基座中心—`link6` 端面中心误差 | `28.0 µm` | `21.2 µm` |
+| attachment anchor 误差 | `35.1 nm` | `69.5 nm` |
+| 接电侧表示轴朝桌内点积 | `1.0` | `1.0` |
+| `link4 → link5` 竖直分量绝对值 | `0.01966` | `0.01931` |
+| 手纵轴朝桌内点积 | `0.98328` | `0.98328` |
+| 掌面朝下点积 | `0.99803` | `0.99805` |
 
 其中 attachment、手轴与掌面值是仿真几何测量；端口点积仅验证
-“pinned mesh 推断的 `base local -X` 轴 + nominal mount”的内部一致性，仍待实物确认，
-不得表述为真实端口实测。
+“pinned mesh 推断的 `base local -X` 轴 + nominal mount”的内部一致性。接电侧应朝
+桌内已经实物确认，但该 local 轴和精确 mount 仍不得表述为接口轴实测。
 
 报告明确记录 `deliberate_unknown_penetration_probe=false`：它没有引入 deliberate
 contact/unknown penetration 场景。same-digit uncommanded linkage 仅作为诊断，
-other-finger isolation 才是本轮 Gate。v14 报告 SHA-256 是
-`5fc6e6329ef553f3ee3e508f8445190045e23e92e1e57c720e4efc07be44aa79`，Workcell-owned
+other-finger isolation 才是本轮 Gate。v15 报告 SHA-256 是
+`4b689e66ce406f225269637b7e16eda895025daf7708ddde3b43e55f64224e56`，Workcell-owned
 右侧接口近景 SHA-256 是
-`5994bf58bf8f0d157fb241493f2c01ad5ebd25db95ab510b0ee0e6a085fc505b`。
+`a202c020f6aa69774a3fdf9a6047cfd1a46d6afe122b20c25b31c31f00496396`。
 
 历史 scripted physical v2 的 68/68
 （报告 `5623b8552f54cfd186640a5b857179bca2b7cbd935f4d847451cf1912573b20f`，
 截图 `2366d024a8d26f85ca97fd2c79aa190a148270ac8e01be85592587a79e201a6a`）
 仍保留为前一版基线；v6、v11 与 v12 均因 J7/Assembly 定义变化转为历史证据，当前
-结论以 coaxial-mount tabletop v14 为准。v1 文件只保留为更早历史基线。
+结论以 inward-port tabletop v15 为准。v1 文件只保留为更早历史基线。
 
 ## 尚需关闭
 

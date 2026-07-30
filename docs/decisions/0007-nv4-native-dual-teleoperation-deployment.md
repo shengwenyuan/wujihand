@@ -2,6 +2,7 @@
 
 - 状态：已接受
 - 日期：2026-07-29
+- 修订：2026-07-30，Workstation2 calibration 收敛为单一无版本入口
 - 影响范围：NV-4 默认运行入口、DeploymentSpec、双 Tracker/双 Glove 编排、
   relative SE(3) mapping、仿真故障恢复与 Glove confidence policy
 - 上位计划：
@@ -103,15 +104,18 @@ calibration revision 必须可追溯。
 - [Valve Index Base Station / SteamVR Base Station 2.0，“系统配置”](https://store.steampowered.com/app/1059570/Valve_Index_Base_Station/)
 - [HTC VIVE Tracker (3.0) Developer Guidelines v1.0，“Optics”“Coordinate system”](https://developer.vive.com/documents/824/HTC_Vive_Tracker_3.0_Developer_Guidelines_v1.0_01182021.pdf)
 
-## 决策四：v2 保留回归，v3 承载 NV-4 live mapping
+## 决策四：Workstation2 只保留一个 canonical mapping
 
-Workstation2 mapping v2 保持 proper `3×3` 轴旋转、translation scale `1.0` 和 X/Y/Z
-各 `±0.08 m`，文件与历史 hash 不原地修改。
+Workstation2 只保留 simulation-only
+`configs/calibrations/vive_tracker_workcell_workstation2.yaml`。它拥有唯一
+`tracker_to_workcell` proper `3×3` 旋转、translation/rotation scale 和限幅；
+runner、默认双侧及左右单侧 Deployment 全部引用同一入口。
 
-NV-4 新建 simulation-only mapping v3，沿用相同轴旋转与 rotation policy，将 X/Y/Z
-mapping clamp 分别改为 `±0.4 m`。逐轴立方包络从 reference 到角点最大位移约
-`sqrt(3) × 0.4 ≈ 0.693 m`。它只限制 relative mapping 输出，不声明机械臂完整包络
-可达、工作台安全或真机标定有效。
+平移 scale 为 `1.0`，X/Y/Z mapping clamp 分别为 `±0.4 m`。逐轴立方包络从
+reference 到角点最大位移约 `sqrt(3) × 0.4 ≈ 0.693 m`。2026-07-30
+inward-port tabletop 人工观察要求 X/Y 与 roll/pitch 同时反向，因此 calibration
+使用一个 `Rz(180°)` 等效 frame 修正；Z 与 yaw 保持不变。它只限制 relative
+mapping 输出，不声明机械臂完整包络可达、工作台安全或真机标定有效。
 
 超过 mapping clamp 继续返回 component-wise clamped target；包络内的不可达目标交给
 现有 IK 路径。孤立 IK 失败保持最后有效目标；连续 5 次失败只撤销对应侧 reference，
@@ -168,7 +172,7 @@ ADR-0006 的 21×3→q20、side/layout、freshness、finite、retarget reset 和
 | 把设备 serial、端口和 process graph 写入 Workcell/Session | 污染五层资产与场景事实 |
 | 把两台 Base 分配给左右 Tracker | 与共享 tracking reference 拓扑和单一 frame Gate 冲突 |
 | 为坐标不一致增加每 Tracker 临时轴补丁 | 掩盖 tracking universe/setup 资格失败 |
-| 原地把 mapping v2 改成 `±0.4 m` | 破坏已有验证和配置 hash 的可追溯性 |
+| 并行保留多个 Workstation2 mapping 文件 | 日常入口和 provenance 分裂，容易让不同启动模式引用不同坐标语义 |
 | 只测试 XYZ-only 与 RPY-only | 不能证明组合 SE(3) 的 IK、限位和恢复行为 |
 | 把 EMF `0.9` 说明扩写为 skeleton 统一拒绝线 | 数据产品和字段语义不同，且与现有 live 证据冲突 |
 
@@ -176,8 +180,8 @@ ADR-0006 的 21×3→q20、side/layout、freshness、finite、retarget reset 和
 
 - 无 backend fast tests：DeploymentSpec strict fields、引用闭合、local binding 分离、
   stable hash、默认双侧与左右单侧诊断模板。
-- mapping tests：v2 不变、v3 proper rotation/1:1/逐轴 `±0.4 m`、component clamp、
-  组合 translation+rotation 和 provenance。
+- mapping tests：单一文件约束、proper rotation、1:1、逐轴 `±0.4 m`、方向、
+  component clamp、组合 translation+rotation 和 provenance。
 - application tests：左右独立 reference/mapper/solver/supervisor、单侧故障隔离、
   连续 5 次 IK 失败、current-pose rebuild 和旧 epoch 拒绝。
 - Glove tests：左右 identity、双连接、低 confidence degraded、错误/缺失/NaN 拒绝、
@@ -194,5 +198,5 @@ ADR-0006 的 21×3→q20、side/layout、freshness、finite、retarget reset 和
 universe、双设备生命周期和四流故障建立独立资格证据。
 
 下列变化必须重新对齐本 ADR 并重跑受影响 Gate：五层/DeploymentSpec 事实所有权、
-默认设备完整性、单侧诊断语义、tracking universe/frame、mapping v3 数值或 scope、
+默认设备完整性、单侧诊断语义、tracking universe/frame、canonical mapping 数值或 scope、
 IK rebuild 次数、仿真 fault coupling、Glove confidence 阈值、四流 command ownership。

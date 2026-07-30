@@ -98,7 +98,7 @@ artifacts/derived/isaac/6.0.1/agilex_nero/nero_description/nero_description.usda
 ```text
 deployment  = isaac_nero_hand2_right_single_live_v1
 session     = isaac_nero_dual_hand2_native_teleop_v1
-mapping     = vive_tracker_workcell_workstation2_v3
+mapping     = vive_tracker_workcell_workstation2
 qualified   = false
 ```
 

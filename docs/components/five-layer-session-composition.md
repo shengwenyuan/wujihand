@@ -79,7 +79,7 @@ resolved snapshot。
 | native-dual live policy | `src/wujihand/specs/native_dual_teleoperation.py` 与 `configs/profiles/isaac_nero_hand2_native_dual_teleoperation_v1.yaml` |
 | side-neutral runtime plan | `wujihand.runtime.build_native_dual_runtime_plan` |
 | managed OpenVR producer | `wujihand.runtime.ManagedOpenVrProducer` 与 `tools/stream_vive_trackers_udp.py` |
-| Workstation2 mapping v3 | `configs/calibrations/vive_tracker_workcell_workstation2_v3.yaml` |
+| Workstation2 canonical mapping | `configs/calibrations/vive_tracker_workcell_workstation2.yaml` |
 | 默认双侧/左右单侧诊断模板 | `configs/deployments/` |
 | 忽略的本机 binding 模板 | `configs/examples/workstation2_nv4_local_device_binding.example.yaml` |
 
@@ -301,7 +301,7 @@ fixed-hand Workcell 数值归属，并把 MuJoCo/rotation-ball 五层组合与�
 54 logical DoF、完整物理 Hand 2 Binding 和 nominal 假设。依赖测试阻止
 `specs -> runtime/adapters/外部 SDK` 和 `adapters -> runtime`。Deployment tests
 另行验证 strict fields、process DAG、Session route 全覆盖、live/fixture binding、
-mapping v3、稳定 hash 和本机 identity/endpoint 脱敏。
+canonical mapping、稳定 hash 和本机 identity/endpoint 脱敏。
 
 NV-4 tests 还覆盖双流 OpenVR serial 选择、一个 owner 的生命周期事件、transport
 epoch/revision、旧 datagram 拒绝、side-neutral arm FK/IK 与 reference、双 Glove

@@ -28,7 +28,7 @@
 - [2026-07-28 lenovo-piper2 目标机基线](validation/2026-07-28-lenovo-piper2-baseline.md)
 - [2026-07-28 NV-1 VIVE 最小跟踪验证](validation/2026-07-28-nv1-vive-minimal-tracking.md)
 - [2026-07-28 NV-2 NERO 双实例、物理 Hand 2 与 Glove 链路阶段验证](validation/2026-07-28-nv2-nero-dual-hand2-twin.md)
-- [2026-07-29 NV-4 Deployment 与 mapping v3 基础验证](validation/2026-07-29-nv4-deployment-foundation.md)
+- [2026-07-29 NV-4 Deployment 与 canonical mapping 基础验证](validation/2026-07-29-nv4-deployment-foundation.md)
 - [2026-07-29 NV-4 原生双侧实现与 Workstation2 预检](validation/2026-07-29-nv4-native-dual-preflight.md)
 - [2026-07-23 五层架构与既有仿真链路验证](validation/2026-07-23-five-layer-architecture.md)
 - [2026-07-13 垂直切片验证报告](validation/2026-07-13-mediapipe-isaac-vertical-slice.md)

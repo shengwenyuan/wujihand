@@ -35,7 +35,7 @@
 已完成：
 
 - [ADR-0007](decisions/0007-nv4-native-dual-teleoperation-deployment.md) 已接受；
-- Workstation2 mapping v3 已落地，v2 保持不变；
+- Workstation2 canonical mapping 已落地并成为唯一入口；
 - relative mapper 已增加同帧 translation+rotation 的纯单元回归；
 - `DeploymentSpec v1`、`LocalDeviceBinding v1`、strict repository 和
   `DeploymentResolver` 已实现；
@@ -68,7 +68,7 @@
 
 阶段证据见：
 
-- [2026-07-29 NV-4 Deployment 与 mapping v3 基础验证](validation/2026-07-29-nv4-deployment-foundation.md)；
+- [2026-07-29 NV-4 Deployment 与 canonical mapping 基础验证](validation/2026-07-29-nv4-deployment-foundation.md)；
 - [2026-07-29 NV-4 原生双侧实现与 Workstation2 预检](validation/2026-07-29-nv4-native-dual-preflight.md)。
 
 ## 1. 当前基线与必须保留的能力
@@ -77,7 +77,7 @@
 |---|---|---|
 | 双 NERO + 双物理 Hand 2 | 五层 Session 已解析 2 root、4 route、54 logical DoF；Isaac 中为 2 棵 q27 articulation | 原样保留，不重做资产架构 |
 | 装配与桌面姿态 | coaxial-mount tabletop v14 为 90/90 | 保留为 live 启动前结构回归 |
-| 右 Tracker 平移 | XYZ 方向人工基本通过；mapping v2 为 1:1、逐轴 `±0.08 m` | 保留 v2 为不可变回归基线；NV-4 新增 v3 |
+| 右 Tracker 平移 | XYZ 方向人工基本通过；canonical mapping 为 1:1、逐轴 `±0.4 m` | 统一由单一 calibration 管理并继续 HIL |
 | 右 Tracker 旋转 | 旧修正 J7 证据已失效；当前固定 Lula 上 RPY 仍待复验 | NV-4 必须重验 |
 | 右 Tracker 组合 SE(3) | 当前代码可同时启用平移与旋转，但真人测试只分别覆盖 XYZ-only、RPY-only | NV-4 必须新增 XYZ+RPY 复合轨迹 Gate，不得记为已通过 |
 | Tracker 生命周期 | `running` 才可建立 reference；短暂异常 hold，持续异常后以当前 link7 重建；GUI 不退出、不回 home | 左右复用同一状态机 |
@@ -92,8 +92,8 @@
 - `link6` 表示对齐、Hand 2 attachment 与两棵 q27 articulation 保持不变；
 - q7/q20 通过 canonical joint name 和 USD path 分区，不依赖运行时数组位置；
 - 准备位和 Isaac-only gain 继续来自 Session 引用的 qualification profile；
-- Workstation2 mapping v2 的 proper rotation、1:1 scale、逐轴 `±0.08 m` 保持不可变，
-  只作为历史回归基线；NV-4 live 使用新的 versioned v3，不原地覆盖 v2；
+- Workstation2 canonical mapping 的 proper rotation、1:1 scale、逐轴 `±0.4 m`
+  和 simulation-only scope 由单一文件管理，所有 Deployment 必须引用同一入口；
 - Tracker `calibrating/out_of_range/lost` 不得伪装为 actionable pose；
 - 连续 IK 失败只撤销对应侧 reference，不关闭 GUI、不重置 articulation；
 - 错误 side/layout、stale、NaN 或 retarget 失败不产生新的 q20 input intent。
@@ -104,7 +104,7 @@
 
 - 两枚 Tracker 以稳定 serial 映射到 `operator_left`、`operator_right`。
 - 两个 Tracker stream 分别驱动左、右 NERO 的 XYZ + RPY relative SE(3)。
-- 新增 simulation-only Workstation2 mapping v3：沿用 v2 proper `3×3` 轴旋转，
+- 使用 simulation-only Workstation2 canonical mapping：proper `3×3` 轴旋转，
   translation scale 为 `1.0`，X/Y/Z 分别限幅 `±0.4 m`。该立方包络的参考点到角点
   最大位移约 `0.693 m`，只限制映射输出，不声明机械臂全包络可达或真机安全。
 - NV-4 仿真沿用已通过的自动 reference：仅在对应 Tracker 连续 `running` 后，以
@@ -306,17 +306,17 @@ NV-4B 先建立候选布局基线，NV-4F 联合 HIL 后再冻结可接受阈值
 | Tracker anchor + 当前 link7 anchor + reference epoch | 左右独立 |
 | Lula solver base pose、IK、q7 supervisor、诊断 | 左右独立 |
 
-当前 Workstation2 mapping v2 是 relative delta mapping：包含 proper `3×3` 轴旋转、
+当前 Workstation2 canonical mapping 是 relative delta mapping：包含 proper `3×3` 轴旋转、
 1:1 translation scale 和逐轴限幅，不包含测得的绝对平移，也不是完整
 `T_workcell_world_vive_tracking` 外参。它可作为共享相对映射基线；左侧 XYZ/RPY
 人工验证通过前，不能仅凭右侧结果宣布共享 mapping 已完成双侧资格。完整世界外参留给
 后续测量标定，不在 NV-4 伪造。
 
-mapping v2 保持 `±0.08 m` 不变以保留历史证据。NV-4 新建 mapping v3，沿用相同 proper
-rotation、rotation policy 和 `1.0` translation scale，仅把 X/Y/Z 的 mapping clamp
-改为各 `±0.4 m`。超过该值仍是 component-wise clamp；包络内的不可达目标继续交给
+canonical mapping 使用统一 proper rotation、rotation policy 和 `1.0` translation
+scale，X/Y/Z mapping clamp 各为 `±0.4 m`。超过该值仍是 component-wise clamp；
+包络内的不可达目标继续交给
 现有 IK 路径处理：孤立 IK 失败保持最后有效目标，连续 5 次失败只撤销对应侧
-reference，下一帧合格输入按当前 link7 自动重建，GUI 不退出、不回初态。v3 是
+reference，下一帧合格输入按当前 link7 自动重建，GUI 不退出、不回初态。该配置是
 simulation-only 控制包络，不是 measured Workcell、安全区或可达性保证。
 
 DeploymentSpec/preflight 必须引用 `tracking_setup_revision`。`TrackedRigidBodySample
@@ -450,11 +450,11 @@ validation、故障诊断和来源校验不因行数目标删除。
 
 ### NV-4A：冻结回归基线
 
-**当前状态：部分完成。** 无硬件 fixture、mapping v2/v3 与旧正确能力回归已冻结；
+**当前状态：部分完成。** 无硬件 fixture、canonical mapping 与旧正确能力回归已冻结；
 右臂/左臂真人组合 SE(3) 和 contact 基线仍待 HIL。
 
 - 固定当前 commit、Session/source/mapping hash 和两侧 Glove 独立报告。
-- 保持 mapping v2 不变，用当前固定 Lula 依次重验右臂 XYZ-only、RPY-only 和
+- 使用 canonical mapping 与当前固定 Lula 依次重验右臂 XYZ-only、RPY-only 和
   XYZ+RPY relative SE(3) 复合轨迹，保存 mapping clamp、target step/rate、
   IK success/failure、reference rebuild 和 supervisor 结果；组合 SE(3) 在本次
   人工 Gate 通过前明确记为未验证。
@@ -479,8 +479,8 @@ OpenVR owner 双流 producer、process supervisor、epoch/revision 合同和隔�
 - 为 composite leaf 与 transport contract 增加 strict loader、reference closure、
   stable hash 和 golden；不增加临时第二 profile 字段。
 - 定义 middleware-neutral `DeploymentSpec v1` 和本地 device binding。
-- 新建 versioned、simulation-only mapping v3：沿用 v2 proper rotation 与 rotation
-  policy，translation scale `1.0`，X/Y/Z 各 `±0.4 m`；保留 v2 文件与历史 hash。
+- 提交唯一 simulation-only canonical mapping：proper rotation 与 rotation policy
+  统一，translation scale `1.0`，X/Y/Z 各 `±0.4 m`。
 - 提交默认 `native_dual_live` 以及 `left_single_live`、`right_single_live` 三个
   DeploymentSpec。单侧 spec 使用同一双侧 Session，非活动侧绑定显式 hold/rest
   fixture，不遗漏 Session route、不发送隐藏全零命令。
@@ -507,7 +507,7 @@ OpenVR owner 双流 producer、process supervisor、epoch/revision 合同和隔�
 
 - 从右臂实现提取通用 per-side arm pipeline。
 - 为左、右分别创建 mapper、reference controller、Lula solver、supervisor 和诊断。
-- 在 mapping v3 下先右臂、后左臂分别完成 XYZ-only、RPY-only、XYZ+RPY 复合轨迹，
+- 在 canonical mapping 下先右臂、后左臂分别完成 XYZ-only、RPY-only、XYZ+RPY 复合轨迹，
   再进行双 Tracker 同时控制；各项 arm 资格期间 Hands 保持。
 - 保留当前 GUI persistent 生命周期和 current-pose reference rebuild。
 - NV-4C 完成后形成左右独立 IK 基线；阈值仍待四流并发数据，不在右侧数据上提前冻结。
@@ -611,8 +611,8 @@ native-dual DeploymentSpec，四路 decision 在一个 tick 后按侧合并为�
 15. 一个日常命令解析 DeploymentSpec/Session、管理 OpenVR producer 并进入 Isaac
     GUI；默认主线 CLI 已收敛，旧互斥 live 分支删除。before/after 报告证明 runner
     认知面实际下降且正确能力无回归，production LOC 作为已解释的预算指标记录。
-16. mapping v2 文件和历史 hash 保持不变；默认 NV-4 live 引用 v3，v3 明确记录
-    `1.0` scale、X/Y/Z 各 `±0.4 m`、约 `0.693 m` 最大角点位移和
+16. 默认 NV-4 live 统一引用 canonical mapping；该文件明确记录 `1.0` scale、
+    X/Y/Z 各 `±0.4 m`、约 `0.693 m` 最大角点位移和
     `simulation_only` scope，不被描述为完整可达或安全包络。
 17. `left_single_live`、`right_single_live` 可分别完成单臂 + 单手诊断；两者与默认
     `native_dual_live` 共用同一个双侧 Session/组件，非活动侧行为显式且没有
@@ -622,7 +622,7 @@ native-dual DeploymentSpec，四路 decision 在一个 tick 后按侧合并为�
 
 - Session-owned native-dual-teleop composite compatibility leaf / transport contract，
   以及 `DeploymentSpec v1` schema、默认双侧/左右单侧诊断模板和 local binding 示例。
-- 保持 v2 不变的 Workstation2 mapping v3，以及 v2/v3 回归与 provenance 记录。
+- Workstation2 canonical mapping，以及单一入口、方向与 provenance 回归。
 - 双 Tracker OpenVR producer/launcher 与双流 component 更新。
 - side-neutral arm application controller、双 Glove composition 和双 q27 scene adapter。
 - 默认双臂双手 runner、独立 qualification 入口。
@@ -644,7 +644,7 @@ native-dual DeploymentSpec，四路 decision 在一个 tick 后按侧合并为�
 | 仿真单侧故障 | 只 hold/disarm 对应侧；共享 tracking/backend/config 故障才全局暂停 | 保留当前 GUI 恢复逻辑并直接验证隔离 |
 | Glove confidence | 保留当前 live 证据采用的“finite 完整帧可 degraded，`0.90` 为 success 阈值”行为；ADR-0007 显式 supersede ADR-0006 的旧 `<0.90` reject 条款 | 当前左右 live 的最低置信度不足以支持静默改成 `<0.90` 全拒绝 |
 | Tracker 坐标资格 | 两枚 Tracker 必须证明来自同一 OpenVR runtime / Standing universe / setup revision / `vive_tracking`；各侧 handle 外参、anchor、reference 独立 | 当前已配置不等于坐标已一致；不支持两套 tracking world 的隐式拼接 |
-| Workstation2 live mapping | v2 保持 1:1、逐轴 `±0.08 m` 作为回归；新 v3 为 1:1、X/Y/Z 各 `±0.4 m`，接受约 `0.693 m` 角点位移 | v3 只负责 mapping clamp，IK 失败沿用当前逻辑，不宣称全包络可达或适用于真机 |
+| Workstation2 live mapping | canonical mapping 为 1:1、X/Y/Z 各 `±0.4 m`，接受约 `0.693 m` 角点位移 | 单一配置负责坐标和 mapping clamp，IK 失败沿用当前逻辑，不宣称全包络可达或适用于真机 |
 | 单侧 arm+hand 诊断 | 提供左右两个 committed DeploymentSpec；活动侧 live、非活动侧显式 hold/rest | 共用双侧 Session 与组件，只切换 `--deployment`，不增加 `--side` 分支 |
 | 组合 SE(3) | XYZ-only、RPY-only、XYZ+RPY 必须分别验收 | 当前只有前两类的分离测试，组合路径不得提前记为通过 |
 
@@ -661,6 +661,6 @@ per-side / concurrent release threshold。当前先冻结记录口径和“不�
 - 从一个 Standing universe 改成两套独立 tracking world；
 - 将仿真 side-local fault policy 改为默认 coupled；
 - 取消双 Tracker、双 Glove 的默认完整性要求；
-- 改写 mapping v2，或改变 v3 的 1:1 / 逐轴 `±0.4 m` / simulation-only 语义；
+- 改变 canonical mapping 的轴向、1:1 / 逐轴 `±0.4 m` / simulation-only 语义；
 - 删除左右单侧 diagnostic DeploymentSpec，或将其改回 runner 内 side/mode 分支；
 - 为减少行数而删除 canonical validation、source verification 或 IK/故障诊断。

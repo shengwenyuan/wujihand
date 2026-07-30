@@ -127,7 +127,7 @@ external collision shapes/contact = retained
 - 若改为 `true`，需先为 NERO 增加明确 collision filtering，再重跑结构、contact、
   GUI 和稳定性 Gate。
 
-在确认前，coaxial-mount tabletop v14 的 90/90 证明当前 nominal 定义下双侧
+在确认前，inward-port tabletop v15 的 90/90 证明当前 nominal 定义下双侧
 q7/q20、五指/组合手型、隔离、reset/recovery、limits、有界静置收敛，以及
 `link6` 圆柱—小臂轴、基座端面中心/平行度、attachment anchor、mount/q7 准备位
 和手工作姿态；右侧 live Glove
@@ -144,10 +144,11 @@ NV-2 允许使用名称和 assumption 都明确为 `simulation_nominal` 的 Work
 - nominal 初始状态与基础外部 contact 检查。
 
 当前 Workcell 将两底座放在同一近侧桌沿 `x=±0.32 m, y=-0.52 m`，yaw 均为
-`+90°`；Session runtime 唯一引用 typed tabletop qualification profile，保存左右
-q7 `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]`、Isaac-only drive gain 和几何
-阈值。端口轴 `base local -X` 仅由固定 mesh 外凸特征推断，仍待实物确认。该 profile
-不是新的配置层，不修改共享 Asset 的通用 q7 home，也不是硬件控制器参数。
+`-90°`，使接电侧朝桌内；Session runtime 唯一引用 typed tabletop qualification
+profile，保存左右 q7 `[∓10°, +45°, 0°, +45°, +90°, 0°, 0°]`、Isaac-only
+drive gain 和几何阈值。接电侧朝桌内由项目负责人实物确认；端口轴
+`base local -X` 仍只是固定 mesh 的表示约定。该 profile 不是新的配置层，不修改
+共享 Asset 的通用 q7 home，也不是硬件控制器参数。
 
 它不能支持真实装配、clearance、可达空间、定位精度或真机安全结论。NERO J7
 轴/零位/符号、法兰孔位 clocking、桌面尺寸和底座 mount 的实测值必须形成新的
@@ -200,11 +201,11 @@ measured Binding/Assembly/Workcell revision，不得静默覆盖 nominal 文件�
   `hand_skeleton → canonical → retarget → Isaac` smoke；
 - self-collision policy 对应的 contact/GUI 资格证据。
 
-coaxial-mount tabletop v14 报告的 90 项检查全部通过：保留 scripted physical
+inward-port tabletop v15 报告的 90 项检查全部通过：保留 scripted physical
 v2 的双侧 q7、五指/组合手型、隔离、finite/limits、命令后 topology reset、回到
 批准初态及 post-reset recovery，并增加分侧 q7 初态、`link6` 圆柱—小臂轴、
 Hand 2 基座端面中心/平行度和 attachment anchor、
-`link4 → link5` 小臂近水平、桌内方向、掌面向下和端口假设轴朝外检查；
+`link4 → link5` 小臂近水平、桌内方向、掌面向下和接电侧朝桌内检查；
 controller/supervisor/composer 的无硬件测试也已覆盖 composition-level invalid
 fail-closed。报告只证明 fixed external collider 保留和 bounded rest settling，
 且明确 `deliberate_unknown_penetration_probe=false`。右侧实际 Glove live 已完成，

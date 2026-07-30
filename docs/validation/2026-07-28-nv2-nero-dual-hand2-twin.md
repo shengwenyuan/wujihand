@@ -1,6 +1,6 @@
 # 2026-07-28 NV-2 NERO 双实例、物理 Hand 2 与 Glove 链路阶段验证
 
-状态：**PARTIAL / coaxial-mount tabletop v14 已在 Workstation2 通过 90/90**。
+状态：**PARTIAL / inward-port tabletop v15 已在 Workstation2 通过 90/90**。
 
 已通过的范围是：
 
@@ -8,12 +8,12 @@
 - NERO-only 双实例 pre-composition q7 smoke；
 - 双 NERO + 双侧完整物理 Hand 2 + nominal Workcell + Session v1 的五层闭合；
 - Isaac 中两棵同侧 q27 articulation；
-- coaxial-mount tabletop v14 的 90 项检查：保留 scripted physical v2 的左右
+- inward-port tabletop v15 的 90 项检查：保留 scripted physical v2 的左右
   q7、双侧五指逐指、
   双侧组合手型、另一手/两臂隔离、有限值与限位、命令后 topology reset、回到批准
   初态和 post-reset recovery 等 68 项检查，并增加 22 项 tabletop 几何、准备位、
   `link6` 圆柱—小臂轴、FixedJoint anchor、Hand 2 基座盘心与盘面平行度检查；
-- prim 隔离证明目标圆柱属于 NERO `link6`。v14 保持 v12 已恢复的固定 URDF/Lula
+- prim 隔离证明目标圆柱属于 NERO `link6`。v15 保持 v12 已恢复的固定 URDF/Lula
   joint 定义；Binding 只对齐 `link6` visual/collision/mass，
   Assembly 以 `[0.023, 0, -0.0235] m + Ry(+90°)` 将 Hand 2 基座盘心耦合到
   mesh-derived `link6 +X` 端面中心；
@@ -231,10 +231,10 @@ axes，但不改 J7 origin/axis、`link7`、q7 limit 或 Lula URDF。Binding 同
 | link6 geometry alignment profile | `0dafd7b44904e69cd8742df41088db81b6c5bbcbb49d186273ff645c571e63ae` |
 | Assembly interface revision | `fca08a478a8e50131fd66e2f86318fc612300cb4f8f6e8ae258010145305c702` |
 | NERO Binding revision | `f35e6fdd5ec60e1608df9ff51d7dbba5115f2e619bad7f0ed0130e088c9f8878` |
-| tabletop qualification profile | `bd4bed117eaa1158c8df6fcb9b2472d0de964bad20c7faedeaadc44dac6fdafa` |
-| resolved Session hash（v14） | `abf48dd47d90e5feea76fadf628119bf6a769572ef705f3a0a86cc60a945037c` |
+| tabletop qualification profile | `2c0b4b7d476d03ad63e04deda983523952925e56b7bd23ae771a252f12acd447` |
+| resolved Session hash（v15） | `46f543efdaa3eff26227ed73150902c20027b90afdc19cb35e9d814098800601` |
 | Lula URDF | 固定来源：`c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278` |
-| `pytest -q` | `529 passed, 4 skipped, 9 deselected` |
+| `pytest -q` | `612 passed, 4 skipped, 11 deselected` |
 | Ruff / `mypy src` / `git diff --check` | 通过 |
 
 新增或修正的 qualification Gate 分别检查：
@@ -251,21 +251,22 @@ Workstation2 上的最终回归入口：
   tools/run_isaac_nero_hand2_dual_twin.py \
   --session configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml \
   --frames-per-phase 120 \
-  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json \
-  --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.png \
-  --top-screenshot artifacts/validation/nv2/nero-dual-hand2-top-v14.png \
-  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png
+  --report artifacts/validation/nv2/nero-dual-hand2-tabletop-v15.json \
+  --screenshot artifacts/validation/nv2/nero-dual-hand2-tabletop-v15.png \
+  --top-screenshot artifacts/validation/nv2/nero-dual-hand2-top-v15.png \
+  --interface-screenshot artifacts/validation/nv2/nero-dual-hand2-right-interface-v15.png
 ```
 
 结果为 `90/90 checks true`、`passed=true`。新增的 link6/接口 Gate 实测为：
 
 | Gate | left | right | threshold |
 |---|---:|---:|---:|
-| `link6` 圆柱—小臂轴点积 | `0.9990836620` | `0.9990982935` | `>=0.999` |
-| Hand 2 基座盘面平行点积 | `0.9999992371` | `0.9999995922` | `>=0.999` |
-| FixedJoint anchor 误差 | `7.745e-9 m` | `2.079e-8 m` | `<=1e-6 m` |
-| Hand 2 基座盘心误差 | `2.841e-5 m` | `2.077e-5 m` | `<=1e-4 m` |
-| `link4 → link5` 竖直分量 | `0.01965` | `0.01930` | `<=0.02` |
+| `link6` 圆柱—小臂轴点积 | `0.9990833848` | `0.9990971640` | `>=0.999` |
+| Hand 2 基座盘面平行点积 | `0.9999992581` | `0.9999995766` | `>=0.999` |
+| FixedJoint anchor 误差 | `3.510e-8 m` | `6.948e-8 m` | `<=1e-6 m` |
+| Hand 2 基座盘心误差 | `2.801e-5 m` | `2.115e-5 m` | `<=1e-4 m` |
+| 接电侧表示轴朝桌内点积 | `1.0` | `1.0` | `>=0.999` |
+| `link4 → link5` 竖直分量 | `0.01966` | `0.01931` | `<=0.02` |
 
 右侧接口近景由 Workcell frame
 `simulation_nominal_camera_right_interface_eye/target` 定义，不是 runner 临时坐标。
@@ -274,8 +275,8 @@ Workstation2 上的最终回归入口：
 
 | Artifact | SHA-256 |
 |---|---|
-| `artifacts/validation/nv2/nero-dual-hand2-tabletop-v14.json` | `5fc6e6329ef553f3ee3e508f8445190045e23e92e1e57c720e4efc07be44aa79` |
-| `artifacts/validation/nv2/nero-dual-hand2-right-interface-v14.png` | `5994bf58bf8f0d157fb241493f2c01ad5ebd25db95ab510b0ee0e6a085fc505b` |
+| `artifacts/validation/nv2/nero-dual-hand2-tabletop-v15.json` | `4b689e66ce406f225269637b7e16eda895025daf7708ddde3b43e55f64224e56` |
+| `artifacts/validation/nv2/nero-dual-hand2-right-interface-v15.png` | `a202c020f6aa69774a3fdf9a6047cfd1a46d6afe122b20c25b31c31f00496396` |
 
 这张图是仿真装配状态证据；它不能替代实体 NERO 法兰螺孔 clocking 照片或 J7
 轴/零位/符号回读。
@@ -451,7 +452,7 @@ Workstation2 真人 Tracker 的左右、前后、上下三方向已经由操作�
 轴映射已从 runner 移到五层之外的 simulation-only calibration：
 
 ```text
-configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml
+configs/calibrations/vive_tracker_workcell_workstation2.yaml
 ```
 
 该 profile 的同一 proper rotation matrix 同时映射位移轴和相对旋转轴。rotation
@@ -461,17 +462,17 @@ configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml
 但 mapper 输出的最大 Workcell 位移为 `0 m`，从而把 rotation 与 XYZ 测试解耦。
 它不修改五层 Session，也不是实体 NERO TCP calibration。
 
-v2 只把平移位移增益从 `0.25` 改为 `1.0`，轴映射、rotation 参数和逐轴
-`±0.08 m` target 限幅不变。该修改使未限幅区间内的位移及速度响应为 1:1，但不扩大
-仿真工作空间；相对 reference 移动 Tracker `8 cm` 即可能到达限幅，而历史 v1
-需要 `32 cm`。
+当前唯一 calibration 的平移位移及速度响应为 1:1，X/Y/Z 逐轴 target 限幅均为
+`±0.4 m`，对角最大 target 位移约为 `0.693 m`。2026-07-30 inward-port tabletop
+人工观察确认 X/Y 与 roll/pitch 需要共同反向，因此同一个 proper rotation 同时完成
+平移和空间相对旋转修正；Z 与 yaw 方向保持不变。
 
 同步到 Workstation2 后，以 `0.01 m` 合成 Tracker 平移执行固定来源 Lula headless
 回归：连续 running reference 窗为 `0.255538349 s / 24 samples`，完成
 `120/120` 帧、IK `120/120`、UDP reject `0`、translation clamp `0`，
-最大 Workcell 位移 `0.0140047 m`，`passed=true`。报告明确记录
-`mapping_id=vive_tracker_workcell_workstation2_v2`、`translation_scale=1.0` 和
-`five_layer_configuration_modified=false`。证据
+最大 Workcell 位移 `0.0140047 m`，`passed=true`。该报告属于 calibration 收敛前的
+历史证据；当前 canonical mapping 仍保持 `translation_scale=1.0` 和
+`five_layer_configuration_modified=false` 的边界。证据
 `artifacts/validation/input-smoke/tracker-right-nero/synthetic-translation-1to1-v2.json`
 的 SHA-256 为
 `232da109cf08e1f2e91d20f7c8b01a4be4d5cd31e27ecea275ec67244c859e6b`。
@@ -634,27 +635,27 @@ SHA-256
 | 左右完整物理 Hand 2 来源与 q20 layout | 通过 | source lock、Binding、USD hash |
 | stage 恰好两棵 q27 articulation | 通过 | runner 启动前结构检查与报告 |
 | Hand world root 禁用、FixedJoint attachment、q7/q20 分区 | 通过 | adapter fail-closed 检查 |
-| link6 Binding 表示对齐 + Assembly 接口映射 | 通过（nominal） | tabletop v14 90/90；圆柱—小臂轴、基座盘心/平行度、anchor 及手姿态 Gate 通过 |
-| 同侧桌沿 mount、端口假设轴朝外 | 通过（nominal） | `x=±0.32, y=-0.52, yaw=+90°`；port-axis dot=`1.0`，轴向为 mesh 推断待实物确认 |
-| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,-45,0,-45,-90,0,0]°`；v14 初始/post-reset checks |
-| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01965/0.01930 <= 0.02` |
+| link6 Binding 表示对齐 + Assembly 接口映射 | 通过（nominal） | tabletop v15 90/90；圆柱—小臂轴、基座盘心/平行度、anchor 及手姿态 Gate 通过 |
+| 同侧桌沿 mount、接电侧朝桌内 | 通过（nominal） | `x=±0.32, y=-0.52, yaw=-90°`；接电侧方向经实物确认，port-axis dot=`1.0` |
+| 左右 q7 准备位与 reset 后回位 | 通过（nominal） | `[∓10,+45,0,+45,+90,0,0]°`；v15 初始/post-reset checks |
+| 左右 `link4 → link5` 小臂轴近水平 | 通过（nominal） | 竖直分量 `0.01966/0.01931 <= 0.02` |
 | 手朝桌内、近水平且掌面向下 | 通过（nominal） | inward、vertical 与 palm-down 五项 stage 几何测量均过 threshold |
-| q7 响应与双实例隔离 | 通过 | tabletop v14 90/90，包含历史 v2 相关 Gate |
+| q7 响应与双实例隔离 | 通过 | tabletop v15 90/90，包含历史 v2 相关 Gate |
 | Tracker → 右 NERO XYZ 方向 | 通过（人工 GUI） | Workstation2 三方向核对；simulation-only calibration |
 | Tracker → 右 NERO roll/pitch/yaw | **待按当前定义复验** | 旧 corrected-J7 240/240 报告仅为历史证据 |
 | 左右逐指与组合手型 fixture | 通过 | 双侧五指单指 phase + 双侧 15-joint 组合 phase |
-| sampled feedback finite 且在 canonical limits 内 | 通过 | v14 全局、左右及 post-reset checks |
+| sampled feedback finite 且在 canonical limits 内 | 通过 | v15 全局、左右及 post-reset checks |
 | 命令后 reset/topology/recovery | 通过 | 两根 q27 重验、partition stable、回到初态并恢复命令 |
 | fixed external collider 与 bounded rest settling | 通过 | table collider + 每个 baseline/reset 后 `0.005 rad` 容差 |
 | deliberate contact/unknown penetration | **未执行** | `deliberate_unknown_penetration_probe=false` |
-| nominal 接口近景 | 通过 | v14 Workcell-owned camera frame、PNG 与 SHA-256 已冻结 |
+| nominal 接口近景 | 通过 | v15 Workcell-owned camera frame、PNG 与 SHA-256 已冻结 |
 | 实际 Glove `hand_skeleton` live smoke | 右侧通过 | 2399/2400 接收、0 拒绝；identity/calibration/replay 待冻结 |
 | composition-level invalid fail-closed | 通过（无硬件） | controller/supervisor/composer 测试；live fault injection 随 live 补验 |
 | merged q27 最终 self-collision policy | **待确认** | 当前仅验证 disabled policy |
 | measured Workcell / 实物 attachment | 后续阶段 | 不阻塞 nominal 功能联调，不构成现场几何事实 |
 
 结论：**NV-2 的五层配置、adapter/controller 边界、双 q27 拓扑、link6 Binding
-表示对齐及 Hand 2 基座同轴装配已闭合；tabletop v14 为 90/90。历史 v6 84/84、
+表示对齐及 Hand 2 基座同轴装配已闭合；tabletop v15 为 90/90。历史 v6 84/84、
 v11 88/88、v12 86/86 与 scripted
 physical v2 68/68 只作旧定义基线，其中 corrected-J7 rotation/SE(3) 结果不能代表
 当前定义。完整 NV-2 仍缺 Tracker rotation 人工复验、Glove 可复现实验材料、

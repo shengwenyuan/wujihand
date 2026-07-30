@@ -50,12 +50,16 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
    直到 NV-2 collision review 给出证据。
 8. 在真实 NERO 运动前，分别只读获取两台设备的固件、当前 q7 范围和最大速度，
    对齐零位、符号与 J2 坐标定义。若与临时 profile 不兼容，则暂停并修订本 ADR。
-9. NV-2 tabletop 准备位采用
-   `[∓10°, -45°, 0°, -45°, -90°, 0°, 0°]`。这里按项目负责人确认调整的是
-   J2 与 J4：减小 J2 弯折绝对值，同时增加 J4 弯折绝对值，使
+9. 项目负责人通过当前实物确认接电侧应朝桌内，纠正了原先根据 mesh 外凸特征作出的
+   朝桌外假设。Workcell mount yaw 因此由 `+90°` 改为 `-90°`；接电侧对应
+   `base local -X` 仍是固定 mesh 的表示约定，不作为接口轴实测。
+   NV-2 tabletop 准备位同步改为
+   `[∓10°, +45°, 0°, +45°, +90°, 0°, 0°]`。J1 的左右 `∓10°` 保持不变；
+   J2/J4/J5 随底座翻转成组换向，使
    `forearm_proximal=link4 → forearm_distal=link5` 在 Isaac world 中近水平。
-   两个语义帧属于 NERO Asset，后端 prim 由 Binding 映射；水平阈值属于 Session
-   引用的 qualification profile，runner 只消费解析结果。
+   该组合在固定 URDF 正运动学下保持原有末端位置、手朝桌内和掌面朝下。两个语义帧
+   属于 NERO Asset，后端 prim 由 Binding 映射；mount 属于 Workcell，准备位和阈值
+   属于 Session 引用的 qualification profile，runner 只消费解析结果。
 10. qualification profile 的 Isaac-only q7 drive gain 采用
     `stiffness=6500`、`damping=220.79402165819616`，用于抵消组合 Hand 2 重力负载下
     约一度的静态下垂并满足 `|forearm_axis.z| <= 0.02`。该数值不是硬件控制器参数。
@@ -87,10 +91,10 @@ NV-2 需要先得到可复现的数字孪生，但不得把仿真参数误称为
   两者都不表达一个不存在的直角转接结构，也不改写 J7 运动学。
 - tabletop v6 在 Isaac Sim 6.0.1 中以 84/84 checks 通过，但只保留为修正前历史
   组合的准备位和 drive qualification 证据。
-- coaxial-mount tabletop v14 已在 Workstation2 以 90/90 checks 通过；左右 Hand 2
-  基座中心到 `link6` 端面中心误差分别约为 `28.4 µm` 与 `20.8 µm`，盘面平行点积
+- inward-port tabletop v15 已在 Workstation2 以 90/90 checks 通过；左右 Hand 2
+  基座中心到 `link6` 端面中心误差分别约为 `28.0 µm` 与 `21.2 µm`，盘面平行点积
   均大于 `0.999999`。圆柱—小臂轴、掌面朝下、手朝桌内、attachment anchor 以及
-  双 q27 功能 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
+  接电侧朝桌内和双 q27 功能 Gate 均通过。Workcell-owned 右侧接口近景已冻结。
 - 先前 corrected-J7 Lula 的旋转/SE(3) 报告只保留为已撤销定义下的历史证据，不再
   支持当前 Tracker rotation 结论；当前定义须使用固定来源 URDF 重新做 Tracker
   rotation 人工验证。
