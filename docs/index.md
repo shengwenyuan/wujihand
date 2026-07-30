@@ -22,6 +22,7 @@
 - [NERO + Hand 2 + Wuji Glove 仿真全流程透明说明](guides/nero-hand2-glove-simulation-flow.md)
 - [MediaPipe 控制 Hand 2 转向抓球指南](guides/mediapipe-hand2-rotation-ball.md)
 - [VIVE Tracker NV-1 资格验证指南](guides/vive-tracker-qualification.md)
+- [Workstation2 双 Wuji Glove 直连网络配置](guides/workstation2-dual-wuji-glove-network.md)
 - [MuJoCo FR3—Wuji Hand 2 桌面运行指南](guides/mujoco-fr3-hand2-table.md)
 - [2026-07-28 Isaac Sim 6.0.1 / Python 3.12 起始兼容性验证](validation/2026-07-28-isaac-6.0.1-python-3.12-compatibility.md)
 - [2026-07-28 lenovo-piper2 目标机基线](validation/2026-07-28-lenovo-piper2-baseline.md)
