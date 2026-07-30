@@ -32,8 +32,8 @@ class GloveHand2ControllerSet:
             GloveHand2SimulationController,
         ],
     ) -> None:
-        if not isinstance(controllers, Mapping) or not controllers:
-            raise ValueError("controllers must contain one or two hands")
+        if not isinstance(controllers, Mapping):
+            raise TypeError("controllers must be a mapping")
         copied = dict(controllers)
         if set(copied) - set(HandSide):
             raise ValueError("controller keys must be HandSide values")
@@ -54,6 +54,7 @@ class GloveHand2ControllerSet:
         self._started: list[
             tuple[HandSide, GloveHand2SimulationController]
         ] = []
+        self._active = False
         self._closed = False
 
     @property
@@ -65,7 +66,7 @@ class GloveHand2ControllerSet:
 
         if self._closed:
             raise RuntimeError("Glove controller set is closed")
-        if self._started:
+        if self._active:
             raise RuntimeError("Glove controller set is already started")
         try:
             for side, controller in self._controllers:
@@ -74,6 +75,7 @@ class GloveHand2ControllerSet:
         except Exception:
             self._close_started()
             raise
+        self._active = True
 
     def step(
         self,
@@ -82,7 +84,7 @@ class GloveHand2ControllerSet:
     ) -> tuple[SideHand2SimulationStep, ...]:
         """Poll each side once; a missing frame advances only that side."""
 
-        if not self._started or self._closed:
+        if not self._active or self._closed:
             raise RuntimeError("start() must succeed before step()")
         decisions: list[SideHand2SimulationStep] = []
         for side, controller in self._started:
@@ -108,6 +110,7 @@ class GloveHand2ControllerSet:
         if self._closed:
             return
         self._closed = True
+        self._active = False
         first_error = self._close_started()
         if first_error is not None:
             raise first_error

@@ -394,10 +394,6 @@ class DeploymentSpec:
             raise ValueError(
                 f"{field}.control_bindings must exactly cover deployment sources"
             )
-        if not any(source.kind == "vive_tracker" for source in sources):
-            raise ValueError(f"{field}.sources must include at least one VIVE Tracker")
-        if not any(source.kind == "wuji_glove" for source in sources):
-            raise ValueError(f"{field}.sources must include at least one Wuji Glove")
         return cls(
             schema=schema,
             deployment_id=validate_identifier(

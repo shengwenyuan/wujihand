@@ -1,5 +1,5 @@
 schema: wujihand.deployment.v1
-deployment_id: isaac_nero_hand2_right_single_debug_v1
+deployment_id: isaac_nero_hand2_dual_arm_only_live_v1
 session:
   path: configs/sessions/isaac_nero_dual_hand2_native_teleop_v1.yaml
   expected_id: isaac_nero_dual_hand2_native_teleop_v1
@@ -17,16 +17,16 @@ processes:
     lifecycle: managed
     depends_on: []
   - process_id: isaac_runtime
-    component_id: isaac_nero_hand2_native_dual_debug_runtime
+    component_id: isaac_nero_hand2_native_dual_runtime
     lifecycle: in_process
     depends_on: [openvr_producer]
 sources:
-  - source_id: arm_hold_left
-    kind: arm_hold_fixture
+  - source_id: tracker_left
+    kind: vive_tracker
     side: left
-    logical_role: arm_hold_left
-    process_id: isaac_runtime
-    local_binding_key: null
+    logical_role: operator_left
+    process_id: openvr_producer
+    local_binding_key: tracker_left
   - source_id: hand_rest_left
     kind: hand_rest_fixture
     side: left
@@ -39,16 +39,16 @@ sources:
     logical_role: operator_right
     process_id: openvr_producer
     local_binding_key: tracker_right
-  - source_id: glove_right
-    kind: wuji_glove
+  - source_id: hand_rest_right
+    kind: hand_rest_fixture
     side: right
-    logical_role: glove_right
+    logical_role: hand_rest_right
     process_id: isaac_runtime
-    local_binding_key: glove_right
+    local_binding_key: null
 control_bindings:
   - instance_id: nero_left
     group_id: arm_joints
-    source_id: arm_hold_left
+    source_id: tracker_left
   - instance_id: hand_left
     group_id: finger_joints
     source_id: hand_rest_left
@@ -57,5 +57,5 @@ control_bindings:
     source_id: tracker_right
   - instance_id: hand_right
     group_id: finger_joints
-    source_id: glove_right
+    source_id: hand_rest_right
 report_root: artifacts/runs/nv4

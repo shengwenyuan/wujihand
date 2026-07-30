@@ -10,7 +10,6 @@ import pytest
 from wujihand.runtime import (
     ConfigRepository,
     DeploymentResolver,
-    NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT,
     NATIVE_DUAL_RUNTIME_COMPONENT,
     build_native_dual_runtime_plan,
     build_openvr_producer_launch,
@@ -23,11 +22,12 @@ from wujihand.specs import (
 
 ROOT = Path(__file__).parents[2]
 DEPLOYMENTS = ROOT / "configs/deployments"
+NATIVE_RUNNER = ROOT / "tools/run_isaac_nero_hand2_dual_twin.py"
 DEPLOYMENT_NAMES = (
     "isaac_nero_hand2_native_dual_live_v1.yaml",
+    "isaac_nero_hand2_dual_arm_only_live_v1.yaml",
     "isaac_nero_hand2_left_single_live_v1.yaml",
     "isaac_nero_hand2_right_single_live_v1.yaml",
-    "isaac_nero_hand2_right_single_debug_v1.yaml",
 )
 LOCAL_BINDING_EXAMPLE = (
     ROOT
@@ -153,19 +153,23 @@ def test_live_session_reuses_lower_four_layers_without_mutating_qualification() 
     )
 
 
-def test_default_and_diagnostic_deployments_have_explicit_source_ownership() -> None:
+def test_native_deployments_have_explicit_route_ownership() -> None:
     resolver = DeploymentResolver(ROOT)
     local = local_binding()
     default = resolver.resolve(
         DEPLOYMENTS / DEPLOYMENT_NAMES[0],
         local_binding=local,
     )
-    left = resolver.resolve(
+    arms_only = resolver.resolve(
         DEPLOYMENTS / DEPLOYMENT_NAMES[1],
         local_binding=local,
     )
-    right = resolver.resolve(
+    left = resolver.resolve(
         DEPLOYMENTS / DEPLOYMENT_NAMES[2],
+        local_binding=local,
+    )
+    right = resolver.resolve(
+        DEPLOYMENTS / DEPLOYMENT_NAMES[3],
         local_binding=local,
     )
 
@@ -173,6 +177,12 @@ def test_default_and_diagnostic_deployments_have_explicit_source_ownership() -> 
         "vive_tracker",
         "wuji_glove",
     }
+    assert {source.source.kind for source in arms_only.sources} == {
+        "vive_tracker",
+        "hand_rest_fixture",
+    }
+    assert arms_only.source("hand_rest_left").local_binding is None
+    assert arms_only.source("hand_rest_right").local_binding is None
     assert left.source("arm_hold_right").local_binding is None
     assert left.source("hand_rest_right").local_binding is None
     assert left.source("tracker_left").local_binding is not None
@@ -181,42 +191,103 @@ def test_default_and_diagnostic_deployments_have_explicit_source_ownership() -> 
     assert right.source("tracker_right").local_binding is not None
     assert {
         default.session.session_hash,
+        arms_only.session.session_hash,
         left.session.session_hash,
         right.session.session_hash,
     } == {default.session.session_hash}
     assert len(
-        {default.deployment_hash, left.deployment_hash, right.deployment_hash}
-    ) == 3
-    assert build_native_dual_runtime_plan(default).live_sides == (
-        "left",
-        "right",
-    )
-    assert build_native_dual_runtime_plan(left).live_sides == ("left",)
-    assert build_native_dual_runtime_plan(right).live_sides == ("right",)
-    assert build_native_dual_runtime_plan(default).arm_reset_key is None
+        {
+            default.deployment_hash,
+            arms_only.deployment_hash,
+            left.deployment_hash,
+            right.deployment_hash,
+        }
+    ) == 4
 
 
-def test_right_debug_deployment_declares_keyboard_arm_reset_capability() -> None:
+@pytest.mark.parametrize(
+    ("name", "expected_kinds"),
+    (
+        (
+            DEPLOYMENT_NAMES[0],
+            (
+                "vive_tracker",
+                "wuji_glove",
+                "vive_tracker",
+                "wuji_glove",
+            ),
+        ),
+        (
+            DEPLOYMENT_NAMES[1],
+            (
+                "vive_tracker",
+                "hand_rest_fixture",
+                "vive_tracker",
+                "hand_rest_fixture",
+            ),
+        ),
+        (
+            DEPLOYMENT_NAMES[2],
+            (
+                "vive_tracker",
+                "wuji_glove",
+                "arm_hold_fixture",
+                "hand_rest_fixture",
+            ),
+        ),
+        (
+            DEPLOYMENT_NAMES[3],
+            (
+                "arm_hold_fixture",
+                "hand_rest_fixture",
+                "vive_tracker",
+                "wuji_glove",
+            ),
+        ),
+    ),
+)
+def test_runtime_plan_exposes_four_routes_without_mode_aggregates(
+    name: str,
+    expected_kinds: tuple[str, str, str, str],
+) -> None:
     resolved = DeploymentResolver(ROOT).resolve(
-        DEPLOYMENTS / DEPLOYMENT_NAMES[3],
+        DEPLOYMENTS / name,
         local_binding=local_binding(),
     )
     plan = build_native_dual_runtime_plan(resolved)
 
+    assert tuple(route.source.kind for route in plan.routes) == expected_kinds
+    assert plan.route("nero_left", "arm_joints").side == "left"
+    assert plan.route("hand_right", "finger_joints").side == "right"
+    with pytest.raises(KeyError):
+        plan.route("nero_left", "finger_joints")
     assert (
         resolved.process("isaac_runtime").process.component_id
-        == NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT
-    )
-    assert plan.live_sides == ("right",)
-    assert plan.arm_reset_key == "R"
-    normal = DeploymentResolver(ROOT).resolve(
-        DEPLOYMENTS / DEPLOYMENT_NAMES[2],
-        local_binding=local_binding(),
-    )
-    assert (
-        normal.process("isaac_runtime").process.component_id
         == NATIVE_DUAL_RUNTIME_COMPONENT
     )
+
+
+def test_exactly_four_native_deployments_are_committed() -> None:
+    committed = {
+        path.name
+        for path in DEPLOYMENTS.glob("isaac_nero_hand2_*live_v1.yaml")
+    }
+
+    assert committed == set(DEPLOYMENT_NAMES)
+
+
+def test_native_runner_has_no_mode_or_operator_reset_aggregates() -> None:
+    source = NATIVE_RUNNER.read_text(encoding="utf-8")
+
+    for removed_name in (
+        "KeyboardResetInputAdapter",
+        "arm_reset_key",
+        "live_sides",
+        "operator_arm_resets",
+        ".source.source",
+    ):
+        assert removed_name not in source
+    assert "wujihand.isaac_native_dual_teleoperation_run.v2" in source
 
 
 def test_resolved_snapshot_redacts_local_identity_and_endpoint() -> None:
@@ -308,8 +379,8 @@ def test_resolver_rejects_cross_side_control_binding(
     ("name", "expected_sides"),
     (
         (DEPLOYMENT_NAMES[0], ("left", "right")),
-        (DEPLOYMENT_NAMES[1], ("left",)),
-        (DEPLOYMENT_NAMES[2], ("right",)),
+        (DEPLOYMENT_NAMES[1], ("left", "right")),
+        (DEPLOYMENT_NAMES[2], ("left",)),
         (DEPLOYMENT_NAMES[3], ("right",)),
     ),
 )

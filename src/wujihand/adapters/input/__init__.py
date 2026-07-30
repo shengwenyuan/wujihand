@@ -1,6 +1,5 @@
 """Canonical input adapters."""
 
-from .keyboard_reset import KeyboardResetInputAdapter
 from .mediapipe_palm_orientation import MediaPipePalmOrientationEstimator
 from .openvr_tracker import (
     OpenVrMultiTrackerAdapter,
@@ -13,7 +12,6 @@ from .wuji_glove import (
 )
 
 __all__ = [
-    "KeyboardResetInputAdapter",
     "MediaPipePalmOrientationEstimator",
     "NoHandSkeletonFrameAvailable",
     "OpenVrMultiTrackerAdapter",

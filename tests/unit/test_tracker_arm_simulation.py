@@ -364,25 +364,3 @@ def test_transport_epoch_invalidation_is_side_local() -> None:
 
     assert left.tracker.requires_reference
     assert not right.tracker.requires_reference
-
-
-def test_operator_reset_restores_command_and_requires_fresh_reference() -> None:
-    subject = controller("right", kinematics=FakeKinematics())
-    establish_reference(subject, "right")
-
-    decision = subject.reset(
-        (0.2,) * 7,
-        now_ns=300_000_000,
-    )
-
-    assert subject.tracker.requires_reference
-    assert decision.reason == "reset_at_rest"
-    np.testing.assert_array_equal(decision.command, (0.2,) * 7)
-    readiness = subject.readiness.observe(
-        sample(
-            "right",
-            sequence=3,
-            host_time_ns=400_000_000,
-        )
-    )
-    assert not readiness.ready

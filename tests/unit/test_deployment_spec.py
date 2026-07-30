@@ -146,6 +146,27 @@ def test_live_and_fixture_sources_have_explicit_local_binding_semantics() -> Non
         DeploymentSpec.from_mapping(fixture_with_device)
 
 
+def test_deployment_sources_do_not_require_a_glove_route() -> None:
+    arm_only = _deployment()
+    hand = arm_only["sources"][1]
+    hand.update(
+        {
+            "source_id": "hand_rest_left",
+            "kind": "hand_rest_fixture",
+            "logical_role": "hand_rest_left",
+            "local_binding_key": None,
+        }
+    )
+    arm_only["control_bindings"][1]["source_id"] = "hand_rest_left"
+
+    deployment = DeploymentSpec.from_mapping(arm_only)
+
+    assert {source.kind for source in deployment.sources} == {
+        "vive_tracker",
+        "hand_rest_fixture",
+    }
+
+
 def test_deployment_rejects_incomplete_or_duplicate_control_bindings() -> None:
     missing = _deployment()
     missing["control_bindings"].pop()

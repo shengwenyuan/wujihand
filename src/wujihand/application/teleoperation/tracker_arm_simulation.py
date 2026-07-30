@@ -109,18 +109,6 @@ class TrackerArmSimulationController:
         self.readiness.reset()
         self.tracker.invalidate_reference()
 
-    def reset(
-        self,
-        rest_q7_rad: Sequence[float],
-        *,
-        now_ns: int,
-    ) -> SafetyDecision:
-        """Restore one arm and require a fresh relative Tracker reference."""
-
-        self.readiness.reset()
-        self.tracker.reset()
-        return self.supervisor.reset(rest_q7_rad, now_ns=now_ns)
-
     def step(
         self,
         samples: Sequence[TrackedRigidBodySample],

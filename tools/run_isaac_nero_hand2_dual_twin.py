@@ -81,6 +81,7 @@ from wujihand.runtime import (
     ConfigRepository,
     DeploymentResolver,
     ManagedOpenVrProducer,
+    NativeDualRoutePlan,
     ResolvedDeployment,
     SessionResolver,
     build_native_dual_runtime_plan,
@@ -466,7 +467,6 @@ from wujihand.adapters.simulation.nero_model import (
     load_nero_model_profile,
 )
 from wujihand.adapters.input import (
-    KeyboardResetInputAdapter,
     NoHandSkeletonFrameAvailable,
     WujiGloveHandSkeletonAdapter,
 )
@@ -2509,40 +2509,19 @@ def _run_native_dual_live(
     plan = build_native_dual_runtime_plan(resolved)
     launch = build_openvr_producer_launch(resolved, ROOT)
     producer = ManagedOpenVrProducer(launch)
-    keyboard_reset_input: KeyboardResetInputAdapter | None = None
-    if plan.arm_reset_key is not None:
-        import carb.input  # type: ignore[import-not-found]
-        import omni.appwindow  # type: ignore[import-not-found]
-
-        app_window = omni.appwindow.get_default_app_window()
-        if app_window is None:
-            raise RuntimeError(
-                "debug runtime requires the Isaac application window"
-            )
-        keyboard = app_window.get_keyboard()
-        if keyboard is None:
-            raise RuntimeError(
-                "debug runtime requires an Isaac keyboard input device"
-            )
-        reset_key = getattr(
-            carb.input.KeyboardInput,
-            plan.arm_reset_key,
-            None,
-        )
-        if reset_key is None:
-            raise RuntimeError(
-                f"unsupported debug reset key {plan.arm_reset_key!r}"
-            )
-        keyboard_reset_input = KeyboardResetInputAdapter(
-            event_source=carb.input.acquire_input_interface(),
-            keyboard=keyboard,
-            reset_key=reset_key,
-            key_press_type=carb.input.KeyboardEventType.KEY_PRESS,
-        )
+    tracker_routes: dict[str, NativeDualRoutePlan] = {}
+    glove_routes: dict[str, NativeDualRoutePlan] = {}
+    for side in ("left", "right"):
+        arm_route = plan.route(f"nero_{side}", "arm_joints")
+        if arm_route.source.kind == "vive_tracker":
+            tracker_routes[side] = arm_route
+        hand_route = plan.route(f"hand_{side}", "finger_joints")
+        if hand_route.source.kind == "wuji_glove":
+            glove_routes[side] = hand_route
     stream_by_side = {stream.side: stream for stream in launch.streams}
-    if set(stream_by_side) != set(plan.live_sides):
+    if set(stream_by_side) != set(tracker_routes):
         raise RuntimeError(
-            "OpenVR streams differ from Deployment live arm ownership"
+            "OpenVR streams differ from Deployment Tracker routes"
         )
 
     receivers = {
@@ -2556,7 +2535,7 @@ def _run_native_dual_live(
             tracking_setup_revision=launch.tracking_setup_revision,
             tracking_frame=launch.tracking_frame,
         )
-        for side in plan.live_sides
+        for side in tracker_routes
     }
     side_runtime = {runtime.side: runtime for runtime in SIDES}
     arm_controllers: dict[str, TrackerArmSimulationController] = {}
@@ -2568,7 +2547,7 @@ def _run_native_dual_live(
         for side in ("left", "right")
     }
     started_ns = time.monotonic_ns()
-    for side in plan.live_sides:
+    for side, route in tracker_routes.items():
         runtime = side_runtime[side]
         solver = LulaKinematicsSolver(
             str(NERO_LULA_DESCRIPTION),
@@ -2600,14 +2579,14 @@ def _run_native_dual_live(
                 profile.kinematics.orientation_tolerance_rad
             ),
         )
-        source = plan.side(side).arm
-        local = source.local_binding
+        source = route.source
+        local = route.local_binding
         if local is None:
             raise RuntimeError(f"{side} Tracker local binding is missing")
         identity = {
             "stream_id": stream_by_side[side].stream_id,
             "device_serial": local.device_identity,
-            "logical_role": source.source.logical_role,
+            "logical_role": source.logical_role,
             "tracking_frame": mapping.tracking_frame,
         }
         mapper = RelativeTrackerPoseMapper(
@@ -2658,15 +2637,15 @@ def _run_native_dual_live(
         HandSide,
         GloveHand2SimulationController,
     ] = {}
-    for side in plan.live_sides:
-        source = plan.side(side).hand
-        local = source.local_binding
+    for side, route in glove_routes.items():
+        source = route.source
+        local = route.local_binding
         if local is None:
             raise RuntimeError(f"{side} Glove local binding is missing")
         hand_side = HandSide(side)
         input_adapter = WujiGloveHandSkeletonAdapter(
             hand_side,
-            source_id=source.source.source_id,
+            source_id=source.source_id,
             calibration_id=local.calibration_id,
             transform_id="wuji_glove.hand_skeleton.v1",
             serial_number=local.device_identity,
@@ -2699,8 +2678,9 @@ def _run_native_dual_live(
     gloves = GloveHand2ControllerSet(glove_controllers)
 
     for side in ("left", "right"):
-        if side not in plan.live_sides:
+        if side not in tracker_routes:
             arm_targets[side] = initial_arm_targets[side].copy()
+        if side not in glove_routes:
             hand_targets[side] = (
                 hand_profiles[side].rest_position.copy()
             )
@@ -2718,8 +2698,8 @@ def _run_native_dual_live(
     )
     _step(world, 5, render=True)
 
-    arm_reasons = {side: Counter() for side in plan.live_sides}
-    hand_reasons = {side: Counter() for side in plan.live_sides}
+    arm_reasons = {side: Counter() for side in tracker_routes}
+    hand_reasons = {side: Counter() for side in glove_routes}
     references_established = Counter()
     references_revoked = Counter()
     ik_successes = Counter()
@@ -2727,65 +2707,26 @@ def _run_native_dual_live(
     max_source_skew_ns = 0
     producer_restarts = 0
     completed_frames = 0
-    operator_arm_resets = 0
     last_tick_ns = started_ns
     loop_started_ns = time.monotonic_ns()
     print(
-        "NV4 LIVE CONNECTING: opening configured Gloves and managed "
-        "OpenVR producer.",
+        "NV4 LIVE CONNECTING: opening configured native inputs.",
         flush=True,
     )
     try:
-        if keyboard_reset_input is not None:
-            keyboard_reset_input.start()
         gloves.start(now_ns=started_ns)
         lifecycle = producer.start()
         print(
             "NV4 LIVE READY: "
             f"deployment={resolved.deployment.deployment_id} "
-            f"live_sides={list(plan.live_sides)} "
+            f"trackers={list(tracker_routes)} "
+            f"gloves={list(glove_routes)} "
             f"transport_epoch={lifecycle.new_transport_epoch}; "
-            "move the configured Tracker(s) and Glove(s) when ready"
-            + (
-                f"; press {plan.arm_reset_key} to reset both arm poses."
-                if plan.arm_reset_key is not None
-                else "."
-            ),
+            "move the configured input devices when ready.",
             flush=True,
         )
         while simulation_app.is_running():
             tick_ns = max(time.monotonic_ns(), last_tick_ns + 1)
-            if (
-                keyboard_reset_input is not None
-                and keyboard_reset_input.consume_reset_requested()
-            ):
-                for side in ("left", "right"):
-                    restored = initial_arm_targets[side].copy()
-                    arm_targets[side] = restored
-                    articulations[side].set_joint_positions(
-                        restored[np.newaxis, :],
-                        joint_indices=arm_indices[side],
-                    )
-                    articulations[side].set_joint_velocities(
-                        np.zeros((1, 7), dtype=np.float64),
-                        joint_indices=arm_indices[side],
-                    )
-                for side, controller in arm_controllers.items():
-                    controller.reset(
-                        initial_arm_targets[side],
-                        now_ns=tick_ns,
-                    )
-                apply_targets()
-                world.step(render=True)
-                completed_frames += 1
-                operator_arm_resets += 1
-                last_tick_ns = tick_ns
-                print(
-                    "NV4 DEBUG RESET: both arm poses restored; "
-                    "active Tracker references cleared.",
-                    flush=True,
-                )
-                continue
             try:
                 producer.ensure_running()
             except RuntimeError:
@@ -2885,8 +2826,6 @@ def _run_native_dual_live(
                 )
             last_tick_ns = tick_ns
     finally:
-        if keyboard_reset_input is not None:
-            keyboard_reset_input.close()
         producer.close()
         gloves.close()
         for controller in arm_controllers.values():
@@ -2895,7 +2834,7 @@ def _run_native_dual_live(
             receiver.close()
 
     report = {
-        "schema": "wujihand.isaac_native_dual_teleoperation_run.v1",
+        "schema": "wujihand.isaac_native_dual_teleoperation_run.v2",
         "scope": (
             "simulation-only dual NERO + Hand2; no ROS, CAN, NERO "
             "hardware, or Hand2 hardware commands"
@@ -2921,10 +2860,7 @@ def _run_native_dual_live(
             "max_rotation_delta_deg": mapping.max_rotation_delta_deg,
         },
         "runtime": {
-            "live_sides": list(plan.live_sides),
             "completed_frames": completed_frames,
-            "operator_arm_resets": operator_arm_resets,
-            "arm_reset_key": plan.arm_reset_key,
             "wall_duration_s": (
                 time.monotonic_ns() - loop_started_ns
             )
@@ -2942,11 +2878,11 @@ def _run_native_dual_live(
                 "udp_batches_accepted": receivers[side].accepted,
                 "udp_datagrams_rejected": receivers[side].rejected,
             }
-            for side in plan.live_sides
+            for side in arm_reasons
         },
         "hands": {
             side: {"reasons": dict(hand_reasons[side])}
-            for side in plan.live_sides
+            for side in hand_reasons
         },
         "tracking_setup_qualified": resolved.tracking_qualified,
         "qualification_evaluated": False,

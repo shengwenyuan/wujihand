@@ -149,6 +149,22 @@ def hand_controller(
     return controller, source
 
 
+def test_empty_set_has_an_explicit_noop_lifecycle() -> None:
+    subject = GloveHand2ControllerSet({})
+
+    assert subject.sides == ()
+    with pytest.raises(RuntimeError, match=r"start\(\)"):
+        subject.step(now_ns=0)
+
+    subject.start(now_ns=0)
+    assert subject.step(now_ns=1) == ()
+    with pytest.raises(RuntimeError, match="already started"):
+        subject.start(now_ns=2)
+
+    subject.close()
+    subject.close()
+
+
 def test_dual_set_starts_left_then_right_and_closes_in_reverse() -> None:
     events: list[str] = []
     left, _ = hand_controller(HandSide.LEFT, events)

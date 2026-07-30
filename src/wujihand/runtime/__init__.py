@@ -22,10 +22,9 @@ from .process_supervisor import (
     build_openvr_producer_launch,
 )
 from .native_dual_plan import (
-    NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT,
     NATIVE_DUAL_RUNTIME_COMPONENT,
+    NativeDualRoutePlan,
     NativeDualRuntimePlan,
-    NativeDualSidePlan,
     build_native_dual_runtime_plan,
 )
 from .rotation_ball_config import (
@@ -48,10 +47,9 @@ __all__ = [
     "RotationBallConfig",
     "MujocoTableSceneConfig",
     "ManagedOpenVrProducer",
-    "NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT",
     "NATIVE_DUAL_RUNTIME_COMPONENT",
+    "NativeDualRoutePlan",
     "NativeDualRuntimePlan",
-    "NativeDualSidePlan",
     "OpenVrProducerLaunch",
     "OpenVrStreamLaunch",
     "ResolvedArtifact",
