@@ -466,6 +466,7 @@ from wujihand.adapters.simulation.nero_model import (
     load_nero_model_profile,
 )
 from wujihand.adapters.input import (
+    KeyboardResetInputAdapter,
     NoHandSkeletonFrameAvailable,
     WujiGloveHandSkeletonAdapter,
 )
@@ -2508,6 +2509,36 @@ def _run_native_dual_live(
     plan = build_native_dual_runtime_plan(resolved)
     launch = build_openvr_producer_launch(resolved, ROOT)
     producer = ManagedOpenVrProducer(launch)
+    keyboard_reset_input: KeyboardResetInputAdapter | None = None
+    if plan.arm_reset_key is not None:
+        import carb.input  # type: ignore[import-not-found]
+        import omni.appwindow  # type: ignore[import-not-found]
+
+        app_window = omni.appwindow.get_default_app_window()
+        if app_window is None:
+            raise RuntimeError(
+                "debug runtime requires the Isaac application window"
+            )
+        keyboard = app_window.get_keyboard()
+        if keyboard is None:
+            raise RuntimeError(
+                "debug runtime requires an Isaac keyboard input device"
+            )
+        reset_key = getattr(
+            carb.input.KeyboardInput,
+            plan.arm_reset_key,
+            None,
+        )
+        if reset_key is None:
+            raise RuntimeError(
+                f"unsupported debug reset key {plan.arm_reset_key!r}"
+            )
+        keyboard_reset_input = KeyboardResetInputAdapter(
+            event_source=carb.input.acquire_input_interface(),
+            keyboard=keyboard,
+            reset_key=reset_key,
+            key_press_type=carb.input.KeyboardEventType.KEY_PRESS,
+        )
     stream_by_side = {stream.side: stream for stream in launch.streams}
     if set(stream_by_side) != set(plan.live_sides):
         raise RuntimeError(
@@ -2696,6 +2727,7 @@ def _run_native_dual_live(
     max_source_skew_ns = 0
     producer_restarts = 0
     completed_frames = 0
+    operator_arm_resets = 0
     last_tick_ns = started_ns
     loop_started_ns = time.monotonic_ns()
     print(
@@ -2704,6 +2736,8 @@ def _run_native_dual_live(
         flush=True,
     )
     try:
+        if keyboard_reset_input is not None:
+            keyboard_reset_input.start()
         gloves.start(now_ns=started_ns)
         lifecycle = producer.start()
         print(
@@ -2711,11 +2745,47 @@ def _run_native_dual_live(
             f"deployment={resolved.deployment.deployment_id} "
             f"live_sides={list(plan.live_sides)} "
             f"transport_epoch={lifecycle.new_transport_epoch}; "
-            "move the configured Tracker(s) and Glove(s) when ready.",
+            "move the configured Tracker(s) and Glove(s) when ready"
+            + (
+                f"; press {plan.arm_reset_key} to reset both arm poses."
+                if plan.arm_reset_key is not None
+                else "."
+            ),
             flush=True,
         )
         while simulation_app.is_running():
             tick_ns = max(time.monotonic_ns(), last_tick_ns + 1)
+            if (
+                keyboard_reset_input is not None
+                and keyboard_reset_input.consume_reset_requested()
+            ):
+                for side in ("left", "right"):
+                    restored = initial_arm_targets[side].copy()
+                    arm_targets[side] = restored
+                    articulations[side].set_joint_positions(
+                        restored[np.newaxis, :],
+                        joint_indices=arm_indices[side],
+                    )
+                    articulations[side].set_joint_velocities(
+                        np.zeros((1, 7), dtype=np.float64),
+                        joint_indices=arm_indices[side],
+                    )
+                for side, controller in arm_controllers.items():
+                    controller.reset(
+                        initial_arm_targets[side],
+                        now_ns=tick_ns,
+                    )
+                apply_targets()
+                world.step(render=True)
+                completed_frames += 1
+                operator_arm_resets += 1
+                last_tick_ns = tick_ns
+                print(
+                    "NV4 DEBUG RESET: both arm poses restored; "
+                    "active Tracker references cleared.",
+                    flush=True,
+                )
+                continue
             try:
                 producer.ensure_running()
             except RuntimeError:
@@ -2815,6 +2885,8 @@ def _run_native_dual_live(
                 )
             last_tick_ns = tick_ns
     finally:
+        if keyboard_reset_input is not None:
+            keyboard_reset_input.close()
         producer.close()
         gloves.close()
         for controller in arm_controllers.values():
@@ -2851,6 +2923,8 @@ def _run_native_dual_live(
         "runtime": {
             "live_sides": list(plan.live_sides),
             "completed_frames": completed_frames,
+            "operator_arm_resets": operator_arm_resets,
+            "arm_reset_key": plan.arm_reset_key,
             "wall_duration_s": (
                 time.monotonic_ns() - loop_started_ns
             )

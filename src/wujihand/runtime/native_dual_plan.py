@@ -9,6 +9,16 @@ from .deployment_resolver import (
     ResolvedDeploymentSource,
 )
 
+NATIVE_DUAL_RUNTIME_COMPONENT = "isaac_nero_hand2_native_dual_runtime"
+NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT = (
+    "isaac_nero_hand2_native_dual_debug_runtime"
+)
+
+_ARM_RESET_KEY_BY_RUNTIME_COMPONENT = {
+    NATIVE_DUAL_RUNTIME_COMPONENT: None,
+    NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT: "R",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class NativeDualSidePlan:
@@ -32,6 +42,7 @@ class NativeDualRuntimePlan:
 
     deployment_id: str
     sides: tuple[NativeDualSidePlan, NativeDualSidePlan]
+    arm_reset_key: str | None
 
     def side(self, side: str) -> NativeDualSidePlan:
         for plan in self.sides:
@@ -48,6 +59,19 @@ def build_native_dual_runtime_plan(
     resolved: ResolvedDeployment,
 ) -> NativeDualRuntimePlan:
     """Compile source routes without adding runner-side mode branches."""
+
+    runtime = resolved.process("isaac_runtime").process
+    if runtime.lifecycle != "in_process":
+        raise ValueError("native dual Isaac runtime must be in-process")
+    try:
+        arm_reset_key = _ARM_RESET_KEY_BY_RUNTIME_COMPONENT[
+            runtime.component_id
+        ]
+    except KeyError as exc:
+        raise ValueError(
+            "native dual Isaac runtime component is unsupported: "
+            f"{runtime.component_id}"
+        ) from exc
 
     routes = {
         (binding.instance_id, binding.group_id): resolved.source(
@@ -98,6 +122,7 @@ def build_native_dual_runtime_plan(
     result = NativeDualRuntimePlan(
         deployment_id=resolved.deployment.deployment_id,
         sides=(side_plans[0], side_plans[1]),
+        arm_reset_key=arm_reset_key,
     )
     if not result.live_sides:
         raise ValueError("native dual runtime requires at least one live side")
@@ -105,6 +130,8 @@ def build_native_dual_runtime_plan(
 
 
 __all__ = [
+    "NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT",
+    "NATIVE_DUAL_RUNTIME_COMPONENT",
     "NativeDualRuntimePlan",
     "NativeDualSidePlan",
     "build_native_dual_runtime_plan",

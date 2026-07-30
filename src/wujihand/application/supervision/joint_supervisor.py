@@ -58,6 +58,29 @@ class JointCommandSupervisor:
         self.last_step_ns = now_ns
         return self._decision("armed_at_rest", False, False)
 
+    def reset(
+        self,
+        rest_position: Sequence[float] | npt.NDArray[np.floating],
+        *,
+        now_ns: int,
+    ) -> SafetyDecision:
+        """Restart temporal supervision at an explicitly restored pose."""
+
+        if now_ns < 0:
+            raise ValueError("now_ns must be non-negative")
+        requested = self.layout.validate_vector(rest_position)
+        restored = self.layout.clamp(requested)
+        position_clamped = not np.array_equal(restored, requested)
+        self.rest = restored.copy()
+        self.state = SafetyState.TRACKING
+        self.last_command = restored.copy()
+        self.last_step_ns = now_ns
+        return self._decision(
+            "reset_at_rest",
+            position_clamped,
+            False,
+        )
+
     def disarm(self) -> SafetyDecision:
         self.state = SafetyState.DISARMED
         self.last_command = self.rest.copy()

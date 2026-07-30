@@ -10,6 +10,8 @@ import pytest
 from wujihand.runtime import (
     ConfigRepository,
     DeploymentResolver,
+    NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT,
+    NATIVE_DUAL_RUNTIME_COMPONENT,
     build_native_dual_runtime_plan,
     build_openvr_producer_launch,
 )
@@ -25,6 +27,7 @@ DEPLOYMENT_NAMES = (
     "isaac_nero_hand2_native_dual_live_v1.yaml",
     "isaac_nero_hand2_left_single_live_v1.yaml",
     "isaac_nero_hand2_right_single_live_v1.yaml",
+    "isaac_nero_hand2_right_single_debug_v1.yaml",
 )
 LOCAL_BINDING_EXAMPLE = (
     ROOT
@@ -190,6 +193,30 @@ def test_default_and_diagnostic_deployments_have_explicit_source_ownership() -> 
     )
     assert build_native_dual_runtime_plan(left).live_sides == ("left",)
     assert build_native_dual_runtime_plan(right).live_sides == ("right",)
+    assert build_native_dual_runtime_plan(default).arm_reset_key is None
+
+
+def test_right_debug_deployment_declares_keyboard_arm_reset_capability() -> None:
+    resolved = DeploymentResolver(ROOT).resolve(
+        DEPLOYMENTS / DEPLOYMENT_NAMES[3],
+        local_binding=local_binding(),
+    )
+    plan = build_native_dual_runtime_plan(resolved)
+
+    assert (
+        resolved.process("isaac_runtime").process.component_id
+        == NATIVE_DUAL_DEBUG_RUNTIME_COMPONENT
+    )
+    assert plan.live_sides == ("right",)
+    assert plan.arm_reset_key == "R"
+    normal = DeploymentResolver(ROOT).resolve(
+        DEPLOYMENTS / DEPLOYMENT_NAMES[2],
+        local_binding=local_binding(),
+    )
+    assert (
+        normal.process("isaac_runtime").process.component_id
+        == NATIVE_DUAL_RUNTIME_COMPONENT
+    )
 
 
 def test_resolved_snapshot_redacts_local_identity_and_endpoint() -> None:
@@ -283,6 +310,7 @@ def test_resolver_rejects_cross_side_control_binding(
         (DEPLOYMENT_NAMES[0], ("left", "right")),
         (DEPLOYMENT_NAMES[1], ("left",)),
         (DEPLOYMENT_NAMES[2], ("right",)),
+        (DEPLOYMENT_NAMES[3], ("right",)),
     ),
 )
 def test_openvr_process_launch_is_compiled_from_deployment_sources(

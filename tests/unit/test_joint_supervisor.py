@@ -72,3 +72,27 @@ def test_invalid_vector_never_reaches_output() -> None:
     assert decision.state is SafetyState.DEGRADED
     assert decision.reason == "invalid_input_return_to_rest"
     assert np.isfinite(decision.command).all()
+
+
+def test_reset_restarts_supervision_at_restored_pose() -> None:
+    supervisor = JointCommandSupervisor(
+        layout(),
+        [0.0, 0.0],
+        velocity_scale=0.5,
+    )
+    supervisor.arm(0)
+    supervisor.step(
+        [0.5, 1.0],
+        now_ns=500_000_000,
+        input_time_ns=500_000_000,
+    )
+
+    decision = supervisor.reset(
+        [-0.25, 0.75],
+        now_ns=600_000_000,
+    )
+
+    assert decision.state is SafetyState.TRACKING
+    assert decision.reason == "reset_at_rest"
+    np.testing.assert_array_equal(decision.command, [-0.25, 0.75])
+    np.testing.assert_array_equal(supervisor.rest, [-0.25, 0.75])
