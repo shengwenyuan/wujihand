@@ -43,7 +43,6 @@ _POSITION_KEYS = frozenset({"instance_id", "group_id", "layout_id", "q7_rad"})
 _GEOMETRY_KEYS = frozenset(
     {
         "base_port_axis_local_xyz",
-        "table_outward_axis_world_xyz",
         "hand_longitudinal_axis_local_xyz",
         "hand_palm_normal_axis_local_xyz",
         "table_inward_axis_world_xyz",
@@ -56,7 +55,7 @@ _THRESHOLD_KEYS = frozenset(
         "hand_base_mount_center_max_error_m",
         "hand_base_face_parallel_min_dot",
         "link6_cylinder_forearm_min_dot",
-        "base_port_outward_min_dot",
+        "base_port_inward_min_dot",
         "hand_world_inward_min_dot",
         "hand_world_vertical_abs_max",
         "hand_palm_down_min_dot",
@@ -149,7 +148,6 @@ class NeroTabletopGeometryContract:
     """Unit axes used to qualify the nominal tabletop geometry."""
 
     base_port_axis_local_xyz: tuple[float, float, float]
-    table_outward_axis_world_xyz: tuple[float, float, float]
     hand_longitudinal_axis_local_xyz: tuple[float, float, float]
     hand_palm_normal_axis_local_xyz: tuple[float, float, float]
     table_inward_axis_world_xyz: tuple[float, float, float]
@@ -164,7 +162,7 @@ class NeroTabletopThresholds:
     hand_base_mount_center_max_error_m: float
     hand_base_face_parallel_min_dot: float
     link6_cylinder_forearm_min_dot: float
-    base_port_outward_min_dot: float
+    base_port_inward_min_dot: float
     hand_world_inward_min_dot: float
     hand_world_vertical_abs_max: float
     hand_palm_down_min_dot: float
@@ -321,10 +319,6 @@ def load_nero_dual_tabletop_qualification_profile(
             geometry_data["base_port_axis_local_xyz"],
             field="geometry_contract.base_port_axis_local_xyz",
         ),
-        table_outward_axis_world_xyz=_unit_axis(
-            geometry_data["table_outward_axis_world_xyz"],
-            field="geometry_contract.table_outward_axis_world_xyz",
-        ),
         hand_longitudinal_axis_local_xyz=_unit_axis(
             geometry_data["hand_longitudinal_axis_local_xyz"],
             field="geometry_contract.hand_longitudinal_axis_local_xyz",
@@ -385,9 +379,9 @@ def load_nero_dual_tabletop_qualification_profile(
             threshold_data["link6_cylinder_forearm_min_dot"],
             field="thresholds.link6_cylinder_forearm_min_dot",
         ),
-        base_port_outward_min_dot=_unit_interval(
-            threshold_data["base_port_outward_min_dot"],
-            field="thresholds.base_port_outward_min_dot",
+        base_port_inward_min_dot=_unit_interval(
+            threshold_data["base_port_inward_min_dot"],
+            field="thresholds.base_port_inward_min_dot",
         ),
         hand_world_inward_min_dot=_unit_interval(
             threshold_data["hand_world_inward_min_dot"],

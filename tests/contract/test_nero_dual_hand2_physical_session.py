@@ -94,8 +94,8 @@ def test_physical_dual_session_owns_per_instance_tabletop_q7_and_isaac_gains() -
     )
 
     expected_degrees = {
-        "nero_left": [-10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0],
-        "nero_right": [10.0, -45.0, 0.0, -45.0, -90.0, 0.0, 0.0],
+        "nero_left": [-10.0, 45.0, 0.0, 45.0, 90.0, 0.0, 0.0],
+        "nero_right": [10.0, 45.0, 0.0, 45.0, 90.0, 0.0, 0.0],
     }
     for instance_id, degrees in expected_degrees.items():
         instance = resolved.instance(instance_id)
@@ -279,6 +279,6 @@ def test_physical_dual_attachments_and_nominal_workcell_are_explicit() -> None:
     assert right.transform.position_m == (0.32, -0.52, 0.0)
     for mount in (left, right):
         assert mount.transform.quat_wxyz == pytest.approx(
-            (2.0**-0.5, 0.0, 0.0, 2.0**-0.5)
+            (2.0**-0.5, 0.0, 0.0, -(2.0**-0.5))
         )
     assert right.transform.position_m[0] - left.transform.position_m[0] == 0.64

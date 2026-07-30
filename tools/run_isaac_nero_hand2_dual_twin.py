@@ -104,7 +104,7 @@ DEFAULT_DEPLOYMENT = (
 DEFAULT_LOCAL_BINDING = (
     ROOT / "configs/local/workstation2_nv4_v1.yaml"
 )
-DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
+DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2.yaml"
 
 
 def parse_args() -> argparse.Namespace:
@@ -3876,10 +3876,10 @@ def main() -> int:
             np.linalg.norm(hand_base_origin_world_m - link6_positive_face_center_world_m)
         )
         flange_origin_world_m = _world_position(stage, attachment.parent_link_path)
-        base_port_outward_dot = float(
+        base_port_inward_dot = float(
             np.dot(
                 port_axis_world,
-                np.asarray(geometry.table_outward_axis_world_xyz),
+                np.asarray(geometry.table_inward_axis_world_xyz),
             )
         )
         hand_world_inward_dot = float(
@@ -3911,7 +3911,7 @@ def main() -> int:
             "attachment_anchor_world_m": (attachment_anchor_world_m.tolist()),
             "flange_origin_world_m": flange_origin_world_m.tolist(),
             "hand_base_origin_world_m": hand_base_origin_world_m.tolist(),
-            "base_port_outward_dot": base_port_outward_dot,
+            "base_port_inward_dot": base_port_inward_dot,
             "hand_world_inward_dot": hand_world_inward_dot,
             "hand_world_vertical_abs": hand_world_vertical_abs,
             "forearm_world_vertical_abs": forearm_world_vertical_abs,
@@ -3929,8 +3929,8 @@ def main() -> int:
         checks[f"{side}_hand_base_centered_on_link6_face"] = bool(
             hand_base_mount_center_error_m <= thresholds.hand_base_mount_center_max_error_m
         )
-        checks[f"{side}_base_port_axis_outward"] = bool(
-            base_port_outward_dot >= thresholds.base_port_outward_min_dot
+        checks[f"{side}_base_port_axis_inward"] = bool(
+            base_port_inward_dot >= thresholds.base_port_inward_min_dot
         )
         checks[f"{side}_hand_axis_points_table_inward"] = bool(
             hand_world_inward_dot >= thresholds.hand_world_inward_min_dot

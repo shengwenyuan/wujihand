@@ -101,7 +101,7 @@ def test_nv4_deployments_resolve_around_the_same_five_layer_session(
     )
     assert len(resolved.session.session.runtime.control_layouts) == 4
     assert len(resolved.deployment.control_bindings) == 4
-    assert resolved.mapping.mapping_id == "vive_tracker_workcell_workstation2_v4"
+    assert resolved.mapping.mapping_id == "vive_tracker_workcell_workstation2"
     assert resolved.mapping.translation_scale == pytest.approx(1.0)
     assert resolved.mapping.max_translation_delta_m == pytest.approx(0.4)
     assert not resolved.tracking_qualified

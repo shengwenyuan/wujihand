@@ -1,8 +1,9 @@
 schema: wujihand.workcell.v1
 workcell_id: isaac_nero_dual_hand2_simulation_nominal_v1
 world_frame: world
-# These dimensions and mount poses are conservative software bring-up values.
-# They are not measurements of the physical table or either NERO installation.
+# These dimensions and mount positions are conservative software bring-up values.
+# The port-side table orientation follows project-owner physical inspection; the
+# exact table and mount poses remain unmeasured.
 frames:
   - frame_id: simulation_nominal_table_top
     parent: world
@@ -44,12 +45,12 @@ mounts:
     frame: simulation_nominal_table_top
     transform:
       position_m: [-0.32, -0.52, 0.0]
-      quat_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
+      quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
   - mount_id: nero_right_simulation_nominal_mount
     frame: simulation_nominal_table_top
     transform:
       position_m: [0.32, -0.52, 0.0]
-      quat_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
+      quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
 entities:
   - entity_id: ground
     frame: world

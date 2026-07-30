@@ -98,6 +98,6 @@ def test_tracker_runner_defaults_to_workstation2_one_to_one_mapping() -> None:
     }
 
     assert (
-        "configs/calibrations/vive_tracker_workcell_workstation2_v2.yaml"
+        "configs/calibrations/vive_tracker_workcell_workstation2.yaml"
         in string_literals
     )
