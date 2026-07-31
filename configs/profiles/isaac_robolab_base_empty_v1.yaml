@@ -25,6 +25,8 @@ lighting:
     expected_sha256: b6178cf04ea2ac9390b8794d3088a04c0254905f335f5f30d2b582c57c40f387
   intensity: 800.0
   exposure: 0.0
+  visible_in_primary_ray: false
+  background_color_rgb: [0.12, 0.12, 0.12]
 expectations:
   default_prim: world
   meters_per_unit: 1.0

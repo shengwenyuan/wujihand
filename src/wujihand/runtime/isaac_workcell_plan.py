@@ -74,6 +74,8 @@ class ResolvedIsaacLighting:
     content: ResolvedContentRef | None
     intensity: float
     exposure: float
+    visible_in_primary_ray: bool
+    background_color_rgb: tuple[float, float, float]
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -85,6 +87,8 @@ class ResolvedIsaacLighting:
             ),
             "intensity": self.intensity,
             "exposure": self.exposure,
+            "visible_in_primary_ray": self.visible_in_primary_ray,
+            "background_color_rgb": list(self.background_color_rgb),
         }
 
 
@@ -171,6 +175,8 @@ def resolve_isaac_workcell_plan(
             content=None,
             intensity=900.0,
             exposure=0.0,
+            visible_in_primary_ray=True,
+            background_color_rgb=(0.12, 0.12, 0.12),
         )
         expectations = None
         profile_id = None
@@ -212,6 +218,10 @@ def resolve_isaac_workcell_plan(
             content=lighting_content,
             intensity=profile.lighting.intensity,
             exposure=profile.lighting.exposure,
+            visible_in_primary_ray=(
+                profile.lighting.visible_in_primary_ray
+            ),
+            background_color_rgb=profile.lighting.background_color_rgb,
         )
         expectations = profile.expectations
         profile_id = profile.profile_id

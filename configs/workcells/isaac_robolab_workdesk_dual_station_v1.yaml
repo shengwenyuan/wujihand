@@ -2,76 +2,58 @@ schema: wujihand.workcell.v1
 workcell_id: isaac_robolab_workdesk_dual_station_v1
 world_frame: world
 frames:
+  # RoboLab authors the robot at the origin, facing its main table along +X.
+  # Map that anchor to the qualified dual-NERO center and project +Y direction.
   - frame_id: robolab_scene_anchor
+    parent: world
+    transform:
+      position_m: [0.0, -0.52, 0.80]
+      quat_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
+  - frame_id: simulation_nominal_table_top
     parent: world
     transform:
       position_m: [0.0, 0.0, 0.80]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-  - frame_id: robolab_table_top
-    parent: robolab_scene_anchor
-    transform:
-      position_m: [0.0, 0.0, 0.0]
-      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_oblique_eye
     parent: world
     transform:
-      position_m: [1.55, -1.75, 1.55]
+      position_m: [1.15, -1.55, 1.45]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_oblique_target
     parent: world
     transform:
-      position_m: [0.55, 0.05, 1.00]
+      position_m: [0.0, -0.03, 1.02]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_top_eye
     parent: world
     transform:
-      position_m: [0.55, 0.0, 2.35]
+      position_m: [0.0, -0.10, 2.25]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_top_target
     parent: world
     transform:
-      position_m: [0.55, 0.0, 0.80]
+      position_m: [0.0, -0.05, 0.80]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_right_interface_eye
     parent: world
     transform:
-      position_m: [1.15, -0.72, 1.25]
+      position_m: [0.72, -0.035, 1.25]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
   - frame_id: simulation_nominal_camera_right_interface_target
     parent: world
     transform:
-      position_m: [0.72, -0.35, 1.10]
+      position_m: [0.234, -0.035, 1.174]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
 mounts:
   - mount_id: table_near_left
-    frame: robolab_table_top
+    frame: simulation_nominal_table_top
     transform:
-      position_m: [0.23, -0.67, 0.0]
+      position_m: [-0.32, -0.52, 0.0]
       quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
   - mount_id: table_near_right
-    frame: robolab_table_top
+    frame: simulation_nominal_table_top
     transform:
-      position_m: [0.87, -0.67, 0.0]
+      position_m: [0.32, -0.52, 0.0]
       quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
-entities:
-  - entity_id: left_base_plinth
-    frame: robolab_scene_anchor
-    transform:
-      position_m: [0.23, -0.67, -0.3485]
-      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-    primitive:
-      kind: box
-      size_m: [0.26, 0.28, 0.697]
-    mobility: fixed
-    mass_kg: null
-  - entity_id: right_base_plinth
-    frame: robolab_scene_anchor
-    transform:
-      position_m: [0.87, -0.67, -0.3485]
-      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-    primitive:
-      kind: box
-      size_m: [0.26, 0.28, 0.697]
-    mobility: fixed
-    mass_kg: null
+entities: []
 compatibility_profile: configs/profiles/isaac_robolab_workdesk_v1.yaml

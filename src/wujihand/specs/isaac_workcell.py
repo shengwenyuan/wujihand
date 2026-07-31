@@ -12,6 +12,7 @@ from .common import (
     finite_number,
     positive_number,
     require_exact_mapping,
+    require_sequence,
     require_string,
     validate_identifier,
 )
@@ -48,6 +49,29 @@ def _non_negative_int(value: object, *, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{field} must be a non-negative integer")
     return value
+
+
+def _boolean(value: object, *, field: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field} must be a boolean")
+    return value
+
+
+def _color3(
+    value: object,
+    *,
+    field: str,
+) -> tuple[float, float, float]:
+    items = require_sequence(value, field=field)
+    if len(items) != 3:
+        raise ValueError(f"{field} must contain exactly three values")
+    channels = tuple(
+        finite_number(item, field=f"{field}[{index}]")
+        for index, item in enumerate(items)
+    )
+    if any(channel < 0.0 or channel > 1.0 for channel in channels):
+        raise ValueError(f"{field} values must be in [0, 1]")
+    return (channels[0], channels[1], channels[2])
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,13 +168,22 @@ class IsaacDomeLightingSpec:
     content: ContentSpec | None
     intensity: float
     exposure: float
+    visible_in_primary_ray: bool
+    background_color_rgb: tuple[float, float, float]
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str) -> Self:
         data = require_exact_mapping(
             value,
             expected=frozenset(
-                {"mode", "content", "intensity", "exposure"}
+                {
+                    "mode",
+                    "content",
+                    "intensity",
+                    "exposure",
+                    "visible_in_primary_ray",
+                    "background_color_rgb",
+                }
             ),
             field=field,
         )
@@ -182,6 +215,14 @@ class IsaacDomeLightingSpec:
                 data["exposure"],
                 field=f"{field}.exposure",
             ),
+            visible_in_primary_ray=_boolean(
+                data["visible_in_primary_ray"],
+                field=f"{field}.visible_in_primary_ray",
+            ),
+            background_color_rgb=_color3(
+                data["background_color_rgb"],
+                field=f"{field}.background_color_rgb",
+            ),
         )
 
     def to_mapping(self) -> dict[str, object]:
@@ -192,6 +233,8 @@ class IsaacDomeLightingSpec:
             ),
             "intensity": self.intensity,
             "exposure": self.exposure,
+            "visible_in_primary_ray": self.visible_in_primary_ray,
+            "background_color_rgb": list(self.background_color_rgb),
         }
 
 

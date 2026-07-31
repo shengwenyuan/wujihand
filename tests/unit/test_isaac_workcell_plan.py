@@ -10,6 +10,7 @@ from wujihand.runtime import (
     SessionResolver,
     resolve_isaac_workcell_plan,
 )
+from wujihand.runtime.isaac_dual_scene import workcell_pose
 
 
 ROOT = Path(__file__).parents[2]
@@ -42,7 +43,10 @@ def test_robolab_workcell_compiles_to_content_identity_and_hybrid_ops() -> None:
     mapping = plan.to_mapping()
 
     assert plan.profile_id == "isaac_robolab_banana_bowl_v1"
-    assert plan.imports[0].pose.position_m == (0.0, 0.0, 0.8)
+    assert plan.imports[0].pose.position_m == (0.0, -0.52, 0.8)
+    assert plan.imports[0].pose.quat_wxyz == pytest.approx(
+        (2**-0.5, 0.0, 0.0, 2**-0.5)
+    )
     assert plan.imports[0].content.relative_path == (
         "assets/scenes/banana_bowl.usda"
     )
@@ -52,11 +56,9 @@ def test_robolab_workcell_compiles_to_content_identity_and_hybrid_ops() -> None:
     )
     assert plan.lighting.intensity == 800.0
     assert plan.lighting.exposure == 0.0
-    assert {operation.entity_id for operation in plan.primitives} == {
-        "left_base_plinth",
-        "right_base_plinth",
-    }
-    assert plan.primitives[0].pose.position_m[2] == pytest.approx(0.4515)
+    assert plan.lighting.visible_in_primary_ray is False
+    assert plan.lighting.background_color_rgb == (0.12, 0.12, 0.12)
+    assert plan.primitives == ()
     encoded = json.dumps(mapping, sort_keys=True)
     assert str(ROOT) not in encoded
     assert "local_runtime_path" not in encoded
@@ -84,12 +86,46 @@ def test_banana_bowl_teleop_keeps_the_qualified_mount_baseline() -> None:
         "configs/sessions/"
         "isaac_nero_dual_hand2_robolab_banana_bowl_teleop_v1.yaml"
     )
-    left = session.workcell.mount("table_near_left").transform.position_m
-    right = session.workcell.mount("table_near_right").transform.position_m
+    baseline = SessionResolver(ROOT).resolve(
+        "configs/sessions/"
+        "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
+    )
+    left_mount = session.workcell.mount("table_near_left")
+    right_mount = session.workcell.mount("table_near_right")
+    baseline_left_mount = baseline.workcell.mount(
+        "nero_left_simulation_nominal_mount"
+    )
+    baseline_right_mount = baseline.workcell.mount(
+        "nero_right_simulation_nominal_mount"
+    )
+    left = left_mount.transform.position_m
+    right = right_mount.transform.position_m
 
     assert session.session.runtime_role == "teleop_consumer"
     assert session.session.runtime.transport_contract == (
         "wujihand.dual_teleoperation.v1"
     )
+    assert left_mount.frame == "simulation_nominal_table_top"
+    assert right_mount.frame == "simulation_nominal_table_top"
+    assert left == pytest.approx((-0.32, -0.52, 0.0))
+    assert right == pytest.approx((0.32, -0.52, 0.0))
     assert right[0] - left[0] == pytest.approx(0.64)
     assert left[1:] == right[1:]
+    assert workcell_pose(
+        session,
+        left_mount.frame,
+        left_mount.transform,
+    ) == workcell_pose(
+        baseline,
+        baseline_left_mount.frame,
+        baseline_left_mount.transform,
+    )
+    assert workcell_pose(
+        session,
+        right_mount.frame,
+        right_mount.transform,
+    ) == workcell_pose(
+        baseline,
+        baseline_right_mount.frame,
+        baseline_right_mount.transform,
+    )

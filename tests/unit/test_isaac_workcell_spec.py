@@ -41,6 +41,8 @@ def _profile() -> dict[str, Any]:
             },
             "intensity": 900.0,
             "exposure": 0.0,
+            "visible_in_primary_ray": False,
+            "background_color_rgb": [0.12, 0.12, 0.12],
         },
         "expectations": {
             "default_prim": "world",
@@ -57,6 +59,8 @@ def test_profile_round_trips_strict_source_locked_scene_and_hdr() -> None:
     assert profile.profile_id == "demo_scene_v1"
     assert profile.scene.artifact.path == "assets/scenes/demo.usda"
     assert profile.lighting.content is not None
+    assert profile.lighting.visible_in_primary_ray is False
+    assert profile.lighting.background_color_rgb == (0.12, 0.12, 0.12)
     assert profile.to_mapping() == _profile()
 
 
@@ -70,3 +74,8 @@ def test_profile_rejects_unpinned_or_conflicting_policy() -> None:
     conflicting["policies"]["collision"] = "replace"
     with pytest.raises(ValueError, match="must be 'preserve'"):
         IsaacStaticUsdWorkcellProfile.from_mapping(conflicting)
+
+    invalid_background = deepcopy(_profile())
+    invalid_background["lighting"]["background_color_rgb"] = [0.0, 2.0, 0.0]
+    with pytest.raises(ValueError, match=r"must be in \[0, 1\]"):
+        IsaacStaticUsdWorkcellProfile.from_mapping(invalid_background)

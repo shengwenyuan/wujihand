@@ -56,9 +56,11 @@ staging、完整校验、原子提升和 receipt 均只发生在 Workstation2。
 dependency closure 完整，`runtime_module_dependencies` 为空。NERO 报告的
 `passed` 均为 `true`，没有失败 check。
 
-双臂 mount 以 RoboLab 桌面中心对称，横向间距保持原合格 Workcell 的 0.64 m；两个
-底座位于桌外独立 fixed plinth 上，避免与上游 dynamic table 混合支撑。截图抽查未见
-双臂互撞、底座悬空或明显初始穿透。
+后续 reachability 对齐保持原合格 Workcell 的双臂 world pose 和 0.64 m 间距不变，
+将 RoboLab 的原始 Franka/DROID anchor 对齐到双臂中心，并把场景 `+X` 方向旋转到
+项目 `+Y`。两个底座由上游 `franka_table` 直接支撑，首版临时 fixed plinth 已删除；
+主操作桌位于双臂正前方。详见
+[banana-in-bowl ROS Deployment 验证](2026-07-31-robolab-banana-bowl-ros.md)。
 
 ## 向后兼容
 

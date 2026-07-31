@@ -58,6 +58,7 @@ def materialize_isaac_workcell(
 ) -> IsaacWorkcellMaterialization:
     """Apply one plan to an initialized Isaac ``World``."""
 
+    import carb  # type: ignore[import-not-found]
     from isaacsim.core.api.objects import (  # type: ignore[import-not-found]
         FixedCuboid,
     )
@@ -206,6 +207,19 @@ def materialize_isaac_workcell(
         )
         dome.CreateIntensityAttr(plan.lighting.intensity)
         dome.CreateExposureAttr(plan.lighting.exposure)
+        dome.GetPrim().CreateAttribute(
+            "visibleInPrimaryRay",
+            Sdf.ValueTypeNames.Bool,
+        ).Set(plan.lighting.visible_in_primary_ray)
+        background_settings = carb.settings.get_settings()
+        background_settings.set(
+            "/rtx/background/source/type",
+            0 if plan.lighting.visible_in_primary_ray else 2,
+        )
+        background_settings.set_float_array(
+            "/rtx/background/source/color",
+            list(plan.lighting.background_color_rgb),
+        )
         if plan.lighting.mode == "selected_hdr":
             if plan.lighting.content is None:
                 raise RuntimeError("selected_hdr lighting has no content")
