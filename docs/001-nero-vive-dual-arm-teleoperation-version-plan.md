@@ -1094,40 +1094,50 @@ channel/安装记录、左右 Tracker-to-handle 外参和当前 Glove confidence
 
 **工作**
 
-1. 冻结 ROS package/IDL 布局与 `DeploymentSpec v2`；提供 v1→v2 migration、strict
-   parse 和 hash 兼容测试，不修改 NV-4 已冻结的 v1 schema。
-2. 建立节点：
-   - VIVE tracker node；
-   - calibration/mapping/supervision node；
-   - Isaac execution bridge；
-   - feedback bridge；
-   - recorder/metrics node；
-   - safety/command-owner service。
-3. ROS topic/service/action 全部放入版本化 namespace；至少包含
-   `/teleop/left/...`、`/teleop/right/...`，vendor 接口通过 adapter/remap 隔离。
-4. 根据 NV-3/NV-4 数据冻结 QoS depth、reliability、deadline、lifespan 和 liveliness。
-5. 处理 Isaac 6 Python 3.12 与系统 Jazzy Python 3.12 的 ROS library/RMW 选择。
-6. 使用同一录制 fixture 分别跑 UDP 和 ROS 2 pipeline，比较 command 结果和新增开销。
-7. 验证 ROS graph 中只有一个 command owner；测试 RViz/demo/测试发布器冲突拒绝。
-8. 测试 node restart、DDS discovery delay、subscriber loss、clock jump 和 stale queue。
-9. 形成一键仿真 launch，但每个底层命令和配置仍可单独执行/诊断。
+1. 冻结两个 ROS package、五个 typed IDL、`DeploymentSpec v2`、local runtime
+   binding v2 和 explicit common projection；不修改 NV-4 的 v1 schema，也不根据 v1
+   隐式猜测 ROS graph。
+2. 从 NV-4 提取 transport-neutral control profile/Session、四 route plan、one-tick
+   cycle、双 NERO/Hand 2 scene 与 q27 execution seam；native/UDP 先通过回归。
+3. 建立最小 graph：一个双 Tracker `vive_source` LifecycleNode、一个双 Glove
+   `glove_source` LifecycleNode、一个唯一持有 q27 execution 的 Isaac consumer。
+4. mapping、reference、IK、retarget 和 supervisor 保持在 Isaac consumer 同一 tick；
+   不拆成 DDS 节点，不增加无真实第二 owner 的 command-owner service。
+5. ROS topic 全部放入 `/wujihand/v1/teleop` namespace；consumer 的 command/feedback/
+   safety topic 只做观察，不存在回灌 subscriber。
+6. 使用 committed QoS profile、depth=1 latest inbox、producer instance/activation
+   epoch 和 canonical sequence 拒绝旧 backlog；ROS clock 不参与安全 freshness。
+7. 分别确认 OpenVR+Jazzy、Wuji SDK+Jazzy、Isaac 6.0.1+Jazzy 三个实际 Python 环境，
+   不向 Isaac numeric stack 安装重复的 NumPy/SciPy/rclpy。
+8. 使用同一 canonical fixture 比较 UDP 与 ROS pipeline；注入 duplicate/reorder/
+   stale/old epoch/restart/single-side loss/QoS mismatch/clock jump。
+9. 形成一个主 launch 和逐进程入口；录制直接使用 rosbag2 MCAP，不增加 recorder
+   node。详细边界由 ADR-0008 固结。
 
 **输出**
 
-- ROS 2 message/package、launch 和 DeploymentSpec v2 ROS binding/migration。
+- ROS 2 message/package、launch、DeploymentSpec v2、local runtime binding 与 common
+  projection。
 - UDP ↔ ROS 语义对照和 golden contract。
 - ROS 2 双流仿真指南、组件文档和验证报告。
 
 **Gate NV-5**
 
-- DeploymentSpec v1→v2 migration 结果确定、可重复；v1 与 v2 均 strict parse，
-  source hash、migrated hash 和 local-binding hash 可追溯。
-- 与 NV-4 相同双侧输入产生等价、受限的 TCP intent/command。
+- DeploymentSpec v1/v2 均 strict parse；Session/control facts 的 common projection、
+  source hash、deployment hash 和 local-binding hash 可追溯。
+- 与 NV-4 相同双侧输入产生等价、受限的 canonical intent/command。
 - ROS 2 不执行陈旧 backlog；NV-5 仿真 loss/restart 后建立新自动 reference epoch，
   NV-6+ 真机才要求显式重新 clutch。
 - namespace、QoS、domain 和 command owner contract 有自动测试。
 - ROS 增量延迟、jitter、CPU 和 drop 指标完整。
 - 真机前 safety profile、速度/范围和初始性能阈值经人工批准。
+
+**执行状态（2026-07-31，CORE_HIL_PASS / 性能 Gate 待完成）**
+
+- ROS 双臂 only 的 XYZ/RPY 与双臂双手四路动作已由用户确认正确；
+- VIVE/Glove Lifecycle restart、epoch 撤销与 GUI lifetime 已完成现场复测；
+- Glove epoch 的同 tick `hold/step` 时间冲突已改为下一 tick 原子 hold，并有自动回归；
+- 单侧物理故障复测和 p50/p95/p99 性能基线仍待完成，未批准进入 NV-6。
 
 **材料与工具评审**
 
