@@ -191,6 +191,29 @@ def test_no_new_observation_holds_last_intent_then_returns_toward_rest() -> None
     controller.close()
 
 
+def test_epoch_change_holds_once_without_consuming_the_new_frame() -> None:
+    controller, input_port, retargeter = _controller()
+    controller.start(now_ns=0)
+    tracked = controller.poll(now_ns=100_000_000)
+
+    controller.invalidate_input_epoch()
+    held = controller.poll(now_ns=200_000_000)
+    resumed = controller.poll(now_ns=300_000_000)
+
+    assert held.intent is None
+    assert held.rejection_reason == "hand_input_epoch_changed_hold"
+    assert held.decision.reason == "hand_input_epoch_changed_hold"
+    np.testing.assert_array_equal(
+        held.decision.command,
+        tracked.decision.command,
+    )
+    assert resumed.intent is not None
+    assert resumed.intent.sequence == 0
+    assert input_port.sequence == 2
+    assert retargeter.reset_calls == 2
+    controller.close()
+
+
 def test_controller_rejects_wrong_side_before_retargeting() -> None:
     controller, input_port, retargeter = _controller(HandSide.RIGHT)
     input_port.side = HandSide.LEFT

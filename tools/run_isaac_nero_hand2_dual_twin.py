@@ -47,7 +47,6 @@ from wujihand.application.qualification import (
     qualification_gate_exit_code,
 )
 from wujihand.application.teleoperation import (
-    GloveHand2ControllerSet,
     GloveHand2SimulationController,
     InteractiveTrackerArmController,
     InteractiveTrackerArmState,
@@ -55,9 +54,7 @@ from wujihand.application.teleoperation import (
     RelativeTrackerPoseMapper,
     TrackerReferenceReadiness,
     TrackerReferenceReadinessGate,
-    TrackerArmSimulationController,
     TrackerTargetMotion,
-    compose_q27_hand_target,
     joint_limit_margins,
     nearest_joint_limit_margin,
     tracker_target_motion,
@@ -89,7 +86,7 @@ from wujihand.runtime import (
 )
 from wujihand.specs import (
     AttachmentSpec,
-    NativeDualTeleoperationProfile,
+    DualTeleoperationProfile,
     PoseSpec,
 )
 
@@ -327,7 +324,7 @@ if not 0.10 <= ARGS.tracker_reference_stable_s <= 2.0:
     raise SystemExit("--tracker-reference-stable-s must be in [0.10, 2.0]")
 
 RESOLVED_DEPLOYMENT: ResolvedDeployment | None = None
-NATIVE_PROFILE: NativeDualTeleoperationProfile | None = None
+NATIVE_PROFILE: DualTeleoperationProfile | None = None
 TRACKER_MAPPING: TrackerWorkcellMapping | None = None
 TRACKER_MAPPING_PATH: Path | None = None
 TRACKER_TRANSLATION_SCALE: float | None = None
@@ -354,10 +351,10 @@ if NATIVE_DUAL_LIVE:
         raise SystemExit(
             "NV-4 live Session is missing its compatibility profile"
         )
-    NATIVE_PROFILE = (
-        ConfigRepository(ROOT).load_native_dual_teleoperation_profile(
-            profile_path
-        )
+    NATIVE_PROFILE = ConfigRepository(
+        ROOT
+    ).load_dual_teleoperation_profile(
+        profile_path
     )
     TRACKER_MAPPING = RESOLVED_DEPLOYMENT.mapping
     TRACKER_MAPPING_PATH = (
@@ -432,14 +429,10 @@ simulation_app = SimulationApp(
     }
 )
 
-from pxr import Gf, Usd, UsdGeom, UsdLux, UsdPhysics  # type: ignore[import-not-found]
+from pxr import Gf, Usd, UsdGeom, UsdPhysics  # type: ignore[import-not-found]
 
 from isaacsim.core.api import World  # type: ignore[import-not-found]
-from isaacsim.core.api.objects import FixedCuboid  # type: ignore[import-not-found]
 from isaacsim.core.prims import Articulation  # type: ignore[import-not-found]
-from isaacsim.core.utils.stage import (  # type: ignore[import-not-found]
-    add_reference_to_stage,
-)
 from isaacsim.core.utils.viewports import (  # type: ignore[import-not-found]
     set_camera_view,
 )
@@ -449,22 +442,20 @@ from isaacsim.robot_motion.motion_generation import (  # type: ignore[import-not
 from wujihand.adapters.transport import UdpTrackingSampleReceiver
 from wujihand.adapters.simulation import (
     Hand2ModelProfile,
-    LulaArmKinematicsAdapter,
-    NeroHand2AttachmentConfig,
-    NeroHand2AttachmentHandles,
     NeroHand2DofPartition,
-    NeroLinkGeometryAlignmentHandles,
-    apply_isaac_nero_link_geometry_alignment,
-    author_nero_hand2_attachment,
-    discover_nero_hand2_dofs,
-    load_hand2_model_profile,
     load_nero_dual_tabletop_qualification_profile,
     load_nero_link_geometry_alignment,
 )
 from wujihand.adapters.simulation.nero_model import (
     NERO_JOINT_NAMES,
     NeroModelProfile,
-    load_nero_model_profile,
+)
+from wujihand.runtime.isaac_dual_scene import (
+    DualNeroHand2IsaacScene,
+    resolve_dual_side_runtimes,
+)
+from wujihand.runtime.isaac_dual_teleoperation import (
+    build_dual_teleoperation_application,
 )
 from wujihand.adapters.input import (
     NoHandSkeletonFrameAvailable,
@@ -802,20 +793,6 @@ def _world_point(
 def _step(world: World, frames: int, *, render: bool) -> None:
     for _ in range(frames):
         world.step(render=render)
-
-
-def _full_target(
-    partition: NeroHand2DofPartition,
-    arm_q7: npt.NDArray[np.float64],
-    hand_q20: npt.NDArray[np.float64],
-) -> npt.NDArray[np.float64]:
-    baseline = np.zeros(27, dtype=np.float64)
-    baseline[np.asarray(partition.arm_indices_q7)] = arm_q7
-    return compose_q27_hand_target(
-        baseline,
-        partition.hand_indices_q20,
-        hand_q20,
-    )
 
 
 def _capture_screenshot(
@@ -2479,14 +2456,7 @@ def _run_tracker_live(
 def _run_native_dual_live(
     world: World,
     *,
-    articulations: dict[str, Articulation],
-    partitions: dict[str, NeroHand2DofPartition],
-    arm_profiles: dict[str, NeroModelProfile],
-    hand_profiles: dict[str, Hand2ModelProfile],
-    initial_arm_targets: dict[str, npt.NDArray[np.float64]],
-    arm_targets: dict[str, npt.NDArray[np.float64]],
-    hand_targets: dict[str, npt.NDArray[np.float64]],
-    apply_targets: Callable[[], None],
+    scene: DualNeroHand2IsaacScene,
 ) -> int:
     """Run the Deployment-owned NV-4 native dual simulation loop."""
 
@@ -2505,6 +2475,12 @@ def _run_native_dual_live(
         raise RuntimeError(
             f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}"
         )
+    articulations = scene.articulations
+    arm_targets = scene.arm_targets
+    hand_targets = scene.hand_targets
+    initial_arm_targets = scene.initial_arm_targets
+    hand_profiles = scene.hand_profiles
+    apply_targets = scene.apply_targets
 
     plan = build_native_dual_runtime_plan(resolved)
     launch = build_openvr_producer_launch(resolved, ROOT)
@@ -2537,113 +2513,14 @@ def _run_native_dual_live(
         )
         for side in tracker_routes
     }
-    side_runtime = {runtime.side: runtime for runtime in SIDES}
-    arm_controllers: dict[str, TrackerArmSimulationController] = {}
-    arm_indices = {
-        side: np.asarray(
-            partitions[side].arm_indices_q7,
-            dtype=np.int64,
-        )
-        for side in ("left", "right")
-    }
-    started_ns = time.monotonic_ns()
-    for side, route in tracker_routes.items():
-        runtime = side_runtime[side]
-        solver = LulaKinematicsSolver(
-            str(NERO_LULA_DESCRIPTION),
-            str(NERO_LULA_SOURCE_URDF),
-        )
-        if tuple(solver.get_joint_names()) != NERO_JOINT_NAMES:
-            raise RuntimeError(
-                f"{side} Lula cspace differs from canonical q7"
-            )
-        if profile.kinematics.end_effector_frame not in (
-            solver.get_all_frame_names()
-        ):
-            raise RuntimeError(
-                f"{side} Lula model does not expose "
-                f"{profile.kinematics.end_effector_frame}"
-            )
-        solver.set_robot_base_pose(
-            np.asarray(runtime.mount_pose.position_m, dtype=np.float64),
-            np.asarray(runtime.mount_pose.quat_wxyz, dtype=np.float64),
-        )
-        kinematics = LulaArmKinematicsAdapter(
-            solver=solver,
-            layout=arm_profiles[side].layout,
-            frame_name=profile.kinematics.end_effector_frame,
-            position_tolerance_m=(
-                profile.kinematics.position_tolerance_m
-            ),
-            orientation_tolerance_rad=(
-                profile.kinematics.orientation_tolerance_rad
-            ),
-        )
-        source = route.source
-        local = route.local_binding
-        if local is None:
-            raise RuntimeError(f"{side} Tracker local binding is missing")
-        identity = {
-            "stream_id": stream_by_side[side].stream_id,
-            "device_serial": local.device_identity,
-            "logical_role": source.logical_role,
-            "tracking_frame": mapping.tracking_frame,
-        }
-        mapper = RelativeTrackerPoseMapper(
-            **identity,
-            tracker_to_workcell=mapping.tracker_to_workcell,
-            translation_scale=mapping.translation_scale,
-            max_translation_delta_m=(
-                mapping.max_translation_delta_m
-            ),
-            rotation_scale=mapping.rotation_scale,
-            max_rotation_delta_rad=mapping.max_rotation_delta_rad,
-            stale_after_s=profile.tracker.stale_after_s,
-            min_quality=profile.tracker.minimum_quality,
-            translation_enabled=True,
-            rotation_enabled=True,
-        )
-        readiness = TrackerReferenceReadinessGate(
-            **identity,
-            stable_after_s=profile.tracker.stable_after_s,
-            max_sample_gap_s=profile.tracker.max_sample_gap_s,
-        )
-        feedback_q7 = _positions(articulations[side])[
-            arm_indices[side]
-        ]
-        arm_targets[side] = feedback_q7.copy()
-        supervisor = JointCommandSupervisor(
-            arm_profiles[side].layout,
-            feedback_q7,
-            stale_after_s=profile.arm_supervision.stale_after_s,
-            velocity_scale=profile.arm_supervision.velocity_scale,
-        )
-        controller = TrackerArmSimulationController(
-            side=side,
-            readiness=readiness,
-            tracker=InteractiveTrackerArmController(
-                mapper,
-                max_consecutive_ik_failures=(
-                    profile.tracker.max_consecutive_ik_failures
-                ),
-            ),
-            kinematics=kinematics,
-            supervisor=supervisor,
-        )
-        controller.start(now_ns=started_ns)
-        arm_controllers[side] = controller
-
-    glove_controllers: dict[
-        HandSide,
-        GloveHand2SimulationController,
-    ] = {}
+    hand_inputs = {}
     for side, route in glove_routes.items():
         source = route.source
         local = route.local_binding
         if local is None:
             raise RuntimeError(f"{side} Glove local binding is missing")
         hand_side = HandSide(side)
-        input_adapter = WujiGloveHandSkeletonAdapter(
+        hand_inputs[hand_side] = WujiGloveHandSkeletonAdapter(
             hand_side,
             source_id=source.source_id,
             calibration_id=local.calibration_id,
@@ -2651,31 +2528,20 @@ def _run_native_dual_live(
             serial_number=local.device_identity,
             device_name=f"nv4_glove_{side}",
         )
-        retargeter = WujiHand2RetargetAdapter(
-            hand_side,
-            max_observation_age_s=profile.glove.max_observation_age_s,
-            minimum_landmark_confidence=(
-                profile.glove.minimum_landmark_confidence
-            ),
-            success_landmark_confidence=(
-                profile.glove.success_landmark_confidence
-            ),
-        )
-        supervisor = JointCommandSupervisor(
-            hand_profiles[side].layout,
-            hand_targets[side],
-            stale_after_s=profile.hand_supervision.stale_after_s,
-            velocity_scale=profile.hand_supervision.velocity_scale,
-        )
-        glove_controllers[hand_side] = (
-            GloveHand2SimulationController(
-                hand_side,
-                input_adapter,
-                retargeter,
-                supervisor,
-            )
-        )
-    gloves = GloveHand2ControllerSet(glove_controllers)
+    application = build_dual_teleoperation_application(
+        scene=scene,
+        route_plan=plan,
+        profile=profile,
+        mapping=mapping,
+        tracker_inputs=receivers,
+        hand_inputs=hand_inputs,
+        lula_description=NERO_LULA_DESCRIPTION,
+        lula_urdf=NERO_LULA_SOURCE_URDF,
+    )
+    arm_controllers = application.arm_controllers
+    arm_indices = application.arm_indices
+    cycle = application.cycle
+    started_ns = time.monotonic_ns()
 
     for side in ("left", "right"):
         if side not in tracker_routes:
@@ -2714,7 +2580,7 @@ def _run_native_dual_live(
         flush=True,
     )
     try:
-        gloves.start(now_ns=started_ns)
+        application.start(now_ns=started_ns)
         lifecycle = producer.start()
         print(
             "NV4 LIVE READY: "
@@ -2753,17 +2619,18 @@ def _run_native_dual_live(
 
             fresh_source_times: list[int] = []
             arm_states: dict[str, str] = {}
-            for side, controller in arm_controllers.items():
-                samples = receivers[side].receive_available(
-                    now_ns=tick_ns
-                )
-                step = controller.step(
-                    samples,
-                    feedback_q7_rad=_positions(
-                        articulations[side]
-                    )[arm_indices[side]],
-                    now_ns=tick_ns,
-                )
+            cycle_result = cycle.step(
+                feedback_q7_rad={
+                    side: _positions(articulations[side])[
+                        arm_indices[side]
+                    ]
+                    for side in arm_controllers
+                },
+                now_ns=tick_ns,
+            )
+            for arm_labelled in cycle_result.arm_steps:
+                side = arm_labelled.side
+                step = arm_labelled.step
                 arm_targets[side] = step.safety.command.copy()
                 arm_reasons[side][step.reason] += 1
                 arm_states[side] = step.state.value
@@ -2793,11 +2660,10 @@ def _run_native_dual_live(
                         step.mapping.input_host_time_ns
                     )
 
-            hand_steps = gloves.step(now_ns=tick_ns)
             hand_states: dict[str, str] = {}
-            for labelled in hand_steps:
-                side = labelled.side.value
-                step = labelled.step
+            for hand_labelled in cycle_result.hand_steps:
+                side = hand_labelled.side.value
+                step = hand_labelled.step
                 hand_targets[side] = step.decision.command.copy()
                 hand_reasons[side][
                     step.rejection_reason or step.decision.reason
@@ -2827,9 +2693,7 @@ def _run_native_dual_live(
             last_tick_ns = tick_ns
     finally:
         producer.close()
-        gloves.close()
-        for controller in arm_controllers.values():
-            controller.close()
+        application.close()
         for receiver in receivers.values():
             receiver.close()
 
@@ -2917,276 +2781,43 @@ def _run_native_dual_live(
 
 
 def main() -> int:
-    world = World(
-        stage_units_in_meters=1.0,
-        physics_dt=1.0 / PHYSICS_HZ,
-        rendering_dt=1.0 / 30.0,
-        backend="numpy",
-        device="cpu",
+    scene = DualNeroHand2IsaacScene(
+        project_root=ROOT,
+        resolved=RESOLVED,
+        sides=resolve_dual_side_runtimes(ROOT, RESOLVED),
+        alignment_profile=ALIGNMENT_PROFILE,
+        qualification_profile=TABLETOP_PROFILE,
+        physics_hz=PHYSICS_HZ,
     )
-    stage = world.scene.stage
-    UsdGeom.Xform.Define(stage, "/World/Robots")
-    UsdGeom.Xform.Define(stage, "/World/Attachments")
-    world.scene.add_default_ground_plane()
-    fixed_workcell_prim_paths: list[str] = []
-    for entity in RESOLVED.workcell.entities:
-        if entity.mobility != "fixed":
-            raise RuntimeError(
-                f"NV-2 nominal qualification requires fixed workcell entities: {entity.entity_id}"
-            )
-        if entity.primitive.kind == "plane":
-            continue
-        if entity.primitive.kind != "box" or entity.primitive.size_m is None:
-            raise RuntimeError(
-                f"NV-2 runner supports only plane/box workcell entities: {entity.entity_id}"
-            )
-        pose = _workcell_pose(entity.frame, entity.transform)
-        world.scene.add(
-            FixedCuboid(
-                prim_path=f"/World/Workcell/{entity.entity_id}",
-                name=entity.entity_id,
-                position=np.asarray(pose.position_m, dtype=np.float64),
-                orientation=np.asarray(pose.quat_wxyz, dtype=np.float64),
-                scale=np.asarray(entity.primitive.size_m, dtype=np.float64),
-                size=1.0,
-                color=np.asarray((0.32, 0.20, 0.12), dtype=np.float64),
-            )
-        )
-        fixed_workcell_prim_paths.append(f"/World/Workcell/{entity.entity_id}")
-    dome = UsdLux.DomeLight.Define(stage, "/World/DomeLight")
-    dome.CreateIntensityAttr(1000.0)
-
-    authored: dict[str, NeroHand2AttachmentHandles] = {}
-    geometry_alignments: dict[str, NeroLinkGeometryAlignmentHandles] = {}
-    articulations: dict[str, Articulation] = {}
-    partitions: dict[str, NeroHand2DofPartition] = {}
-    arm_profiles: dict[str, NeroModelProfile] = {}
-    hand_profiles: dict[str, Hand2ModelProfile] = {}
-    initial_arm_targets: dict[str, npt.NDArray[np.float64]] = {}
-    for runtime in SIDES:
-        add_reference_to_stage(str(runtime.arm_asset), runtime.arm_prim_path)
-        arm_root = stage.GetPrimAtPath(runtime.arm_prim_path)
-        _set_world_pose(arm_root, runtime.mount_pose)
-        parent_backend_name = RESOLVED.instance(runtime.arm_instance_id).binding.backend_frame(
-            runtime.attachment.parent.frame
-        )
-        child_backend_name = RESOLVED.instance(runtime.hand_instance_id).binding.backend_frame(
-            runtime.attachment.child.frame
-        )
-        parent_link = _one_prim(
-            stage,
-            prefix=runtime.arm_prim_path,
-            name=parent_backend_name,
-            rigid_body=True,
-        )
-        arm_asset = RESOLVED.instance(runtime.arm_instance_id).asset
-        wrist_housing_backend_name = RESOLVED.instance(
-            runtime.arm_instance_id
-        ).binding.backend_frame(arm_asset.frame_name("wrist_housing"))
-        wrist_housing = _one_prim(
-            stage,
-            prefix=runtime.arm_prim_path,
-            name=wrist_housing_backend_name,
-            rigid_body=True,
-        )
-        geometry_alignments[runtime.side] = apply_isaac_nero_link_geometry_alignment(
-            stage,
-            link_path=str(wrist_housing.GetPath()),
-            profile=ALIGNMENT_PROFILE,
-        )
-        add_reference_to_stage(str(runtime.hand_asset), runtime.hand_prim_path)
-
-        arm_articulation_root = _one_prim(
-            stage,
-            prefix=runtime.arm_prim_path,
-            articulation_root=True,
-        )
-        child_base = _one_prim(
-            stage,
-            prefix=runtime.hand_prim_path,
-            name=child_backend_name,
-            rigid_body=True,
-        )
-        hand_root_joint = _one_prim(
-            stage,
-            prefix=runtime.hand_prim_path,
-            articulation_root=True,
-            fixed_joint=True,
-        )
-        config = NeroHand2AttachmentConfig(
-            side=runtime.side,
-            nero_prim_path=runtime.arm_prim_path,
-            hand_prim_path=runtime.hand_prim_path,
-            nero_articulation_root_path=str(arm_articulation_root.GetPath()),
-            parent_link_path=str(parent_link.GetPath()),
-            child_base_link_path=str(child_base.GetPath()),
-            hand_root_joint_path=str(hand_root_joint.GetPath()),
-            attachment_joint_path=(f"/World/Attachments/{runtime.attachment.attachment_id}"),
-            position_m=runtime.attachment.transform.position_m,
-            quat_wxyz=runtime.attachment.transform.quat_wxyz,
-            enable_self_collisions=False,
-        )
-        authored[runtime.side] = author_nero_hand2_attachment(stage, config)
-        articulations[runtime.side] = world.scene.add(
-            Articulation(
-                str(arm_articulation_root.GetPath()),
-                name=f"nero_hand2_{runtime.side}",
-            )
-        )
-        arm_profile = load_nero_model_profile(runtime.arm_profile)
-        arm_profiles[runtime.side] = arm_profile
-        hand_profiles[runtime.side] = load_hand2_model_profile(runtime.hand_profile)
-        initial_arm_targets[runtime.side] = arm_profile.layout.validate_vector(
-            TABLETOP_PROFILE.initial_position(
-                runtime.arm_instance_id,
-                "arm_joints",
-                arm_profile.layout_id,
-            )
-        ).copy()
-
-    expected_root_paths = tuple(
-        sorted(handle.articulation_root_path for handle in authored.values())
+    world = scene.world
+    stage = scene.stage
+    authored = scene.authored
+    geometry_alignments = scene.geometry_alignments
+    articulations = scene.articulations
+    partitions = scene.partitions
+    arm_profiles = scene.arm_profiles
+    hand_profiles = scene.hand_profiles
+    initial_arm_targets = scene.initial_arm_targets
+    arm_targets = scene.arm_targets
+    hand_targets = scene.hand_targets
+    root_paths_before_reset = scene.root_paths_before_reset
+    arm_drive_runtime = scene.arm_drive_runtime
+    external_fixed_collider_paths = (
+        scene.external_fixed_collider_paths
     )
 
     def validate_articulations() -> tuple[
         dict[str, NeroHand2DofPartition],
         tuple[str, ...],
     ]:
-        root_paths = tuple(
-            sorted(
-                str(prim.GetPath())
-                for prim in stage.Traverse()
-                if str(prim.GetPath()).startswith("/World/Robots/")
-                and prim.HasAPI(UsdPhysics.ArticulationRootAPI)
-            )
-        )
-        if root_paths != expected_root_paths:
-            raise RuntimeError(
-                "NV-2 stage must contain exactly the two expected q27 roots: "
-                f"expected={expected_root_paths}, actual={root_paths}"
-            )
-
-        result: dict[str, NeroHand2DofPartition] = {}
-        for runtime in SIDES:
-            articulation = articulations[runtime.side]
-            hand_profile = hand_profiles[runtime.side]
-            dof_paths = _dof_paths(articulation)
-            partition = discover_nero_hand2_dofs(
-                articulation.dof_names,
-                dof_paths,
-                NERO_JOINT_NAMES,
-                hand_profile.layout.names,
-                nero_prim_path=runtime.arm_prim_path,
-                hand_prim_path=runtime.hand_prim_path,
-            )
-            result[runtime.side] = partition
-            limits = np.asarray(articulation.get_dof_limits(), dtype=np.float64)
-            if limits.shape != (1, 27, 2):
-                raise RuntimeError(
-                    f"{runtime.side} q27 limits have unexpected shape {limits.shape}"
-                )
-            arm_limits = limits[0, np.asarray(partition.arm_indices_q7)]
-            hand_limits = limits[0, np.asarray(partition.hand_indices_q20)]
-            expected_arm = np.column_stack(
-                (
-                    arm_profiles[runtime.side].layout.lower,
-                    arm_profiles[runtime.side].layout.upper,
-                )
-            )
-            expected_hand = np.column_stack(
-                (
-                    hand_profile.layout.lower,
-                    hand_profile.layout.upper,
-                )
-            )
-            if not np.allclose(arm_limits, expected_arm, atol=1e-4):
-                raise RuntimeError(f"{runtime.side} NERO q7 limits drifted")
-            if not np.allclose(hand_limits, expected_hand, atol=1e-4):
-                raise RuntimeError(f"{runtime.side} Hand 2 q20 limits drifted")
-        return result, root_paths
+        return scene.validate_articulations()
 
     def apply_qualification_arm_drive_gains(
         current_partitions: dict[str, NeroHand2DofPartition],
     ) -> dict[str, dict[str, list[float]]]:
-        configured = TABLETOP_PROFILE.arm_drive_gains
-        result: dict[str, dict[str, list[float]]] = {}
-        for side in ("left", "right"):
-            joint_indices = np.asarray(
-                current_partitions[side].arm_indices_q7,
-                dtype=np.int64,
-            )
-            kps = np.full(
-                (1, len(joint_indices)),
-                configured.stiffness,
-                dtype=np.float32,
-            )
-            kds = np.full(
-                (1, len(joint_indices)),
-                configured.damping,
-                dtype=np.float32,
-            )
-            articulations[side].set_gains(
-                kps=kps,
-                kds=kds,
-                joint_indices=joint_indices,
-            )
-            actual_kps, actual_kds = articulations[side].get_gains(
-                joint_indices=joint_indices,
-            )
-            actual_kps = np.asarray(actual_kps, dtype=np.float64)
-            actual_kds = np.asarray(actual_kds, dtype=np.float64)
-            if (
-                actual_kps.shape != kps.shape
-                or actual_kds.shape != kds.shape
-                or not np.allclose(actual_kps, kps)
-                or not np.allclose(actual_kds, kds)
-            ):
-                raise RuntimeError(f"{side} qualification q7 drive gains were not applied")
-            result[side] = {
-                "stiffness": actual_kps[0].tolist(),
-                "damping": actual_kds[0].tolist(),
-            }
-        return result
+        return scene.apply_arm_drive_gains(current_partitions)
 
-    world.reset()
-    partitions, root_paths_before_reset = validate_articulations()
-    arm_drive_runtime = apply_qualification_arm_drive_gains(partitions)
-
-    external_fixed_collider_paths: list[str] = []
-    for prefix in fixed_workcell_prim_paths:
-        matches = [
-            str(prim.GetPath())
-            for prim in stage.Traverse()
-            if (str(prim.GetPath()) == prefix or str(prim.GetPath()).startswith(prefix + "/"))
-            and prim.HasAPI(UsdPhysics.CollisionAPI)
-        ]
-        if not matches:
-            raise RuntimeError(f"fixed workcell entity has no authored external collider: {prefix}")
-        external_fixed_collider_paths.extend(matches)
-    external_fixed_collider_paths = sorted(set(external_fixed_collider_paths))
-    if not external_fixed_collider_paths:
-        raise RuntimeError("NV-2 nominal workcell has no fixed external collider")
-
-    arm_targets = {side: initial_arm_targets[side].copy() for side in ("left", "right")}
-    hand_targets = {side: hand_profiles[side].rest_position.copy() for side in ("left", "right")}
-
-    def apply_targets() -> None:
-        for side in ("left", "right"):
-            arm_profile = arm_profiles[side]
-            hand_profile = hand_profiles[side]
-            if not (
-                np.all(arm_targets[side] >= np.asarray(arm_profile.layout.lower))
-                and np.all(arm_targets[side] <= np.asarray(arm_profile.layout.upper))
-                and np.all(hand_targets[side] >= np.asarray(hand_profile.layout.lower))
-                and np.all(hand_targets[side] <= np.asarray(hand_profile.layout.upper))
-            ):
-                raise RuntimeError(f"{side} scripted q7/q20 target exceeds limits")
-            full = _full_target(
-                partitions[side],
-                arm_targets[side],
-                hand_targets[side],
-            )
-            articulations[side].set_joint_position_targets(full[np.newaxis, :])
+    apply_targets = scene.apply_targets
 
     feedback: dict[str, dict[str, list[float]]] = {}
     settling_records: dict[str, dict[str, object]] = {}
@@ -3291,14 +2922,7 @@ def main() -> int:
         )
         return _run_native_dual_live(
             world,
-            articulations=articulations,
-            partitions=partitions,
-            arm_profiles=arm_profiles,
-            hand_profiles=hand_profiles,
-            initial_arm_targets=initial_arm_targets,
-            arm_targets=arm_targets,
-            hand_targets=hand_targets,
-            apply_targets=apply_targets,
+            scene=scene,
         )
 
     if ARGS.glove_live:

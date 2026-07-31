@@ -17,8 +17,12 @@ from wujihand.specs import (
     BackendBinding,
     ConfigRef,
     DeploymentSpec,
+    DualTeleoperationProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
+    RosDeploymentSpec,
+    RosLocalRuntimeBindingSpec,
+    RosQosProfileSpec,
     SessionSpec,
     WorkcellSpec,
 )
@@ -34,8 +38,12 @@ SpecT = TypeVar(
     WorkcellSpec,
     SessionSpec,
     DeploymentSpec,
+    DualTeleoperationProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
+    RosDeploymentSpec,
+    RosLocalRuntimeBindingSpec,
+    RosQosProfileSpec,
 )
 
 
@@ -150,6 +158,50 @@ class ConfigRepository:
             field="native dual teleoperation profile",
             spec_type=NativeDualTeleoperationProfile,
             id_attribute="profile_id",
+        )
+
+    def load_dual_teleoperation_profile(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> DualTeleoperationProfile:
+        return self._load(
+            reference,
+            field="dual teleoperation profile",
+            spec_type=DualTeleoperationProfile,
+            id_attribute="profile_id",
+        )
+
+    def load_ros_deployment(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> RosDeploymentSpec:
+        return self._load(
+            reference,
+            field="ROS deployment",
+            spec_type=RosDeploymentSpec,
+            id_attribute="deployment_id",
+        )
+
+    def load_ros_qos_profile(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> RosQosProfileSpec:
+        return self._load(
+            reference,
+            field="ROS QoS profile",
+            spec_type=RosQosProfileSpec,
+            id_attribute="profile_id",
+        )
+
+    def load_ros_local_runtime_binding(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> RosLocalRuntimeBindingSpec:
+        return self._load(
+            reference,
+            field="ROS local runtime binding",
+            spec_type=RosLocalRuntimeBindingSpec,
+            id_attribute="binding_id",
         )
 
     def validate_profile_reference(self, reference: ConfigRef) -> str:

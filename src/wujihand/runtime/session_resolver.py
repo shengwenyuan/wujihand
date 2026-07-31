@@ -15,6 +15,7 @@ from wujihand.specs import (
     AssemblySpec,
     AssetManifest,
     BackendBinding,
+    DUAL_TELEOPERATION_CONTRACT,
     SessionSpec,
     WorkcellSpec,
     NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT,
@@ -300,6 +301,27 @@ class SessionResolver:
             referenced_paths.add(
                 self.repository.validate_profile_reference(
                     live_profile.base_qualification
+                )
+            )
+        elif session.runtime.transport_contract == DUAL_TELEOPERATION_CONTRACT:
+            profile_path = session.runtime.compatibility_profile
+            if profile_path is None:
+                raise ValueError(
+                    "dual teleoperation requires a compatibility profile"
+                )
+            dual_profile = self.repository.load_dual_teleoperation_profile(
+                profile_path
+            )
+            if (
+                dual_profile.transport_contract
+                != session.runtime.transport_contract
+            ):
+                raise ValueError(
+                    "dual teleoperation profile and Session contracts differ"
+                )
+            referenced_paths.add(
+                self.repository.validate_profile_reference(
+                    dual_profile.base_qualification
                 )
             )
 

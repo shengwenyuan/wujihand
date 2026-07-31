@@ -1,0 +1,25 @@
+/wujihand/v1/teleop/input/tracker/left/sample:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/input/tracker/right/sample:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/input/tracker/lifecycle:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local
+/wujihand/v1/teleop/input/glove/left/observation:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/input/glove/right/observation:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile

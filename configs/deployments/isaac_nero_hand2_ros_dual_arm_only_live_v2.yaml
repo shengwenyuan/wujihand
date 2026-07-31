@@ -1,0 +1,75 @@
+schema: wujihand.deployment.v2
+deployment_id: isaac_nero_hand2_ros_dual_arm_only_live_v2
+session:
+  path: configs/sessions/isaac_nero_dual_hand2_teleop_v1.yaml
+  expected_id: isaac_nero_dual_hand2_teleop_v1
+local_binding_id: workstation2_nv5_ros_v2
+tracking_setup:
+  setup_revision: workstation2_steamvr_standing_unqualified_v1
+  tracking_frame: vive_tracking
+  qualification_status: pending
+  mapping:
+    path: configs/calibrations/vive_tracker_workcell_workstation2.yaml
+    expected_id: vive_tracker_workcell_workstation2
+processes:
+  - process_id: vive_source
+    component_id: ros2_vive_dual_tracker_source
+    lifecycle: managed
+    depends_on: []
+  - process_id: isaac_consumer
+    component_id: isaac_nero_hand2_ros_consumer
+    lifecycle: managed
+    depends_on: [vive_source]
+sources:
+  - source_id: tracker_left
+    kind: vive_tracker
+    side: left
+    logical_role: operator_left
+    process_id: vive_source
+    local_binding_key: tracker_left
+  - source_id: hand_rest_left
+    kind: hand_rest_fixture
+    side: left
+    logical_role: hand_rest_left
+    process_id: isaac_consumer
+    local_binding_key: null
+  - source_id: tracker_right
+    kind: vive_tracker
+    side: right
+    logical_role: operator_right
+    process_id: vive_source
+    local_binding_key: tracker_right
+  - source_id: hand_rest_right
+    kind: hand_rest_fixture
+    side: right
+    logical_role: hand_rest_right
+    process_id: isaac_consumer
+    local_binding_key: null
+control_bindings:
+  - instance_id: nero_left
+    group_id: arm_joints
+    source_id: tracker_left
+  - instance_id: hand_left
+    group_id: finger_joints
+    source_id: hand_rest_left
+  - instance_id: nero_right
+    group_id: arm_joints
+    source_id: tracker_right
+  - instance_id: hand_right
+    group_id: finger_joints
+    source_id: hand_rest_right
+report_root: artifacts/runs/nv5
+root_namespace: wujihand/v1/teleop
+interface_set_id: wujihand_interfaces_v1
+qos_profile:
+  path: configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml
+  expected_id: ros2_jazzy_dual_teleoperation_qos_v1
+node_bindings:
+  - process_id: vive_source
+    node_name: vive_source
+    remaps: []
+  - process_id: isaac_consumer
+    node_name: isaac_consumer
+    remaps: []
+execution_owner_process_id: isaac_consumer
+recorder_process_id: null

@@ -1,0 +1,48 @@
+# Copy into ignored configs/local/ and replace each REPLACE_* token.
+# Device identities remain local; committed configs only refer to binding keys.
+schema: wujihand.ros_local_runtime_binding.v2
+binding_id: workstation2_nv5_ros_v2
+host_id: workstation2
+ros_domain_id: 57
+rmw_implementation: rmw_fastrtps_cpp
+dds_profile: null
+processes:
+  - process_id: vive_source
+    executable: /REPLACE_WITH_OPENVR_ROS_PYTHON
+    environment_id: workstation2_openvr_ros_jazzy_v1
+    setup_scripts:
+      - /opt/ros/jazzy/setup.bash
+      - /REPLACE_WITH_NV5_OVERLAY/setup.bash
+  - process_id: glove_source
+    executable: /REPLACE_WITH_WUJI_SDK_ROS_PYTHON
+    environment_id: workstation2_wuji_sdk_ros_jazzy_v1
+    setup_scripts:
+      - /opt/ros/jazzy/setup.bash
+      - /REPLACE_WITH_NV5_OVERLAY/setup.bash
+  - process_id: isaac_consumer
+    executable: /REPLACE_WITH_ISAAC_6_0_1_PYTHON
+    environment_id: workstation2_isaac_6_0_1_ros_jazzy_v1
+    setup_scripts:
+      - /opt/ros/jazzy/setup.bash
+      - /REPLACE_WITH_NV5_OVERLAY/setup.bash
+sources:
+  - binding_key: tracker_left
+    source_kind: vive_tracker
+    device_identity: REPLACE_WITH_LEFT_TRACKER_SERIAL
+    endpoint: openvr://runtime
+    calibration_id: tracker_left_handle_pending_v1
+  - binding_key: tracker_right
+    source_kind: vive_tracker
+    device_identity: REPLACE_WITH_RIGHT_TRACKER_SERIAL
+    endpoint: openvr://runtime
+    calibration_id: tracker_right_handle_pending_v1
+  - binding_key: glove_left
+    source_kind: wuji_glove
+    device_identity: REPLACE_WITH_LEFT_GLOVE_ID
+    endpoint: wuji://REPLACE_WITH_LEFT_GLOVE_ADDRESS
+    calibration_id: glove_left_sdk_default_pending_v1
+  - binding_key: glove_right
+    source_kind: wuji_glove
+    device_identity: REPLACE_WITH_RIGHT_GLOVE_ID
+    endpoint: wuji://REPLACE_WITH_RIGHT_GLOVE_ADDRESS
+    calibration_id: glove_right_sdk_default_pending_v1

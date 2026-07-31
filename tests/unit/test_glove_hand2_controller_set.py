@@ -241,6 +241,32 @@ def test_invalid_left_frame_is_rejected_without_suppressing_right() -> None:
     subject.close()
 
 
+def test_epoch_invalidation_is_side_local_and_uses_the_next_tick() -> None:
+    events: list[str] = []
+    left, left_input = hand_controller(HandSide.LEFT, events)
+    right, right_input = hand_controller(HandSide.RIGHT, events)
+    subject = GloveHand2ControllerSet(
+        {
+            HandSide.LEFT: left,
+            HandSide.RIGHT: right,
+        }
+    )
+    subject.start(now_ns=0)
+    subject.step(now_ns=100_000_000)
+
+    subject.invalidate_input_epoch(HandSide.LEFT)
+    left_step, right_step = subject.step(now_ns=200_000_000)
+
+    assert left_step.step.decision.reason == (
+        "hand_input_epoch_changed_hold"
+    )
+    assert left_step.step.intent is None
+    assert right_step.step.intent is not None
+    assert left_input.sequence == 1
+    assert right_input.sequence == 2
+    subject.close()
+
+
 def test_second_start_failure_rolls_back_first_controller() -> None:
     events: list[str] = []
     left, _ = hand_controller(HandSide.LEFT, events)

@@ -1,6 +1,17 @@
 """Runtime configuration and dependency composition."""
 
 from .config_repository import ConfigRepository
+from .deployment_projection import (
+    CommonDeploymentProjection,
+    DeploymentRouteFacts,
+    SessionControlFacts,
+    common_deployment_projection,
+)
+from .dual_route_plan import (
+    DualTeleoperationRoute,
+    DualTeleoperationRoutePlan,
+    build_dual_teleoperation_route_plan,
+)
 from .deployment_resolver import (
     DeploymentResolver,
     ResolvedDeployment,
@@ -20,6 +31,14 @@ from .process_supervisor import (
     OpenVrProducerLaunch,
     OpenVrStreamLaunch,
     build_openvr_producer_launch,
+)
+from .ros_deployment_resolver import (
+    ResolvedRosDeployment,
+    RosDeploymentResolver,
+)
+from .ros_local_binding import (
+    RosProcessEnvironment,
+    build_ros_local_runtime_binding,
 )
 from .native_dual_plan import (
     NATIVE_DUAL_RUNTIME_COMPONENT,
@@ -41,6 +60,10 @@ from .mujoco_table_config import MujocoTableSceneConfig, load_mujoco_table_scene
 __all__ = [
     "BallConfig",
     "ConfigRepository",
+    "CommonDeploymentProjection",
+    "DeploymentRouteFacts",
+    "DualTeleoperationRoute",
+    "DualTeleoperationRoutePlan",
     "DeploymentResolver",
     "FlangeConfig",
     "QualificationConfig",
@@ -58,15 +81,22 @@ __all__ = [
     "ResolvedDeploymentSource",
     "ResolvedInstance",
     "ResolvedOverride",
+    "ResolvedRosDeployment",
     "ResolvedSession",
     "SessionResolver",
+    "SessionControlFacts",
     "SourceLock",
     "SourceRecord",
+    "RosDeploymentResolver",
+    "RosProcessEnvironment",
     "TableConfig",
     "WristConfig",
     "load_rotation_ball_config",
     "load_mujoco_table_scene_config",
     "build_openvr_producer_launch",
     "build_native_dual_runtime_plan",
+    "build_ros_local_runtime_binding",
+    "build_dual_teleoperation_route_plan",
+    "common_deployment_projection",
     "validate_transport_pair",
 ]

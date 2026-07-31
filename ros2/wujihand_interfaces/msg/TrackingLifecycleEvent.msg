@@ -1,0 +1,13 @@
+string<=128 schema
+string<=128 producer_instance
+string<=128 tracking_setup_revision
+string<=128[<=2] stream_ids
+string<=32 kind
+string<=128 reason
+uint64 sequence
+bool has_old_transport_epoch
+uint64 old_transport_epoch
+bool has_new_transport_epoch
+uint64 new_transport_epoch
+uint64 host_time_ns
+string<=128 clock_domain

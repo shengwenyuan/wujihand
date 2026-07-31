@@ -1,0 +1,9 @@
+string<=128 schema
+string<=128 instance_id
+string<=128 group_id
+string<=32 safety_state
+string<=128 reason
+bool position_clamped
+bool rate_limited
+uint64 host_time_ns
+string<=128 clock_domain

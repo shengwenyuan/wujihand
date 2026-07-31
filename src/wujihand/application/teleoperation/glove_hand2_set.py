@@ -104,6 +104,20 @@ class GloveHand2ControllerSet:
             )
         return tuple(decisions)
 
+    def invalidate_input_epoch(
+        self,
+        side: HandSide,
+    ) -> None:
+        """Schedule a side-local hold for a changed ROS producer epoch."""
+
+        if not self._active or self._closed:
+            raise RuntimeError("start() must succeed before invalidation")
+        for configured_side, controller in self._started:
+            if configured_side is side:
+                controller.invalidate_input_epoch()
+                return
+        raise KeyError(side)
+
     def close(self) -> None:
         """Close right then left while preserving the first cleanup error."""
 

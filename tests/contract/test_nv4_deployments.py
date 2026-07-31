@@ -14,9 +14,9 @@ from wujihand.runtime import (
     build_native_dual_runtime_plan,
     build_openvr_producer_launch,
 )
-from wujihand.specs import LocalDeviceBindingSpec
 from wujihand.specs import (
-    NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT,
+    DUAL_TELEOPERATION_CONTRACT,
+    LocalDeviceBindingSpec,
 )
 
 
@@ -92,12 +92,12 @@ def test_nv4_deployments_resolve_around_the_same_five_layer_session(
     )
 
     assert resolved.session.session.session_id == (
-        "isaac_nero_dual_hand2_native_teleop_v1"
+        "isaac_nero_dual_hand2_teleop_v1"
     )
     assert resolved.session.session.runtime_role == "teleop_consumer"
     assert (
         resolved.session.session.runtime.transport_contract
-        == NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT
+        == DUAL_TELEOPERATION_CONTRACT
     )
     assert len(resolved.session.session.runtime.control_layouts) == 4
     assert len(resolved.deployment.control_bindings) == 4
@@ -137,19 +137,19 @@ def test_live_session_reuses_lower_four_layers_without_mutating_qualification() 
     hashes = dict(live.referenced_file_hashes)
     assert (
         "configs/profiles/"
-        "isaac_nero_hand2_native_dual_teleoperation_v1.yaml"
+        "isaac_nero_hand2_dual_teleoperation_v1.yaml"
     ) in hashes
     assert (
         "configs/profiles/"
         "isaac_nero_dual_tabletop_qualification_v1.yaml"
     ) in hashes
-    profile = repository.load_native_dual_teleoperation_profile(
+    profile = repository.load_dual_teleoperation_profile(
         live.session.runtime.compatibility_profile
         or ""
     )
     assert (
         profile.transport_contract
-        == NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT
+        == DUAL_TELEOPERATION_CONTRACT
     )
 
 

@@ -51,6 +51,7 @@ class GloveHand2SimulationController:
         self._closed = False
         self._intent_sequence = 0
         self._last_intent: HandIntent | None = None
+        self._pending_hold_reason: str | None = None
 
     def start(self, *, now_ns: int) -> SafetyDecision:
         """Open input and reset all state at a bounded simulation epoch."""
@@ -71,12 +72,24 @@ class GloveHand2SimulationController:
         self._started = True
         self._intent_sequence = 0
         self._last_intent = None
+        self._pending_hold_reason = None
         return decision
 
     def poll(self, *, now_ns: int) -> Hand2SimulationStep:
         """Acquire, retarget, and supervise one newly available canonical frame."""
 
         self._require_started()
+        if self._pending_hold_reason is not None:
+            reason = self._pending_hold_reason
+            self._pending_hold_reason = None
+            return Hand2SimulationStep(
+                intent=None,
+                decision=self.supervisor.hold(
+                    now_ns=now_ns,
+                    reason=reason,
+                ),
+                rejection_reason=reason,
+            )
         observation = self.observation_input.poll(receive_time_ns=now_ns)
         try:
             self._validate_observation_side(observation)
@@ -124,6 +137,17 @@ class GloveHand2SimulationController:
             raise ValueError("rejection reason must be a bounded non-empty string")
         return self._advance(now_ns=now_ns, rejection_reason=reason)
 
+    def invalidate_input_epoch(
+        self,
+    ) -> None:
+        """Forget transport state and hold once on the next control tick."""
+
+        self._require_started()
+        self.retargeter.reset()
+        self._last_intent = None
+        self._intent_sequence = 0
+        self._pending_hold_reason = "hand_input_epoch_changed_hold"
+
     def _advance(
         self,
         *,
@@ -163,6 +187,7 @@ class GloveHand2SimulationController:
                     first_error = exc
         decision = self.supervisor.disarm()
         self._last_intent = None
+        self._pending_hold_reason = None
         if first_error is not None:
             raise first_error
         return decision

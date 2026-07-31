@@ -57,7 +57,7 @@ dev = [
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers -m 'not requires_socket'"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "ros2/wujihand_ros2"]
 markers = [
     "requires_mujoco: uses the optional MuJoCo runtime and pinned upstream MJCF assets",
     "requires_socket: uses a real local network socket and is excluded from sandboxed fast tests",

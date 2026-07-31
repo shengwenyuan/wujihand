@@ -1,0 +1,11 @@
+string<=128 schema
+string<=128 instance_id
+string<=128 group_id
+string<=128 layout_id
+float64[<=27] positions
+uint64 produced_time_ns
+string<=32 safety_state
+string<=128 safety_reason
+bool position_clamped
+bool rate_limited
+string<=128 clock_domain
