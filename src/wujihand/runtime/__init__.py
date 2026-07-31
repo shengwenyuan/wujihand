@@ -25,7 +25,12 @@ from .session_resolver import (
     SessionResolver,
     validate_transport_pair,
 )
-from .source_lock import ResolvedArtifact, SourceLock, SourceRecord
+from .source_lock import (
+    ResolvedArtifact,
+    ResolvedContentRef,
+    SourceLock,
+    SourceRecord,
+)
 from .process_supervisor import (
     ManagedOpenVrProducer,
     OpenVrProducerLaunch,
@@ -56,6 +61,21 @@ from .rotation_ball_config import (
     load_rotation_ball_config,
 )
 from .mujoco_table_config import MujocoTableSceneConfig, load_mujoco_table_scene_config
+from .isaac_workcell_plan import (
+    RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA,
+    ResolvedIsaacLighting,
+    ResolvedIsaacPrimitive,
+    ResolvedIsaacUsdImport,
+    ResolvedIsaacWorkcellPlan,
+    resolve_isaac_workcell_plan,
+)
+from .modelscope_dataset import (
+    ModelScopeDatasetPin,
+    ModelScopeEnsureResult,
+    ModelScopeManifest,
+    ModelScopeManifestEntry,
+    ensure_modelscope_dataset,
+)
 
 __all__ = [
     "BallConfig",
@@ -69,6 +89,10 @@ __all__ = [
     "QualificationConfig",
     "RotationBallConfig",
     "MujocoTableSceneConfig",
+    "ModelScopeDatasetPin",
+    "ModelScopeEnsureResult",
+    "ModelScopeManifest",
+    "ModelScopeManifestEntry",
     "ManagedOpenVrProducer",
     "NATIVE_DUAL_RUNTIME_COMPONENT",
     "NativeDualRoutePlan",
@@ -76,6 +100,12 @@ __all__ = [
     "OpenVrProducerLaunch",
     "OpenVrStreamLaunch",
     "ResolvedArtifact",
+    "ResolvedContentRef",
+    "RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA",
+    "ResolvedIsaacLighting",
+    "ResolvedIsaacPrimitive",
+    "ResolvedIsaacUsdImport",
+    "ResolvedIsaacWorkcellPlan",
     "ResolvedDeployment",
     "ResolvedDeploymentProcess",
     "ResolvedDeploymentSource",
@@ -98,5 +128,7 @@ __all__ = [
     "build_ros_local_runtime_binding",
     "build_dual_teleoperation_route_plan",
     "common_deployment_projection",
+    "ensure_modelscope_dataset",
+    "resolve_isaac_workcell_plan",
     "validate_transport_pair",
 ]

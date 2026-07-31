@@ -1,0 +1,328 @@
+"""Resolve Workcell v1 into source-neutral Isaac stage operations."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+import math
+from pathlib import Path
+from typing import cast
+
+from wujihand.specs import (
+    ISAAC_STATIC_USD_WORKCELL_SCHEMA,
+    EntitySpec,
+    IsaacSceneExpectations,
+    IsaacStaticUsdWorkcellProfile,
+    IsaacWorkcellPolicies,
+    PoseSpec,
+    WorkcellSpec,
+)
+
+from .config_repository import ConfigRepository
+from .source_lock import ResolvedContentRef, SourceLock
+from .yaml_loader import load_yaml_strict
+
+
+RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA = "wujihand.resolved_isaac_workcell_plan.v1"
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedIsaacUsdImport:
+    import_id: str
+    content: ResolvedContentRef
+    composition: str
+    pose: PoseSpec
+
+    @property
+    def prim_path(self) -> str:
+        return f"/World/Environment/{self.import_id}"
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "import_id": self.import_id,
+            "prim_path": self.prim_path,
+            "content": self.content.identity_mapping(),
+            "composition": self.composition,
+            "pose": self.pose.to_mapping(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedIsaacPrimitive:
+    entity_id: str
+    pose: PoseSpec
+    entity: EntitySpec
+
+    @property
+    def prim_path(self) -> str:
+        return f"/World/Workcell/{self.entity_id}"
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "entity_id": self.entity_id,
+            "prim_path": self.prim_path,
+            "pose": self.pose.to_mapping(),
+            "primitive": self.entity.primitive.to_mapping(),
+            "mobility": self.entity.mobility,
+            "mass_kg": self.entity.mass_kg,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedIsaacLighting:
+    mode: str
+    content: ResolvedContentRef | None
+    intensity: float
+    exposure: float
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "mode": self.mode,
+            "content": (
+                None
+                if self.content is None
+                else self.content.identity_mapping()
+            ),
+            "intensity": self.intensity,
+            "exposure": self.exposure,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedIsaacWorkcellPlan:
+    """Deterministic operations; absolute content locators stay out of mappings."""
+
+    schema: str
+    workcell_id: str
+    profile_id: str | None
+    profile_path: str | None
+    imports: tuple[ResolvedIsaacUsdImport, ...]
+    primitives: tuple[ResolvedIsaacPrimitive, ...]
+    policies: IsaacWorkcellPolicies
+    lighting: ResolvedIsaacLighting
+    expectations: IsaacSceneExpectations | None
+    frame_ids: tuple[str, ...]
+    mount_ids: tuple[str, ...]
+    entity_ids: tuple[str, ...]
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "schema": self.schema,
+            "workcell_id": self.workcell_id,
+            "profile_id": self.profile_id,
+            "profile_path": self.profile_path,
+            "imports": [operation.to_mapping() for operation in self.imports],
+            "primitives": [
+                operation.to_mapping() for operation in self.primitives
+            ],
+            "policies": self.policies.to_mapping(),
+            "lighting": self.lighting.to_mapping(),
+            "expectations": (
+                None
+                if self.expectations is None
+                else self.expectations.to_mapping()
+            ),
+            "inventory": {
+                "frames": list(self.frame_ids),
+                "mounts": list(self.mount_ids),
+                "entities": list(self.entity_ids),
+            },
+        }
+
+
+def resolve_isaac_workcell_plan(
+    project_root: str | Path,
+    workcell: WorkcellSpec,
+    *,
+    verify_content: bool = False,
+) -> ResolvedIsaacWorkcellPlan:
+    """Compile a Workcell without importing Isaac Sim or pxr."""
+
+    repository = ConfigRepository(project_root)
+    source_lock = SourceLock.load(repository)
+    profile, profile_path = _load_typed_profile(repository, workcell)
+    frame_poses = _frame_poses(workcell)
+    primitives = tuple(
+        ResolvedIsaacPrimitive(
+            entity_id=entity.entity_id,
+            pose=_compose(frame_poses[entity.frame], entity.transform),
+            entity=entity,
+        )
+        for entity in workcell.entities
+    )
+
+    if profile is None:
+        policies = IsaacWorkcellPolicies(
+            ground=(
+                "project"
+                if any(
+                    entity.primitive.kind == "plane"
+                    for entity in workcell.entities
+                )
+                else "none"
+            ),
+            physics_scene="project",
+            camera="project",
+            collision="preserve",
+        )
+        imports: tuple[ResolvedIsaacUsdImport, ...] = ()
+        lighting = ResolvedIsaacLighting(
+            mode="project",
+            content=None,
+            intensity=900.0,
+            exposure=0.0,
+        )
+        expectations = None
+        profile_id = None
+    else:
+        if profile.frame not in frame_poses:
+            raise ValueError(
+                f"Isaac workcell profile references unknown frame {profile.frame!r}"
+            )
+        scene = source_lock.resolve_content(
+            profile.scene.artifact,
+            expected_sha256=profile.scene.expected_sha256,
+            verify=verify_content,
+        )
+        imports = (
+            ResolvedIsaacUsdImport(
+                import_id=profile.import_id,
+                content=scene,
+                composition=profile.composition,
+                pose=_compose(
+                    frame_poses[profile.frame],
+                    profile.transform,
+                ),
+            ),
+        )
+        lighting_content = (
+            None
+            if profile.lighting.content is None
+            else source_lock.resolve_content(
+                profile.lighting.content.artifact,
+                expected_sha256=(
+                    profile.lighting.content.expected_sha256
+                ),
+                verify=verify_content,
+            )
+        )
+        policies = profile.policies
+        lighting = ResolvedIsaacLighting(
+            mode=profile.lighting.mode,
+            content=lighting_content,
+            intensity=profile.lighting.intensity,
+            exposure=profile.lighting.exposure,
+        )
+        expectations = profile.expectations
+        profile_id = profile.profile_id
+
+    return ResolvedIsaacWorkcellPlan(
+        schema=RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA,
+        workcell_id=workcell.workcell_id,
+        profile_id=profile_id,
+        profile_path=profile_path,
+        imports=imports,
+        primitives=primitives,
+        policies=policies,
+        lighting=lighting,
+        expectations=expectations,
+        frame_ids=(
+            workcell.world_frame,
+            *(frame.frame_id for frame in workcell.frames),
+        ),
+        mount_ids=tuple(mount.mount_id for mount in workcell.mounts),
+        entity_ids=tuple(entity.entity_id for entity in workcell.entities),
+    )
+
+
+def _load_typed_profile(
+    repository: ConfigRepository,
+    workcell: WorkcellSpec,
+) -> tuple[IsaacStaticUsdWorkcellProfile | None, str | None]:
+    reference = workcell.compatibility_profile
+    if reference is None:
+        return None, None
+    path = repository.resolve_project_path(
+        reference,
+        field="workcell compatibility profile",
+    )
+    document = load_yaml_strict(path.read_text(encoding="utf-8"))
+    if not isinstance(document, Mapping):
+        raise ValueError(f"workcell compatibility profile must be a mapping: {path}")
+    mapping = cast(Mapping[str, object], document)
+    if mapping.get("schema") != ISAAC_STATIC_USD_WORKCELL_SCHEMA:
+        return None, None
+    return (
+        IsaacStaticUsdWorkcellProfile.from_mapping(mapping),
+        repository.project_relative(
+            path,
+            field="workcell compatibility profile",
+        ),
+    )
+
+
+def _frame_poses(workcell: WorkcellSpec) -> dict[str, PoseSpec]:
+    poses = {
+        workcell.world_frame: PoseSpec(
+            position_m=(0.0, 0.0, 0.0),
+            quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+        )
+    }
+    pending = {frame.frame_id: frame for frame in workcell.frames}
+    while pending:
+        progressed = False
+        for frame_id, frame in tuple(pending.items()):
+            parent = poses.get(frame.parent)
+            if parent is None:
+                continue
+            poses[frame_id] = _compose(parent, frame.transform)
+            del pending[frame_id]
+            progressed = True
+        if not progressed:
+            raise RuntimeError("validated Workcell frame graph could not be resolved")
+    return poses
+
+
+def _compose(parent: PoseSpec, child: PoseSpec) -> PoseSpec:
+    pw, px, py, pz = parent.quat_wxyz
+    x, y, z = child.position_m
+    rotated = (
+        (1 - 2 * (py * py + pz * pz)) * x
+        + 2 * (px * py - pz * pw) * y
+        + 2 * (px * pz + py * pw) * z,
+        2 * (px * py + pz * pw) * x
+        + (1 - 2 * (px * px + pz * pz)) * y
+        + 2 * (py * pz - px * pw) * z,
+        2 * (px * pz - py * pw) * x
+        + 2 * (py * pz + px * pw) * y
+        + (1 - 2 * (px * px + py * py)) * z,
+    )
+    cw, cx, cy, cz = child.quat_wxyz
+    quaternion = (
+        pw * cw - px * cx - py * cy - pz * cz,
+        pw * cx + px * cw + py * cz - pz * cy,
+        pw * cy - px * cz + py * cw + pz * cx,
+        pw * cz + px * cy - py * cx + pz * cw,
+    )
+    norm = math.sqrt(sum(component * component for component in quaternion))
+    return PoseSpec(
+        position_m=(
+            parent.position_m[0] + rotated[0],
+            parent.position_m[1] + rotated[1],
+            parent.position_m[2] + rotated[2],
+        ),
+        quat_wxyz=cast(
+            tuple[float, float, float, float],
+            tuple(component / norm for component in quaternion),
+        ),
+    )
+
+
+__all__ = [
+    "RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA",
+    "ResolvedIsaacLighting",
+    "ResolvedIsaacPrimitive",
+    "ResolvedIsaacUsdImport",
+    "ResolvedIsaacWorkcellPlan",
+    "resolve_isaac_workcell_plan",
+]

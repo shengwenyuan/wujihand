@@ -3541,6 +3541,9 @@ def main() -> int:
         "scope": "NV-2 simulation only; no ROS, CAN, NERO hardware, or Hand 2 hardware",
         "session_id": RESOLVED.session.session_id,
         "session_hash": RESOLVED.session_hash,
+        "workcell_materialization": (
+            scene.workcell_materialization.to_mapping()
+        ),
         "isaac_distribution": version("isaacsim"),
         "physics_hz": PHYSICS_HZ,
         "frames_per_phase": ARGS.frames_per_phase,

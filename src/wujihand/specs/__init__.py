@@ -19,6 +19,14 @@ from .backend_binding import (
     GroupBindingSpec,
 )
 from .common import ConfigRef, PoseSpec
+from .isaac_workcell import (
+    ISAAC_STATIC_USD_WORKCELL_SCHEMA,
+    ContentSpec,
+    IsaacDomeLightingSpec,
+    IsaacSceneExpectations,
+    IsaacStaticUsdWorkcellProfile,
+    IsaacWorkcellPolicies,
+)
 from .deployment import (
     DEPLOYMENT_SCHEMA,
     LOCAL_DEVICE_BINDING_SCHEMA,
@@ -90,6 +98,7 @@ __all__ = [
     "DUAL_TELEOPERATION_PROFILE_SCHEMA",
     "DUAL_TELEOPERATION_PROFILE_STATUS",
     "LOCAL_DEVICE_BINDING_SCHEMA",
+    "ISAAC_STATIC_USD_WORKCELL_SCHEMA",
     "NATIVE_DUAL_TELEOPERATION_PROFILE_ID",
     "NATIVE_DUAL_TELEOPERATION_PROFILE_SCHEMA",
     "NATIVE_DUAL_TELEOPERATION_PROFILE_STATUS",
@@ -107,6 +116,7 @@ __all__ = [
     "AttachmentSpec",
     "BackendBinding",
     "ConfigRef",
+    "ContentSpec",
     "ControlGroupSpec",
     "ControlLayoutSpec",
     "ControlSourceBindingSpec",
@@ -120,6 +130,10 @@ __all__ = [
     "DualTrackerPolicy",
     "EntitySpec",
     "GroupBindingSpec",
+    "IsaacDomeLightingSpec",
+    "IsaacSceneExpectations",
+    "IsaacStaticUsdWorkcellProfile",
+    "IsaacWorkcellPolicies",
     "MountSpec",
     "NativeDualGlovePolicy",
     "NativeDualKinematicsPolicy",

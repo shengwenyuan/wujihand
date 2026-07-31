@@ -142,6 +142,25 @@ sources:
       franka_fr3_v2/scene.xml: 55dbf0364c1b8887c455ac10103b3d4f498971358d65b0b5c4113b055c4c6530
     asset_trees:
       franka_fr3_v2/assets: 0ee1f659bb749fb88c1c2cca93215ec42460de9626eab31018bbc7bf1c88d7bf
+  - name: modelscope-sss225-robolab-assets
+    kind: modelscope_dataset
+    url: https://modelscope.cn/datasets/sss225/robolab-assets
+    dataset_id: sss225/robolab-assets
+    commit: 377fb4959532d2ee6055d3a874f25c4b327e2894
+    retrieved_at: 2026-07-31
+    local_runtime_path: third_party/src/modelscope/sss225/robolab-assets/377fb4959532d2ee6055d3a874f25c4b327e2894
+    manifest_sha256: abbf0a4c3799a7470fa41918b802288aa70e3e8b1d3938d547836481a39ea427
+    expected_blob_count: 3285
+    expected_tree_count: 663
+    expected_total_size_bytes: 6814007813
+    artifacts:
+      assets/backgrounds/indoors/photo_studio_01_2k.hdr: b6178cf04ea2ac9390b8794d3088a04c0254905f335f5f30d2b582c57c40f387
+      assets/backgrounds/indoors/studio_small_07_2k.hdr: c31b9b2dbcbacce5ad304ed950af22418e562562ce1de2c7e86c7ee7cae31d05
+      assets/scenes/banana_bowl.usda: caf59864ffd777e53fb14e88e5620e19a967bbaa8d448bf98a8fdd41cb8832a0
+      assets/scenes/base_empty.usda: 8c41ed20c15e92ab829d5b0f0c654a5b2cbf03d701e266bfe9be4e71c0d03a34
+      assets/scenes/colored_blocks.usda: d1cc7b6a59f110b8178ae31c2825d4b1dfa17dd91be37e9d8a6aaa2c29cbf12e
+      assets/scenes/tools_sorting.usda: 60ccf66e716331aee15f2400a21d432325a5b2afdf4b6eeca27445c6d436fb52
+      assets/scenes/workdesk.usda: 511f673cdec8a71442e3f7004889841e460aca04f1f9f6a0342ef11f94df2f3d
   - name: isaaclab
     kind: git
     url: https://github.com/isaac-sim/IsaacLab.git

@@ -1,0 +1,32 @@
+schema: wujihand.isaac_static_usd_workcell.v1
+profile_id: isaac_robolab_base_empty_v1
+import_id: robolab_base_empty
+scene:
+  source: modelscope-sss225-robolab-assets
+  source_revision: commit:377fb4959532d2ee6055d3a874f25c4b327e2894
+  path: assets/scenes/base_empty.usda
+  expected_sha256: 8c41ed20c15e92ab829d5b0f0c654a5b2cbf03d701e266bfe9be4e71c0d03a34
+composition: reference
+frame: robolab_scene_anchor
+transform:
+  position_m: [0.0, 0.0, 0.0]
+  quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+policies:
+  ground: preserve
+  physics_scene: project
+  camera: project
+  collision: preserve
+lighting:
+  mode: selected_hdr
+  content:
+    source: modelscope-sss225-robolab-assets
+    source_revision: commit:377fb4959532d2ee6055d3a874f25c4b327e2894
+    path: assets/backgrounds/indoors/photo_studio_01_2k.hdr
+    expected_sha256: b6178cf04ea2ac9390b8794d3088a04c0254905f335f5f30d2b582c57c40f387
+  intensity: 800.0
+  exposure: 0.0
+expectations:
+  default_prim: world
+  meters_per_unit: 1.0
+  up_axis: Z
+  min_colliders: 6

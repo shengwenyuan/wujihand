@@ -17,6 +17,7 @@ from .yaml_loader import load_yaml_strict
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
+
 @dataclass(frozen=True, slots=True)
 class SourceRecord:
     name: str
@@ -24,6 +25,11 @@ class SourceRecord:
     artifacts: tuple[tuple[str, str], ...]
     asset_trees: tuple[tuple[str, str], ...]
     revision: tuple[tuple[str, str], ...]
+    dataset_id: str | None
+    manifest_sha256: str | None
+    expected_blob_count: int | None
+    expected_tree_count: int | None
+    expected_total_size_bytes: int | None
 
     def expected_artifact_hash(self, relative_path: str) -> str:
         for path, digest in self.artifacts:
@@ -63,6 +69,27 @@ class ResolvedArtifact:
             "path": self.relative_path,
             "expected_sha256": self.expected_sha256,
             "kind": self.kind,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedContentRef:
+    """Content identity plus a host-local locator excluded from snapshots."""
+
+    source_name: str
+    source_revision: str
+    relative_path: str
+    expected_sha256: str
+    manifest_sha256: str | None
+    absolute_path: Path
+
+    def identity_mapping(self) -> dict[str, object]:
+        return {
+            "source": self.source_name,
+            "source_revision": self.source_revision,
+            "path": self.relative_path,
+            "expected_sha256": self.expected_sha256,
+            "manifest_sha256": self.manifest_sha256,
         }
 
 
@@ -170,6 +197,30 @@ class SourceLock:
             kind="asset_tree" if tree else "artifact",
         )
 
+    def resolve_content(
+        self,
+        content: ArtifactSpec,
+        *,
+        expected_sha256: str,
+        verify: bool = False,
+    ) -> ResolvedContentRef:
+        """Resolve immutable content while checking the profile/lock digest twice."""
+
+        artifact = self.resolve(content, verify=verify)
+        if artifact.expected_sha256 != expected_sha256:
+            raise ValueError(
+                f"source {content.source!r} profile digest differs from source lock "
+                f"for {content.path!r}"
+            )
+        return ResolvedContentRef(
+            source_name=artifact.source.name,
+            source_revision=content.source_revision,
+            relative_path=artifact.relative_path,
+            expected_sha256=artifact.expected_sha256,
+            manifest_sha256=artifact.source.manifest_sha256,
+            absolute_path=artifact.absolute_path,
+        )
+
 
 def _source_record(value: object, *, index: int) -> SourceRecord:
     if not isinstance(value, Mapping):
@@ -194,12 +245,34 @@ def _source_record(value: object, *, index: int) -> SourceRecord:
             if data.get(key) is not None
         )
     )
+    dataset_id = _optional_string(
+        data.get("dataset_id"),
+        field=f"sources[{index}].dataset_id",
+    )
+    manifest_sha256 = _optional_sha256(
+        data.get("manifest_sha256"),
+        field=f"sources[{index}].manifest_sha256",
+    )
     return SourceRecord(
         name=name,
         local_runtime_path=local_runtime_path,
         artifacts=artifacts,
         asset_trees=trees,
         revision=revision,
+        dataset_id=dataset_id,
+        manifest_sha256=manifest_sha256,
+        expected_blob_count=_optional_non_negative_int(
+            data.get("expected_blob_count"),
+            field=f"sources[{index}].expected_blob_count",
+        ),
+        expected_tree_count=_optional_non_negative_int(
+            data.get("expected_tree_count"),
+            field=f"sources[{index}].expected_tree_count",
+        ),
+        expected_total_size_bytes=_optional_non_negative_int(
+            data.get("expected_total_size_bytes"),
+            field=f"sources[{index}].expected_total_size_bytes",
+        ),
     )
 
 
@@ -217,8 +290,33 @@ def _digest_pairs(value: object, *, field: str) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(pairs))
 
 
+def _optional_string(value: object, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        raise ValueError(f"{field} must be a non-blank string")
+    return value
+
+
+def _optional_sha256(value: object, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or _SHA256.fullmatch(value) is None:
+        raise ValueError(f"{field} must be a lowercase SHA-256")
+    return value
+
+
+def _optional_non_negative_int(value: object, *, field: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer")
+    return value
+
+
 __all__ = [
     "ResolvedArtifact",
+    "ResolvedContentRef",
     "SourceLock",
     "SourceRecord",
     "sha256_file",

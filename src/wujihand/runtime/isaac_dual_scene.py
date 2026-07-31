@@ -42,6 +42,11 @@ from wujihand.adapters.simulation.q27_execution import (
 from wujihand.specs import AttachmentSpec, PoseSpec
 
 from .session_resolver import ResolvedSession
+from .isaac_workcell import (
+    IsaacWorkcellMaterialization,
+    materialize_isaac_workcell,
+)
+from .isaac_workcell_plan import resolve_isaac_workcell_plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,9 +282,6 @@ class DualNeroHand2IsaacScene:
         physics_hz: int,
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
-        from isaacsim.core.api.objects import (  # type: ignore[import-not-found]
-            FixedCuboid,
-        )
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
             Articulation,
         )
@@ -289,11 +291,8 @@ class DualNeroHand2IsaacScene:
         from pxr import (  # type: ignore[import-not-found]
             Gf,
             UsdGeom,
-            UsdLux,
-            UsdPhysics,
         )
 
-        del project_root
         self.resolved = resolved
         self.sides = sides
         self.alignment_profile = alignment_profile
@@ -306,57 +305,16 @@ class DualNeroHand2IsaacScene:
             device="cpu",
         )
         self.stage = self.world.scene.stage
+        workcell_plan = resolve_isaac_workcell_plan(
+            project_root,
+            resolved.workcell,
+            verify_content=True,
+        )
+        self.workcell_materialization: IsaacWorkcellMaterialization = (
+            materialize_isaac_workcell(self.world, workcell_plan)
+        )
         UsdGeom.Xform.Define(self.stage, "/World/Robots")
         UsdGeom.Xform.Define(self.stage, "/World/Attachments")
-        self.world.scene.add_default_ground_plane()
-        fixed_workcell_prim_paths: list[str] = []
-        for entity in resolved.workcell.entities:
-            if entity.mobility != "fixed":
-                raise RuntimeError(
-                    "dual scene requires fixed workcell entity "
-                    f"{entity.entity_id}"
-                )
-            if entity.primitive.kind == "plane":
-                continue
-            if (
-                entity.primitive.kind != "box"
-                or entity.primitive.size_m is None
-            ):
-                raise RuntimeError(
-                    "dual scene supports only plane/box workcell entities"
-                )
-            pose = workcell_pose(
-                resolved,
-                entity.frame,
-                entity.transform,
-            )
-            prim_path = f"/World/Workcell/{entity.entity_id}"
-            self.world.scene.add(
-                FixedCuboid(
-                    prim_path=prim_path,
-                    name=entity.entity_id,
-                    position=np.asarray(
-                        pose.position_m,
-                        dtype=np.float64,
-                    ),
-                    orientation=np.asarray(
-                        pose.quat_wxyz,
-                        dtype=np.float64,
-                    ),
-                    scale=np.asarray(
-                        entity.primitive.size_m,
-                        dtype=np.float64,
-                    ),
-                    size=1.0,
-                    color=np.asarray(
-                        (0.32, 0.20, 0.12),
-                        dtype=np.float64,
-                    ),
-                )
-            )
-            fixed_workcell_prim_paths.append(prim_path)
-        dome = UsdLux.DomeLight.Define(self.stage, "/World/DomeLight")
-        dome.CreateIntensityAttr(1000.0)
 
         self.authored: dict[str, NeroHand2AttachmentHandles] = {}
         self.geometry_alignments: dict[
@@ -494,24 +452,9 @@ class DualNeroHand2IsaacScene:
         self.q27_execution = IsaacQ27ExecutionAdapter(
             self.articulations
         )
-        external_paths: list[str] = []
-        for prefix in fixed_workcell_prim_paths:
-            matches = [
-                str(prim.GetPath())
-                for prim in self.stage.Traverse()
-                if (
-                    str(prim.GetPath()) == prefix
-                    or str(prim.GetPath()).startswith(prefix + "/")
-                )
-                and prim.HasAPI(UsdPhysics.CollisionAPI)
-            ]
-            if not matches:
-                raise RuntimeError(
-                    "fixed workcell entity has no external collider: "
-                    f"{prefix}"
-                )
-            external_paths.extend(matches)
-        self.external_fixed_collider_paths = sorted(set(external_paths))
+        self.external_fixed_collider_paths = list(
+            self.workcell_materialization.fixed_collider_paths
+        )
         if not self.external_fixed_collider_paths:
             raise RuntimeError(
                 "dual scene has no fixed external collider"

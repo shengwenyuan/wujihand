@@ -26,6 +26,7 @@ from wujihand.runtime.session_compat import (
     fixed_hand_workcell_runtime,
     resolve_isaac_hand_runtime,
 )
+from wujihand.runtime import resolve_isaac_workcell_plan
 from wujihand.integrity import sha256_file
 
 
@@ -85,6 +86,10 @@ SESSION_RUNTIME = resolve_isaac_hand_runtime(
 ARGS.asset = SESSION_RUNTIME.asset_path
 ARGS.profile = SESSION_RUNTIME.profile_path
 WORKCELL_RUNTIME = fixed_hand_workcell_runtime(SESSION_RUNTIME.resolved)
+WORKCELL_PLAN = resolve_isaac_workcell_plan(
+    ROOT,
+    SESSION_RUNTIME.resolved.workcell,
+)
 if not ARGS.asset.is_file():
     raise SystemExit(f"Hand 2 USD not found: {ARGS.asset}")
 if not ARGS.profile.is_file():
@@ -100,12 +105,11 @@ simulation_app = SimulationApp(
 )
 
 import numpy as np
-from pxr import UsdLux, UsdPhysics
+from pxr import UsdPhysics
 
 import omni.kit.renderer_capture
 from omni.kit.viewport.utility import capture_viewport_to_file, get_active_viewport
 from isaacsim.core.api import World
-from isaacsim.core.api.objects import FixedCuboid
 from isaacsim.core.prims import Articulation
 from isaacsim.core.utils.stage import add_reference_to_stage
 from isaacsim.core.utils.viewports import set_camera_view
@@ -114,6 +118,7 @@ from wujihand.adapters.simulation import load_hand2_model_profile
 from wujihand.adapters.transport import UdpJointCommandReceiver
 from wujihand.application.supervision import JointCommandSupervisor
 from wujihand.domain import HAND2_RIGHT_LAYOUT, HAND2_RIGHT_REST
+from wujihand.runtime.isaac_workcell import materialize_isaac_workcell
 
 
 PHYSICS_HZ = 120
@@ -194,21 +199,15 @@ def main() -> int:
         rendering_dt=1.0 / 30.0,
         backend="numpy",
     )
-    world.scene.add_default_ground_plane()
-    table = world.scene.add(
-        FixedCuboid(
-            prim_path="/World/Table",
-            name="table",
-            position=np.asarray(WORKCELL_RUNTIME.table.transform.position_m),
-            scale=np.asarray(WORKCELL_RUNTIME.table.primitive.size_m),
-            size=1.0,
-            color=np.array([0.34, 0.20, 0.10]),
-        )
+    workcell_materialization = materialize_isaac_workcell(
+        world,
+        WORKCELL_PLAN,
     )
+    table = world.scene.get_object(WORKCELL_RUNTIME.table.entity_id)
+    if table is None:
+        raise RuntimeError("materialized Workcell table is not registered")
     add_reference_to_stage(str(ARGS.asset.resolve()), "/World/Hand2")
     stage = world.scene.stage
-    dome = UsdLux.DomeLight.Define(stage, "/World/DomeLight")
-    dome.CreateIntensityAttr(900.0)
 
     articulation_root = find_articulation_root(stage)
     hand = world.scene.add(Articulation(articulation_root, name="hand2_right"))
@@ -353,6 +352,7 @@ def main() -> int:
         "isaac_sim": get_isaac_sim_version()[0],
         "session": SESSION_RUNTIME.resolved.session.session_id,
         "session_hash": SESSION_RUNTIME.resolved.session_hash,
+        "workcell_materialization": workcell_materialization.to_mapping(),
         "asset": str(ARGS.asset.resolve()),
         "asset_sha256": asset_sha256,
         "profile": str(ARGS.profile.resolve()),

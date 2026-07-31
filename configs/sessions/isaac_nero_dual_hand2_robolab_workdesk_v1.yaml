@@ -1,0 +1,42 @@
+schema: wujihand.session.v1
+session_id: isaac_nero_dual_hand2_robolab_workdesk_v1
+backend: isaac
+runtime_role: simulation
+assembly:
+  path: configs/assemblies/nero_dual_hand2_physical_simulation_nominal_v1.yaml
+  expected_id: nero_dual_hand2_physical_simulation_nominal_v1
+workcell:
+  path: configs/workcells/isaac_robolab_workdesk_dual_station_v1.yaml
+  expected_id: isaac_robolab_workdesk_dual_station_v1
+bindings:
+  nero_left:
+    path: configs/bindings/isaac/agilex_nero_f6642ce0_isaac_6_0_1_v1.yaml
+    expected_id: agilex_nero_f6642ce0_isaac_6_0_1
+  hand_left:
+    path: configs/bindings/isaac/wuji_hand2_beta1_left_v2026_6_27_physical_v1.yaml
+    expected_id: wuji_hand2_beta1_left_isaac_v2026_6_27_physical
+  nero_right:
+    path: configs/bindings/isaac/agilex_nero_f6642ce0_isaac_6_0_1_v1.yaml
+    expected_id: agilex_nero_f6642ce0_isaac_6_0_1
+  hand_right:
+    path: configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_physical_v1.yaml
+    expected_id: wuji_hand2_beta1_right_isaac_v2026_6_27_physical
+placements:
+  nero_left: table_near_left
+  nero_right: table_near_right
+runtime:
+  compatibility_profile: configs/profiles/isaac_nero_dual_tabletop_qualification_v1.yaml
+  transport_contract: null
+  control_layouts:
+    - instance_id: nero_left
+      group_id: arm_joints
+      layout_id: agilex_nero_q7_v1
+    - instance_id: hand_left
+      group_id: finger_joints
+      layout_id: wuji_hand2_left_firmware_v1
+    - instance_id: nero_right
+      group_id: arm_joints
+      layout_id: agilex_nero_q7_v1
+    - instance_id: hand_right
+      group_id: finger_joints
+      layout_id: wuji_hand2_right_firmware_v1

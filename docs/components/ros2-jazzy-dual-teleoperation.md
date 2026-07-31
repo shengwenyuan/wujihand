@@ -15,6 +15,7 @@ Gloves -> glove_source ---/
 
 - `configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml`
 - `configs/deployments/isaac_nero_hand2_ros_dual_arm_only_live_v2.yaml`
+- `configs/deployments/isaac_nero_hand2_ros_dual_robolab_banana_bowl_live_v2.yaml`
 - `configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml`
 - `configs/local/workstation2_nv5_ros_v2.yaml`（忽略、不提交）
 
@@ -59,6 +60,20 @@ ros2 launch wujihand_ros2 dual_teleoperation.launch.py \
   gui:=true record:=false
 ```
 
+RoboLab banana-in-bowl rich Workcell：
+
+```bash
+ros2 launch wujihand_ros2 dual_teleoperation.launch.py \
+  project_root:="$PWD" \
+  deployment:=configs/deployments/isaac_nero_hand2_ros_dual_robolab_banana_bowl_live_v2.yaml \
+  local_runtime_binding:=configs/local/workstation2_nv5_ros_v2.yaml \
+  gui:=true record:=false
+```
+
+该 Deployment 只替换 Session 所选 Workcell；双 NERO + Hand 2、Tracker/Glove
+source、控制映射和 supervisor 均沿用既有链路。banana 与 bowl 是可交互初始布局，
+不包含 reset、任务判定或 reward。
+
 逐进程入口由 local runtime binding 中的 Python 执行：
 
 ```text
@@ -87,3 +102,5 @@ side-local hold，再接受新 epoch 的 observation；同一 tick 内不得同�
 
 HIL 记录见
 [2026-07-31 NV-5 ROS 2 Jazzy Workstation2 HIL](../validation/2026-07-31-nv5-ros2-jazzy-hil.md)。
+RoboLab rich Workcell 验证见
+[2026-07-31 RoboLab banana-in-bowl ROS Deployment](../validation/2026-07-31-robolab-banana-bowl-ros.md)。
