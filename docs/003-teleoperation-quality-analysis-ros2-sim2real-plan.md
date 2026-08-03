@@ -187,7 +187,7 @@ flowchart LR
 
     subgraph OFF["独立离线分析平面"]
         M --> X["Validate + align"]
-        X --> P["Parquet derived views"]
+        X --> P["CSV derived views（可选 Parquet 后续）"]
         P --> K["Metrics + statistics"]
         K --> O["Plots + comparison + report"]
     end
@@ -244,7 +244,7 @@ Python 局部变量、SDK 对象或渲染帧缓存。最低闭包包括：
 
 ### 3.3 代码与依赖边界
 
-以下为后续目录方向，不表示当前文件已存在：
+当前离线分析器已按以下独立目录落地：
 
 ```text
 src/wujihand/                       # 生产主线
@@ -262,28 +262,27 @@ ros2/
 └── wujihand_ros2/
     └── recording/                 # ROS projection / QoS / recorder launch
 
-analysis/teleoperation_quality/    # 独立离线 package / 独立 pyproject
-├── artifact.py
-├── align.py
-├── metrics_common.py
-├── metrics_arm.py
-├── metrics_hand.py
-├── metrics_scene.py
-├── statistics.py
-├── plots.py
-└── report.py
+analysis/teleoperation_quality/    # 独立离线 package / 独立 pyproject + uv.lock
+├── src/teleoperation_quality/
+│   ├── artifact.py               # immutable artifact/checksum validator
+│   ├── ros2_reader.py            # 20-topic typed reader/schema validation
+│   ├── metrics.py                # causal align + common/arm/hand/scene metrics
+│   ├── statistics.py             # frozen statistics definitions
+│   ├── plots.py                  # deterministic PNG
+│   ├── report.py                 # presentation-only HTML
+│   └── pipeline.py               # atomic/checksummed output
+└── tests/                         # synthetic golden tests
 
 tools/analysis/                     # 仅离线薄 CLI
-├── validate_teleoperation_run.py
-├── analyze_teleoperation_run.py
-└── compare_teleoperation_runs.py
+└── analyze_teleoperation_run.py
 ```
 
 依赖约束：
 
 - `src/wujihand` 和 ROS package 不 import `analysis/teleoperation_quality`。
-- pandas/polars、Matplotlib/Seaborn/Plotly、Parquet export 和 HTML report 依赖只在
-  离线环境安装；生产当前因控制算法已有的 SciPy 依赖不得承载质量统计代码。
+- NumPy、Matplotlib、CSV/HTML report 依赖只在离线环境安装；后续若增加 pandas/polars、
+  Seaborn/Plotly 或 Parquet export，也不得进入生产依赖。生产当前因控制算法已有的 SciPy
+  依赖不得承载质量统计代码。
 - 离线 package 可以读取稳定 schema，但不得反向成为 control/recorder dependency。
 - 在线只记录 `stage_start_ns/stage_end_ns`；duration、percentile 和 jitter 离线相减。
 - 旧 schema 不原地改变字段语义；新增字段使用新 schema version 或 companion event。
@@ -545,7 +544,7 @@ application overwrite 与 recorder drop。
 
 - ROS2 使用 rosbag2 MCAP storage 时，bag metadata 与 MCAP 分片共同构成 raw truth；
 - UDP 使用同一事件 schema 写 MCAP；
-- Parquet 是派生分析表，不与 MCAP 同时宣称原始事实；
+- CSV（以及后续可选 Parquet）是派生分析表，不与 MCAP 同时宣称原始事实；
 - JSON/CSV/PNG/HTML 均由离线工具再生成，不作为不可替代的原始记录。
 
 生产 run 和离线 analysis 使用不同根目录：
@@ -1234,7 +1233,7 @@ recorder 可先作为 ADR-0008 下受控 launch sidecar；若正式写入
 `recorder_process_id`，再联动修订 ADR、schema、resolver、local binding 和 launch，
 不能只改 YAML。
 
-### Phase DATA-0：短 pilot 采集（紧随 REC-1）
+### Phase DATA-0：短 pilot 采集（已由 -05 完成）
 
 - 使用当前 banana-bowl ROS Deployment 和第 11.1 节动作 block；
 - 检查 topic/schema coverage、可回放、磁盘、drop/incomplete 和敏感身份保护；
@@ -1243,18 +1242,21 @@ recorder 可先作为 ADR-0008 下受控 launch sidecar；若正式写入
 
 退出条件：raw artifact 可独立验证，异常终止可识别，同一 run 可确定性导出事件表。
 
-### Phase OFF-0：独立离线 analyzer
+### Phase OFF-0：独立离线 analyzer（当前 v1 recording profile 已完成）
 
 交付：
 
 - 独立 `analysis/teleoperation_quality` 环境和依赖锁；
-- artifact validator、多时钟/多速率对齐、Parquet 导出；
+- artifact validator、多时钟/多速率对齐、完整 CSV derived views；
 - common/arm/hand/runtime/scene metrics；
 - JSON/CSV、统计图和 HTML report；
-- known-delay/error/missing/contact synthetic golden tests。
+- known-delay/error/missing、因果 join、q27 组合和原子输出 synthetic golden tests；contact
+  capability 缺失时保持 unsupported，不伪造测试结论。
 
-退出条件：无 ROS/Isaac/设备即可从只读 raw run 重建全部派生表和图片；production 不
-import analyzer；缺失/不可比字段不会补零。
+退出条件已由 `teleoperation_quality 0.1.2` 和 Workstation2 `-05` 全量分析满足：可从只读
+raw run 重建全部当前能力范围内的派生表和图片；production 不 import analyzer；缺失/不可比
+字段不会补零。结果见
+[banana grasp pilot -05 质量分析](validation/2026-08-03-ros2-banana-grasp-pilot-05-quality-analysis.md)。
 
 ### Phase DATA-1：重复基线与阈值
 
@@ -1304,7 +1306,7 @@ hardware 分开执行；离线分析测试不得启动 ROS/Isaac/CAN 或连接�
 
 ## 16. 完成定义
 
-### 16.1 当前下一里程碑：ROS2 仿真录制可正式采数
+### 16.1 ROS2 仿真录制短 pilot：已完成
 
 必须同时满足：
 
@@ -1321,7 +1323,8 @@ hardware 分开执行；离线分析测试不得启动 ROS/Isaac/CAN 或连接�
 
 新 `record=true` 已覆盖完整 allowlist 和 companion trace，并已在 Workstation2 完成
 IDL 构建、MCAP 回放、抓放 pilot 与有序关闭复验。它已满足短 pilot 采集管线 Gate，
-但仍不代表 60 Hz 控制、离线质量分析或正式数据集已经完成。
+但仍不代表 60 Hz 控制或正式数据集已经完成。离线分析器随后已落地，且对 `-05` 的结果明确
+判定其不满足当前四流 60 Hz 数据集基线。
 
 ### 16.2 独立离线质量分析完成
 
@@ -1330,9 +1333,10 @@ IDL 构建、MCAP 回放、抓放 pilot 与有序关闭复验。它已满足短 
 1. analyzer 从只读 raw run 验证 manifest/receipt/checksum/inventory，再生成版本化派生物；
 2. 多时钟、多速率对齐显式报告 coverage、误差和不确定度，不补零、不把无数据当零误差；
 3. 机械臂与机械手分别有 primary metrics，并提供左右、单路/并发及 cross-stream 对照；
-4. arm、hand、runtime、scene/contact 指标具有 synthetic golden tests；尚无 Task truth 时
-   task success 明确为不可用；
-5. JSON/CSV/Parquet、统计图和报告均记录 analyzer 版本、输入 run/hash、参数和 capability；
+4. arm、hand、runtime、scene 指标具有 synthetic golden tests；contact capability 尚未录制，
+   contact 与 task success 明确为不可用；
+5. JSON/CSV（后续可选 Parquet）、统计图和报告均记录 analyzer 版本、输入 run/hash、参数和
+   capability；
 6. repeated baseline 与 holdout 完成后才冻结 release threshold 和最小样本量。
 
 ### 16.3 不作为当前阻塞条件

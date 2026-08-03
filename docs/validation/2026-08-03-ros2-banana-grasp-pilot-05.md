@@ -16,3 +16,6 @@
 
 本次确认 ADR-0009 的有序关闭竞态已经修复。该 PASS 只覆盖录制闭合与产物完整性，
 不替代 topic/sequence 离线质量分析，也不宣称 60 Hz 控制目标已经达成。
+
+后续完整质量结论见
+[banana grasp pilot -05 质量分析](2026-08-03-ros2-banana-grasp-pilot-05-quality-analysis.md)。
