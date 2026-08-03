@@ -51,6 +51,18 @@ post-step 状态闭合到同一控制 tick。
   `complete`；
 - 尚未形成正式数据集。
 
+## 后续计划：踏板终止 episode
+
+- 使用独立有线双踏板：一侧标记 `success`，另一侧标记 `abort`；通过稳定设备路径读取，
+  不复用键盘焦点，也不进入手臂/手部遥操作输入。
+- 独立 recording supervisor 对踏板输入做独占读取、去抖和单次锁存，并记录
+  `run_id`、递增序号、主机 monotonic timestamp 与 outcome；重复触发必须幂等。
+- 锁存时刻作为数据集 episode 的逻辑截止点；控制端进入 hold，随后沿现有 terminal
+  ack → receipt → rosbag SIGINT → checksum 顺序有序闭合。
+- 未来真机沿用该 episode 语义，但踏板终止不得替代硬件急停、安全 PLC 或驱动器停机。
+- 手势和语音不作为主终止方式，避免污染动作数据或产生误触发。本项当前仅为计划，
+  尚未实现。
+
 ## 验证责任
 
 - 普通 Python：schema round-trip、q20/q27 保真、run closure/incomplete、topic/QoS 投影；
