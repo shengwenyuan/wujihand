@@ -198,7 +198,7 @@ Wuji Glove hand_skeleton
 来源、标定或 frame epoch 切换后必须先 reset retargeter。
 
 完整且 finite 的 skeleton 不再因低置信度被硬阻塞：21 个 landmark 的最低置信度
-`<0.90` 时产生 `DEGRADED` intent，`>=0.90` 时为 `SUCCESS`；默认硬拒绝下限为
+`<0.60` 时产生 `DEGRADED` intent，`>=0.60` 时为 `SUCCESS`；默认硬拒绝下限为
 `0.0`。缺帧或被拒绝的观测不会创建新的 input-derived `HandIntent`；supervisor
 可在 `0.25 s` freshness 窗内保持最后有效命令，超时后生成渐进 return-to-rest
 安全输出。该安全输出不是由 invalid input 派生的新 q20 intent。

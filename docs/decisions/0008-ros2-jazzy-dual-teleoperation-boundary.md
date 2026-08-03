@@ -1,7 +1,7 @@
 # ADR-0008：ROS 2 Jazzy 双侧遥操作边界
 
-- 状态：已接受，待 Workstation2 硬件 HIL 收口
-- 日期：2026-07-30
+- 状态：已接受，Workstation2 HIL 已完成；录制扩展见 ADR-0009
+- 日期：2026-07-31
 - 上位计划：[001：NERO + VIVE 双臂遥操作版本计划](../001-nero-vive-dual-arm-teleoperation-version-plan.md)
 - 前置决策：[ADR-0007：NV-4 原生双侧遥操作与 Deployment 边界](0007-nv4-native-dual-teleoperation-deployment.md)
 
@@ -49,6 +49,10 @@ glove_source LifecycleNode ----/
 Glove；Isaac consumer 是唯一 articulation command owner。ROS command topics 只用于
 观测，不存在回灌 subscriber。
 
+可选的被动 rosbag2 sidecar 不属于 execution graph，不改变上述 owner 边界；其录制
+契约、ready Gate 和产物闭合见
+[ADR-0009](0009-ros2-full-causal-recording-boundary.md)。
+
 ### 4. Deployment v2 与本机环境分离
 
 `wujihand.deployment.v2` 记录 ROS node/process graph、namespace、QoS 引用和唯一 owner。
@@ -60,7 +64,7 @@ Deployment v1 猜测 ROS graph；本机绑定转换必须显式提供三个进�
 
 ### 5. Typed IDL、QoS 与 epoch
 
-控制输入使用五个版本化 custom message；Tracker quaternion 保持 `wxyz`，Hand 保持
+控制输入使用五个版本化 custom message；接口集 v2 另增加三个只读录制消息。Tracker quaternion 保持 `wxyz`，Hand 保持
 固定 21 landmark 顺序。输入 subscriber 使用 depth=1 latest inbox，并按
 `producer_instance + transport_epoch + sequence` 拒绝重复、倒序和旧 producer。
 

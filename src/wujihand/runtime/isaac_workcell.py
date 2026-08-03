@@ -25,6 +25,7 @@ class IsaacWorkcellMaterialization:
     primitive_prim_paths: tuple[str, ...]
     collider_paths: tuple[str, ...]
     fixed_collider_paths: tuple[str, ...]
+    fixed_rigid_body_paths: tuple[str, ...]
     rigid_body_paths: tuple[str, ...]
     physics_scene_paths: tuple[str, ...]
     light_paths: tuple[str, ...]
@@ -40,6 +41,9 @@ class IsaacWorkcellMaterialization:
             "primitive_prim_paths": list(self.primitive_prim_paths),
             "collider_paths": list(self.collider_paths),
             "fixed_collider_paths": list(self.fixed_collider_paths),
+            "fixed_rigid_body_paths": list(
+                self.fixed_rigid_body_paths
+            ),
             "rigid_body_paths": list(self.rigid_body_paths),
             "physics_scene_paths": list(self.physics_scene_paths),
             "light_paths": list(self.light_paths),
@@ -239,6 +243,20 @@ def materialize_isaac_workcell(
             "preserve lighting policy requires an imported light"
         )
 
+    for path in plan.fixed_rigid_body_paths:
+        prim = stage.GetPrimAtPath(path)
+        if not prim.IsValid():
+            raise RuntimeError(
+                f"fixed rigid-body override did not resolve: {path}"
+            )
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            raise RuntimeError(
+                f"fixed rigid-body override is not a rigid body: {path}"
+            )
+        UsdPhysics.RigidBodyAPI(prim).CreateRigidBodyEnabledAttr(
+            False
+        ).Set(False)
+
     colliders = tuple(
         sorted(
             str(prim.GetPath())
@@ -282,6 +300,18 @@ def materialize_isaac_workcell(
             UsdPhysics,
         )
     )
+    for path in plan.fixed_rigid_body_paths:
+        if path in rigid_bodies:
+            raise RuntimeError(
+                f"fixed rigid-body override remained dynamic: {path}"
+            )
+        if not any(
+            collider == path or collider.startswith(path + "/")
+            for collider in fixed_colliders
+        ):
+            raise RuntimeError(
+                f"fixed rigid-body override has no fixed collider: {path}"
+            )
     physics_scenes = tuple(
         sorted(
             str(prim.GetPath())
@@ -309,6 +339,7 @@ def materialize_isaac_workcell(
         primitive_prim_paths=tuple(primitive_paths),
         collider_paths=colliders,
         fixed_collider_paths=fixed_colliders,
+        fixed_rigid_body_paths=plan.fixed_rigid_body_paths,
         rigid_body_paths=rigid_bodies,
         physics_scene_paths=physics_scenes,
         light_paths=lights,

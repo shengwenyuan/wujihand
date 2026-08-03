@@ -39,7 +39,8 @@ def test_transport_neutral_profile_preserves_validated_policy() -> None:
     assert profile.tracker.max_consecutive_ik_failures == 5
     assert profile.kinematics.end_effector_frame == "link7"
     assert profile.arm_supervision.velocity_scale == pytest.approx(0.20)
-    assert profile.glove.success_landmark_confidence == pytest.approx(0.90)
+    assert profile.glove.minimum_landmark_confidence == 0.0
+    assert profile.glove.success_landmark_confidence == pytest.approx(0.60)
     assert profile.hand_supervision.velocity_scale == 1.0
 
 
@@ -73,7 +74,7 @@ def test_transport_neutral_session_resolves_all_five_layers() -> None:
             lambda value: value["glove"].update(
                 {
                     "minimum_landmark_confidence": 0.95,
-                    "success_landmark_confidence": 0.90,
+                    "success_landmark_confidence": 0.60,
                 }
             ),
             "must not exceed",

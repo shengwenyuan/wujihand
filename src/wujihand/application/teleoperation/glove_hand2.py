@@ -25,6 +25,7 @@ class Hand2SimulationStep:
     """One supervised command and whether a new observation was accepted."""
 
     intent: HandIntent | None
+    active_intent: HandIntent | None
     decision: SafetyDecision
     rejection_reason: str | None = None
 
@@ -84,6 +85,7 @@ class GloveHand2SimulationController:
             self._pending_hold_reason = None
             return Hand2SimulationStep(
                 intent=None,
+                active_intent=None,
                 decision=self.supervisor.hold(
                     now_ns=now_ns,
                     reason=reason,
@@ -116,7 +118,11 @@ class GloveHand2SimulationController:
         )
         self._intent_sequence += 1
         self._last_intent = intent
-        return Hand2SimulationStep(intent=intent, decision=decision)
+        return Hand2SimulationStep(
+            intent=intent,
+            active_intent=intent,
+            decision=decision,
+        )
 
     def advance_without_observation(self, *, now_ns: int) -> Hand2SimulationStep:
         """Advance supervision using the last intent until it becomes stale."""
@@ -162,6 +168,7 @@ class GloveHand2SimulationController:
         )
         return Hand2SimulationStep(
             intent=None,
+            active_intent=intent,
             decision=decision,
             rejection_reason=rejection_reason,
         )

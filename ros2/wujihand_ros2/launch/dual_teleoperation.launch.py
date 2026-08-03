@@ -7,26 +7,33 @@ from pathlib import Path
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
+    EmitEvent,
     ExecuteProcess,
     OpaqueFunction,
+    RegisterEventHandler,
 )
+from launch.event_handlers import OnProcessExit
+from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 
-from wujihand.runtime import RosDeploymentResolver
+from wujihand.runtime import RosDeploymentResolver, new_run_id, run_root
+from wujihand_ros2.recording import recording_topics, source_topics
 
 
 def _processes(context: object) -> list[object]:
-    project_root = Path(
-        LaunchConfiguration("project_root").perform(context)
-    ).resolve()
+    project_root = Path(LaunchConfiguration("project_root").perform(context)).resolve()
     deployment_path = LaunchConfiguration("deployment").perform(context)
-    local_path = LaunchConfiguration(
-        "local_runtime_binding"
-    ).perform(context)
+    local_path = LaunchConfiguration("local_runtime_binding").perform(context)
     gui = LaunchConfiguration("gui").perform(context).lower() == "true"
     frames = int(LaunchConfiguration("frames").perform(context))
-    record = (
-        LaunchConfiguration("record").perform(context).lower() == "true"
+    record = LaunchConfiguration("record").perform(context).lower() == "true"
+    requested_run_id = (
+        LaunchConfiguration(
+            "run_id",
+            default="",
+        )
+        .perform(context)
+        .strip()
     )
     if not gui and frames < 1:
         raise ValueError("headless launch requires frames > 0")
@@ -37,15 +44,19 @@ def _processes(context: object) -> list[object]:
     )
     runtime_environment = {
         "ROS_DOMAIN_ID": str(resolved.local_binding.ros_domain_id),
-        "RMW_IMPLEMENTATION": (
-            resolved.local_binding.rmw_implementation
-        ),
+        "RMW_IMPLEMENTATION": (resolved.local_binding.rmw_implementation),
     }
     if resolved.local_binding.dds_profile is not None:
-        runtime_environment["FASTRTPS_DEFAULT_PROFILES_FILE"] = (
-            resolved.local_binding.dds_profile
-        )
+        runtime_environment["FASTRTPS_DEFAULT_PROFILES_FILE"] = resolved.local_binding.dds_profile
     namespace = f"/{resolved.deployment.root_namespace}"
+    current_run_id = requested_run_id or new_run_id()
+    current_run_root = run_root(
+        project_root,
+        resolved.deployment.report_root,
+        current_run_id,
+    )
+    if record and current_run_root.exists():
+        raise FileExistsError(f"recording run directory already exists: {current_run_root}")
     common_ros_args = [
         "--ros-args",
         "-r",
@@ -62,9 +73,7 @@ def _processes(context: object) -> list[object]:
         "vive_source": "wujihand_ros2.nodes.vive_source",
         "glove_source": "wujihand_ros2.nodes.glove_source",
     }
-    deployment_processes = {
-        process.process_id for process in resolved.deployment.processes
-    }
+    deployment_processes = {process.process_id for process in resolved.deployment.processes}
     lifecycle_nodes = []
     for process_id, module in source_modules.items():
         if process_id not in deployment_processes:
@@ -102,57 +111,90 @@ def _processes(context: object) -> list[object]:
     ]
     if frames:
         consumer_command.extend(["--frames", str(frames)])
-    actions.append(
-        ExecuteProcess(
-            cmd=consumer_command,
-            name="isaac_consumer",
+    if record:
+        consumer_command.extend(
+            [
+                "--recording-enabled",
+                "--run-id",
+                current_run_id,
+                "--run-root",
+                str(current_run_root),
+            ]
+        )
+    consumer_action = ExecuteProcess(
+        cmd=consumer_command,
+        name="isaac_consumer",
+        output="screen",
+        sigterm_timeout="20",
+        additional_env=runtime_environment,
+    )
+    actions.append(consumer_action)
+    recorder_action = None
+    if record:
+        recorder_topics = recording_topics(
+            namespace,
+            resolved.route_plan,
+        )
+        recorder_command = [
+            "/usr/bin/python3",
+            str(project_root / "tools/run_rosbag_recording.py"),
+            "--run-root",
+            str(current_run_root),
+            "--run-id",
+            current_run_id,
+            "--qos-profile",
+            str(project_root / "configs/profiles/ros2_jazzy_dual_teleoperation_rosbag_qos_v1.yaml"),
+        ]
+        for topic in recorder_topics:
+            recorder_command.extend(["--topic", topic])
+        recorder_action = ExecuteProcess(
+            cmd=recorder_command,
+            name="rosbag2",
             output="screen",
-            sigterm_timeout="20",
+            sigterm_timeout="30",
             additional_env=runtime_environment,
         )
-    )
+        actions.append(recorder_action)
+    lifecycle_command = [
+        "/usr/bin/python3",
+        "-m",
+        "wujihand_ros2.lifecycle_activate",
+    ]
+    if record:
+        for topic in source_topics(namespace, resolved.route_plan):
+            lifecycle_command.extend(["--wait-for-subscriber-topic", topic])
+        lifecycle_command.extend(["--minimum-subscribers", "2"])
+    lifecycle_command.extend(lifecycle_nodes)
     actions.append(
         ExecuteProcess(
-            cmd=[
-                "/usr/bin/python3",
-                "-m",
-                "wujihand_ros2.lifecycle_activate",
-                *lifecycle_nodes,
-            ],
+            cmd=lifecycle_command,
             name="lifecycle_activate",
             output="screen",
             additional_env=runtime_environment,
         )
     )
     if record:
-        topics = [
-            f"{namespace}/input/tracker/left/sample",
-            f"{namespace}/input/tracker/right/sample",
-            f"{namespace}/input/tracker/lifecycle",
-            f"{namespace}/input/glove/left/observation",
-            f"{namespace}/input/glove/right/observation",
-        ]
+        assert recorder_action is not None
         actions.append(
-            ExecuteProcess(
-                cmd=[
-                    "ros2",
-                    "bag",
-                    "record",
-                    "--storage",
-                    "mcap",
-                    "--output",
-                    str(project_root / "artifacts/runs/nv5/rosbag"),
-                    "--qos-profile-overrides-path",
-                    str(
-                        project_root
-                        / "configs/profiles/"
-                        "ros2_jazzy_dual_teleoperation_rosbag_qos_v1.yaml"
-                    ),
-                    *topics,
-                ],
-                name="rosbag2",
-                output="screen",
-                additional_env=runtime_environment,
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=consumer_action,
+                    on_exit=[
+                        EmitEvent(
+                            event=Shutdown(reason=("Isaac consumer closed; finalize recording"))
+                        )
+                    ],
+                )
+            )
+        )
+        actions.append(
+            RegisterEventHandler(
+                OnProcessExit(
+                    target_action=recorder_action,
+                    on_exit=[
+                        EmitEvent(event=Shutdown(reason=("Recorder closed; stop the recorded run")))
+                    ],
+                )
             )
         )
     return actions
@@ -167,20 +209,16 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "deployment",
-                default_value=(
-                    "configs/deployments/"
-                    "isaac_nero_hand2_ros_dual_live_v2.yaml"
-                ),
+                default_value=("configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"),
             ),
             DeclareLaunchArgument(
                 "local_runtime_binding",
-                default_value=(
-                    "configs/local/workstation2_nv5_ros_v2.yaml"
-                ),
+                default_value=("configs/local/workstation2_nv5_ros_v2.yaml"),
             ),
             DeclareLaunchArgument("gui", default_value="true"),
             DeclareLaunchArgument("frames", default_value="0"),
             DeclareLaunchArgument("record", default_value="false"),
+            DeclareLaunchArgument("run_id", default_value=""),
             OpaqueFunction(function=_processes),
         ]
     )

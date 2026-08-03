@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import re
 from typing import Self
@@ -24,6 +25,7 @@ _GROUND_POLICIES = frozenset({"preserve", "project", "none"})
 _PHYSICS_SCENE_POLICIES = frozenset({"preserve", "project"})
 _CAMERA_POLICIES = frozenset({"preserve", "project"})
 _LIGHTING_MODES = frozenset({"preserve", "project", "selected_hdr"})
+_PRIM_PATH_COMPONENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _choice(
@@ -74,6 +76,29 @@ def _color3(
     return (channels[0], channels[1], channels[2])
 
 
+def _relative_prim_paths(
+    value: object,
+    *,
+    field: str,
+) -> tuple[str, ...]:
+    items = require_sequence(value, field=field)
+    result: list[str] = []
+    for index, item in enumerate(items):
+        path = require_string(item, field=f"{field}[{index}]")
+        components = path.split("/")
+        if not components or any(
+            _PRIM_PATH_COMPONENT.fullmatch(component) is None
+            for component in components
+        ):
+            raise ValueError(
+                f"{field}[{index}] must be a relative USD prim path"
+            )
+        result.append(path)
+    if len(set(result)) != len(result):
+        raise ValueError(f"{field} must not contain duplicates")
+    return tuple(result)
+
+
 @dataclass(frozen=True, slots=True)
 class ContentSpec:
     """A source-locked path with a digest duplicated into the profile identity."""
@@ -118,13 +143,23 @@ class IsaacWorkcellPolicies:
     physics_scene: str
     camera: str
     collision: str
+    fixed_rigid_body_paths: tuple[str, ...]
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str) -> Self:
+        base_keys = frozenset(
+            {"ground", "physics_scene", "camera", "collision"}
+        )
+        has_fixed_overrides = bool(
+            isinstance(value, Mapping)
+            and "fixed_rigid_body_paths" in value
+        )
         data = require_exact_mapping(
             value,
-            expected=frozenset(
-                {"ground", "physics_scene", "camera", "collision"}
+            expected=(
+                base_keys | {"fixed_rigid_body_paths"}
+                if has_fixed_overrides
+                else base_keys
             ),
             field=field,
         )
@@ -151,6 +186,14 @@ class IsaacWorkcellPolicies:
                 field=f"{field}.camera",
             ),
             collision=collision,
+            fixed_rigid_body_paths=(
+                _relative_prim_paths(
+                    data["fixed_rigid_body_paths"],
+                    field=f"{field}.fixed_rigid_body_paths",
+                )
+                if has_fixed_overrides
+                else ()
+            ),
         )
 
     def to_mapping(self) -> dict[str, object]:
@@ -159,6 +202,9 @@ class IsaacWorkcellPolicies:
             "physics_scene": self.physics_scene,
             "camera": self.camera,
             "collision": self.collision,
+            "fixed_rigid_body_paths": list(
+                self.fixed_rigid_body_paths
+            ),
         }
 
 

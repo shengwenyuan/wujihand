@@ -59,6 +59,13 @@ def test_robolab_workcell_compiles_to_content_identity_and_hybrid_ops() -> None:
     assert plan.lighting.visible_in_primary_ray is False
     assert plan.lighting.background_color_rgb == (0.12, 0.12, 0.12)
     assert plan.primitives == ()
+    assert plan.fixed_rigid_body_paths == (
+        "/World/Environment/robolab_banana_bowl/table",
+        "/World/Environment/robolab_banana_bowl/bowl",
+    )
+    assert mapping["fixed_rigid_body_paths"] == list(
+        plan.fixed_rigid_body_paths
+    )
     encoded = json.dumps(mapping, sort_keys=True)
     assert str(ROOT) not in encoded
     assert "local_runtime_path" not in encoded

@@ -1,6 +1,6 @@
 # NERO + Hand 2 + Wuji Glove 仿真全流程透明说明
 
-状态：**CURRENT / 2026-07-29**。预计阅读时间：5 分钟。
+状态：**CURRENT / 2026-08-03**。预计阅读时间：5 分钟。
 
 本文回答四个问题：Isaac 里加载了什么、Glove 发来什么、信号如何变成 Hand 2
 动作，以及 `confidence`、`supervisor`、`qualification` 到底会不会阻止动作。
@@ -11,8 +11,8 @@
   2 棵 q27、4 条逻辑控制 route、54 个逻辑 DoF。
 - 一次 Glove live 只拥有所选侧的 Hand 2 q20。两台 NERO q7 和另一只 Hand 2
   的命令保持不变，也没有 ROS、CAN 或真机命令输出。
-- 当前置信度策略很宽松：取 21 个 landmark 的最低置信度；`<0.90` 只标记
-  `DEGRADED`，仍然控制仿真手；`>=0.90` 标记 `SUCCESS`。硬拒绝下限是 `0.0`。
+- 当前置信度策略很宽松：取 21 个 landmark 的最低置信度；`<0.60` 只标记
+  `DEGRADED`，仍然控制仿真手；`>=0.60` 标记 `SUCCESS`。硬拒绝下限是 `0.0`。
 - `qualification` 是可记录的仿真测试 Gate，不是手套标定，也不是每帧动作滤波。
   Glove live 启动前最多等待 60 个仿真帧，随后在限定帧数内运行，并在结束时检查
   目标手响应、双臂/另一只手隔离和反馈有限值等条件。
@@ -128,11 +128,11 @@ address、最后才是 handedness；当前左右实测均使用 handedness 选�
 |---|---|
 | 任一 confidence 非有限或不在 `[0,1]` | canonical 构造失败，拒绝该帧 |
 | 点缺失、position 非法、side/frame/order 不符 | 拒绝该帧，不生成新 intent |
-| 21 点完整有限，最低 confidence `<0.90` 且 `>=0.0` | 生成 `DEGRADED` intent，**仍用于控制** |
-| 21 点完整有限，最低 confidence `>=0.90` | 生成 `SUCCESS` intent并用于控制 |
+| 21 点完整有限，最低 confidence `<0.60` 且 `>=0.0` | 生成 `DEGRADED` intent，**仍用于控制** |
+| 21 点完整有限，最低 confidence `>=0.60` | 生成 `SUCCESS` intent并用于控制 |
 | SDK retarget 输出不是有限 `(20,)` q20 | 拒绝该帧，不生成新 intent |
 
-这里取的是 21 点的 **minimum**，不是均值；只要一个点低于 `0.90`，整帧就记为
+这里取的是 21 点的 **minimum**，不是均值；只要一个点低于 `0.60`，整帧就记为
 `DEGRADED`。项目代码目前不会因为 `DEGRADED` 缩小动作、降低速度或回到 rest；
 supervisor 接收到的仍是完整 q20。该标签目前用于 provenance、计数和后续调参，
 不等于 supervisor 的 `DEGRADED` 安全状态。

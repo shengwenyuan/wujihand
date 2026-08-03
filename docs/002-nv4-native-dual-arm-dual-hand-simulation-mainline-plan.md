@@ -642,7 +642,7 @@ native-dual DeploymentSpec，四路 decision 在一个 tick 后按侧合并为�
 |---|---|---|
 | 默认设备完整性 | 默认主线要求 2 Tracker + 2 Glove 全部就绪；单侧只留 diagnostic/fixture | 避免默认主线继续积累单侧模式分支 |
 | 仿真单侧故障 | 只 hold/disarm 对应侧；共享 tracking/backend/config 故障才全局暂停 | 保留当前 GUI 恢复逻辑并直接验证隔离 |
-| Glove confidence | 保留当前 live 证据采用的“finite 完整帧可 degraded，`0.90` 为 success 阈值”行为；ADR-0007 显式 supersede ADR-0006 的旧 `<0.90` reject 条款 | 当前左右 live 的最低置信度不足以支持静默改成 `<0.90` 全拒绝 |
+| Glove confidence | finite 完整帧可 degraded、floor 保持 `0.0`；2026-08-03 抓放 pilot 后将 success 标签阈值校准为 `0.60`；ADR-0007 supersede ADR-0006 的旧 `<0.90` reject 条款 | 抓取中最低置信度会短时低于 `0.50`，不得把标签阈值改成硬拒绝 |
 | Tracker 坐标资格 | 两枚 Tracker 必须证明来自同一 OpenVR runtime / Standing universe / setup revision / `vive_tracking`；各侧 handle 外参、anchor、reference 独立 | 当前已配置不等于坐标已一致；不支持两套 tracking world 的隐式拼接 |
 | Workstation2 live mapping | canonical mapping 为 1:1、X/Y/Z 各 `±0.4 m`，接受约 `0.693 m` 角点位移 | 单一配置负责坐标和 mapping clamp，IK 失败沿用当前逻辑，不宣称全包络可达或适用于真机 |
 | 单侧 arm+hand 诊断 | 提供左右两个 committed DeploymentSpec；活动侧 live、非活动侧显式 hold/rest | 共用双侧 Session 与组件，只切换 `--deployment`，不增加 `--side` 分支 |

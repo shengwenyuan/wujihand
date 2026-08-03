@@ -1056,12 +1056,12 @@ def _run_glove_live(
         "calibration_id": ARGS.glove_calibration_id,
         "degraded_intent_policy": (
             "complete finite skeletons are admitted; minimum landmark "
-            "confidence <0.90 is DEGRADED and >=0.90 is SUCCESS"
+            "confidence <0.60 is DEGRADED and >=0.60 is SUCCESS"
         ),
         "confidence_policy": {
             "aggregation": "minimum_of_21_landmarks",
             "hard_rejection_floor": 0.0,
-            "success_threshold": 0.9,
+            "success_threshold": 0.6,
             "low_confidence_action": "admit_as_degraded_intent",
         },
         "supervisor_policy": {

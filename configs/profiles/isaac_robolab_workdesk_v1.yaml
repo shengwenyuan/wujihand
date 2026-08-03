@@ -16,6 +16,7 @@ policies:
   physics_scene: project
   camera: project
   collision: preserve
+  fixed_rigid_body_paths: []
 lighting:
   mode: selected_hdr
   content:

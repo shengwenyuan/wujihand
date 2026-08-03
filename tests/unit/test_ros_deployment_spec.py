@@ -62,6 +62,7 @@ def test_committed_ros_v2_contracts_are_strict_and_closed() -> None:
 
     assert RosDeploymentSpec.from_mapping(full.to_mapping()) == full
     assert full.execution_owner_process_id == "isaac_consumer"
+    assert full.interface_set_id == "wujihand_interfaces_v2"
     assert full.root_namespace == "wujihand/v1/teleop"
     assert {node.process_id for node in full.node_bindings} == {
         "vive_source",

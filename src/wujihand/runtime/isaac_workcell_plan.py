@@ -102,6 +102,7 @@ class ResolvedIsaacWorkcellPlan:
     profile_path: str | None
     imports: tuple[ResolvedIsaacUsdImport, ...]
     primitives: tuple[ResolvedIsaacPrimitive, ...]
+    fixed_rigid_body_paths: tuple[str, ...]
     policies: IsaacWorkcellPolicies
     lighting: ResolvedIsaacLighting
     expectations: IsaacSceneExpectations | None
@@ -119,6 +120,9 @@ class ResolvedIsaacWorkcellPlan:
             "primitives": [
                 operation.to_mapping() for operation in self.primitives
             ],
+            "fixed_rigid_body_paths": list(
+                self.fixed_rigid_body_paths
+            ),
             "policies": self.policies.to_mapping(),
             "lighting": self.lighting.to_mapping(),
             "expectations": (
@@ -168,6 +172,7 @@ def resolve_isaac_workcell_plan(
             physics_scene="project",
             camera="project",
             collision="preserve",
+            fixed_rigid_body_paths=(),
         )
         imports: tuple[ResolvedIsaacUsdImport, ...] = ()
         lighting = ResolvedIsaacLighting(
@@ -226,6 +231,12 @@ def resolve_isaac_workcell_plan(
         expectations = profile.expectations
         profile_id = profile.profile_id
 
+    fixed_rigid_body_paths = tuple(
+        f"{operation.prim_path}/{relative_path}"
+        for operation in imports
+        for relative_path in policies.fixed_rigid_body_paths
+    )
+
     return ResolvedIsaacWorkcellPlan(
         schema=RESOLVED_ISAAC_WORKCELL_PLAN_SCHEMA,
         workcell_id=workcell.workcell_id,
@@ -233,6 +244,7 @@ def resolve_isaac_workcell_plan(
         profile_path=profile_path,
         imports=imports,
         primitives=primitives,
+        fixed_rigid_body_paths=fixed_rigid_body_paths,
         policies=policies,
         lighting=lighting,
         expectations=expectations,

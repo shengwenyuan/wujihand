@@ -1,0 +1,13 @@
+string<=128 schema
+string<=128 run_id
+uint64 tick_id
+string<=512 prim_path
+uint64 recorded_time_ns
+string<=128 clock_domain
+float64[3] position_m
+float64[4] quat_wxyz
+bool has_linear_velocity
+float64[3] linear_velocity_m_s
+bool has_angular_velocity
+float64[3] angular_velocity_deg_s
+bool kinematic_enabled

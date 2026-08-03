@@ -23,6 +23,14 @@ from .tracking import (
     tracked_sample_from_message,
     tracked_sample_to_message,
 )
+from .recording import (
+    run_recording_status_from_message,
+    run_recording_status_to_message,
+    scene_rigid_body_state_from_message,
+    scene_rigid_body_state_to_message,
+    teleoperation_tick_trace_from_message,
+    teleoperation_tick_trace_to_message,
+)
 
 __all__ = [
     "HAND_OBSERVATION_ENVELOPE_SCHEMA",
@@ -38,8 +46,14 @@ __all__ = [
     "route_command_from_decision",
     "route_command_from_message",
     "route_command_to_message",
+    "run_recording_status_from_message",
+    "run_recording_status_to_message",
     "safety_event_from_message",
     "safety_event_to_message",
+    "scene_rigid_body_state_from_message",
+    "scene_rigid_body_state_to_message",
+    "teleoperation_tick_trace_from_message",
+    "teleoperation_tick_trace_to_message",
     "tracked_sample_from_message",
     "tracked_sample_to_message",
 ]

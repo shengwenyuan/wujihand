@@ -1499,7 +1499,7 @@ hardware 等非入口项仍为 `PARTIAL`。所有转移债务必须在 NV-9 发�
 | NV-4 单侧诊断 | `left_single_live` / `right_single_live` DeploymentSpec 复用双侧 Session；活动侧 live、非活动侧显式 hold/rest，不增加 runner side/mode 分支 |
 | NV-4 组合控制 Gate | XYZ-only、RPY-only、XYZ+RPY relative SE(3) 分别验收，不用两个单项替代组合测试 |
 | NV-4 仿真故障 | 单侧 Tracker/IK/Glove 故障只影响对应侧；共享 universe/mapping/Session/Isaac 故障共同暂停 |
-| Glove confidence | finite 完整低置信度帧可标为 degraded，`0.90` 为 success 阈值；ADR-0007 显式 supersede ADR-0006 的旧硬拒绝条款 |
+| Glove confidence | finite 完整低置信度帧可标为 degraded，floor 为 `0.0`；2026-08-03 抓放 pilot 后 success 标签阈值为 `0.60`；ADR-0007 supersede ADR-0006 的旧硬拒绝条款 |
 | Hand 2 仿真表示 | 左右均使用官方完整物理 USD；保留 articulation/rigid body/collision/q20 drive |
 | Hand 2 命令 | NV-2 沿用 Session v1，左右 q20 与左右 NERO q7 均显式 commanded；不新增 inactive/Session v2 |
 | Glove→Hand2 | `hand_skeleton` canonical 21×3 m → Hand2/side retarget → q20 rad；不直通 21 DoF 人手角 |

@@ -45,6 +45,15 @@ from .ros_local_binding import (
     RosProcessEnvironment,
     build_ros_local_runtime_binding,
 )
+from .run_recording import (
+    SignalStopRequest,
+    consumer_receipt_is_terminal,
+    finalize_rosbag_recording,
+    new_run_id,
+    run_root,
+    write_consumer_receipt,
+    write_manifest,
+)
 from .native_dual_plan import (
     NATIVE_DUAL_RUNTIME_COMPONENT,
     NativeDualRoutePlan,
@@ -117,6 +126,7 @@ __all__ = [
     "SessionControlFacts",
     "SourceLock",
     "SourceRecord",
+    "SignalStopRequest",
     "RosDeploymentResolver",
     "RosProcessEnvironment",
     "TableConfig",
@@ -129,6 +139,12 @@ __all__ = [
     "build_dual_teleoperation_route_plan",
     "common_deployment_projection",
     "ensure_modelscope_dataset",
+    "consumer_receipt_is_terminal",
+    "finalize_rosbag_recording",
+    "new_run_id",
     "resolve_isaac_workcell_plan",
+    "run_root",
     "validate_transport_pair",
+    "write_consumer_receipt",
+    "write_manifest",
 ]

@@ -23,3 +23,78 @@
   depth: 1
   reliability: best_effort
   durability: volatile
+/wujihand/v1/teleop/left/arm/command:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/left/arm/feedback:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/left/arm/safety:
+  history: keep_last
+  depth: 16
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/left/hand/command:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/left/hand/feedback:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/left/hand/safety:
+  history: keep_last
+  depth: 16
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/right/arm/command:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/right/arm/feedback:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/right/arm/safety:
+  history: keep_last
+  depth: 16
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/right/hand/command:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/right/hand/feedback:
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/right/hand/safety:
+  history: keep_last
+  depth: 16
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/runtime/tick:
+  history: keep_last
+  depth: 8
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/scene/rigid_body_state:
+  history: keep_last
+  depth: 32
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/recording/status:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local

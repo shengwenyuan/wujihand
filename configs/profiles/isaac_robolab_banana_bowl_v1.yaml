@@ -16,6 +16,9 @@ policies:
   physics_scene: project
   camera: project
   collision: preserve
+  # Task fixtures must not move under arm/hand/object contact. The banana is
+  # intentionally omitted and remains the only dynamic task object.
+  fixed_rigid_body_paths: [table, bowl]
 lighting:
   mode: selected_hdr
   content:

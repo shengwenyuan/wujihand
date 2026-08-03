@@ -22,8 +22,10 @@ arm_supervision:
   velocity_scale: 0.20
 glove:
   max_observation_age_s: 0.25
+  # Admission remains permissive: pilot -02 dipped below 0.50 during a valid
+  # grasp. Confidence is retained as provenance and a quality label only.
   minimum_landmark_confidence: 0.0
-  success_landmark_confidence: 0.90
+  success_landmark_confidence: 0.60
 hand_supervision:
   stale_after_s: 0.25
   velocity_scale: 1.0

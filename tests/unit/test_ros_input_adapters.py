@@ -113,14 +113,15 @@ def test_tracker_callback_is_latest_only_and_rejects_future_time() -> None:
             host_time_ns=message.host_time_ns,
         ),
     )
+    assert adapter.selected is not None
+    assert adapter.selected.sample.sequence == message.sequence
+    assert adapter.selected.callback_time_ns >= message.host_time_ns
 
 
 def test_tracker_lifecycle_clears_pending_sample_and_invalidates_reference() -> None:
     adapter = tracker_input()
     sample = running_sample()
-    assert adapter.offer_message(
-        tracked_sample_to_message(sample, factory=message_factory)
-    )
+    assert adapter.offer_message(tracked_sample_to_message(sample, factory=message_factory))
     event = TrackingLifecycleEvent(
         producer_instance=sample.producer_instance,
         tracking_setup_revision=sample.tracking_setup_revision,
@@ -154,13 +155,11 @@ def test_hand_callback_exposes_nonblocking_input_port() -> None:
     with pytest.raises(NoHandObservationAvailable):
         adapter.poll(receive_time_ns=observation.receive_time_ns)
 
-    assert adapter.offer_message(
-        hand_envelope_to_message(envelope, factory=message_factory)
-    )
-    assert (
-        adapter.poll(receive_time_ns=observation.receive_time_ns)
-        == observation
-    )
+    assert adapter.offer_message(hand_envelope_to_message(envelope, factory=message_factory))
+    assert adapter.poll(receive_time_ns=observation.receive_time_ns) == observation
+    assert adapter.selected is not None
+    assert adapter.selected.envelope == envelope
+    assert adapter.selected.callback_time_ns >= observation.receive_time_ns
     with pytest.raises(NoHandObservationAvailable):
         adapter.poll(receive_time_ns=observation.receive_time_ns)
     adapter.close()
@@ -169,13 +168,9 @@ def test_hand_callback_exposes_nonblocking_input_port() -> None:
 def test_message_epoch_changes_are_signalled_once() -> None:
     tracker = tracker_input()
     sample = running_sample()
-    assert tracker.offer_message(
-        tracked_sample_to_message(sample, factory=message_factory)
-    )
+    assert tracker.offer_message(tracked_sample_to_message(sample, factory=message_factory))
     newer = replace(sample, transport_epoch=4, sequence=0)
-    assert tracker.offer_message(
-        tracked_sample_to_message(newer, factory=message_factory)
-    )
+    assert tracker.offer_message(tracked_sample_to_message(newer, factory=message_factory))
     assert tracker.take_reference_invalidation()
     assert not tracker.take_reference_invalidation()
 
@@ -187,9 +182,7 @@ def test_message_epoch_changes_are_signalled_once() -> None:
         calibration_id=observation.calibration_id,
         transform_id=observation.transform_id,
     )
-    assert hand.offer_message(
-        hand_envelope_to_message(envelope, factory=message_factory)
-    )
+    assert hand.offer_message(hand_envelope_to_message(envelope, factory=message_factory))
     assert hand.offer_message(
         hand_envelope_to_message(
             replace(

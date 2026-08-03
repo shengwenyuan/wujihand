@@ -152,8 +152,9 @@ NV-4 保留已经由左右 live 证据使用的行为：
 
 - missing、stale、错误 side/frame/layout、NaN 或 retarget failure 继续拒绝；
 - 完整、finite 且最低 landmark confidence 不低于配置 floor 的帧可进入 retarget；
-- 默认 floor 为 `0.0`，最低 confidence `<0.90` 产生 `DEGRADED` intent；
-- 最低 confidence `>=0.90` 产生 `SUCCESS` intent；
+- 默认 floor 为 `0.0`，最低 confidence `<0.60` 产生 `DEGRADED` intent；
+- 最低 confidence `>=0.60` 产生 `SUCCESS` intent；该标签阈值由 2026-08-03
+  抓放 pilot 校准，旧运行使用的 `0.90` 作为历史 provenance 保留；
 - `DEGRADED` intent 仍必须经过同一 JointCommandSupervisor，不等同于绕过监督。
 
 本节明确 supersede

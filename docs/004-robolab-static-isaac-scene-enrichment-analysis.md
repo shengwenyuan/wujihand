@@ -33,6 +33,10 @@
 
 这里的“静态布局”指确定的场景选择和初始摆放，不表示把所有物体强制改成 fixed。
 RoboLab USD 中已经 author 的 dynamic / kinematic / static、碰撞和材质应默认保留；
+
+2026-08-03 抓放 pilot 增加一条例外：banana-bowl 任务 profile 显式把 `table` 和
+`bowl` 固定为 fixture，只保留 `banana` 为动态任务对象。该覆盖进入 resolved plan 和
+run manifest，不修改 source-locked USD，也不改变其他 RoboLab 场景的默认保留策略。
 本项目只是不实现 episode reset 和任务判定。
 
 ## 1. 本轮范围

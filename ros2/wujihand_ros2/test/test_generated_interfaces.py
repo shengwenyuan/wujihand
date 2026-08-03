@@ -13,6 +13,9 @@ from wujihand.domain import (  # noqa: E402
     TrackingState,
 )
 from wujihand_interfaces.msg import (  # type: ignore[import-not-found]  # noqa: E402
+    RunRecordingStatus,
+    SceneRigidBodyState,
+    TeleoperationTickTrace,
     TrackedRigidBodySample as TrackedRigidBodySampleMessage,
 )
 from wujihand_ros2.conversion import (  # noqa: E402
@@ -47,3 +50,15 @@ def test_generated_tracker_message_round_trip() -> None:
     )
 
     assert tracked_sample_from_message(message) == sample
+
+
+def test_generated_recording_interfaces_have_fixed_control_shapes() -> None:
+    tick = TeleoperationTickTrace()
+    scene = SceneRigidBodyState()
+    status = RunRecordingStatus()
+
+    assert len(tick.arm_command_q7_rad) == 7
+    assert len(tick.hand_intent_q20_rad) == 20
+    assert len(tick.applied_target_q27_rad) == 27
+    assert len(scene.position_m) == 3
+    assert status.state == ""

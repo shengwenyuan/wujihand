@@ -60,7 +60,7 @@ control_bindings:
     source_id: hand_rest_right
 report_root: artifacts/runs/nv5
 root_namespace: wujihand/v1/teleop
-interface_set_id: wujihand_interfaces_v1
+interface_set_id: wujihand_interfaces_v2
 qos_profile:
   path: configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml
   expected_id: ros2_jazzy_dual_teleoperation_qos_v1

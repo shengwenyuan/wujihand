@@ -10,6 +10,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/HandObservationEnvelope.msg"
   "msg/RouteCommand.msg"
   "msg/SafetyEvent.msg"
+  "msg/TeleoperationTickTrace.msg"
+  "msg/SceneRigidBodyState.msg"
+  "msg/RunRecordingStatus.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)

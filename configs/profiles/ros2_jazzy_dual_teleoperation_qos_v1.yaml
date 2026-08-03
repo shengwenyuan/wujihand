@@ -50,3 +50,17 @@ policies:
     durability: volatile
     deadline_ms: null
     lifespan_ms: null
+  - channel: trace_event
+    history: keep_last
+    depth: 8
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: scene_state
+    history: keep_last
+    depth: 32
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null

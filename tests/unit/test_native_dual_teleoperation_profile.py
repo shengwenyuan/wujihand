@@ -49,7 +49,7 @@ def test_profile_loads_all_live_policy_without_duplicating_mapping() -> None:
     assert profile.kinematics.position_tolerance_m == pytest.approx(0.002)
     assert profile.arm_supervision.velocity_scale == pytest.approx(0.20)
     assert profile.glove.minimum_landmark_confidence == 0.0
-    assert profile.glove.success_landmark_confidence == pytest.approx(0.90)
+    assert profile.glove.success_landmark_confidence == pytest.approx(0.60)
     assert profile.hand_supervision.velocity_scale == 1.0
     assert "translation_scale" not in profile.to_mapping()
     assert "max_translation_delta_m" not in profile.to_mapping()
@@ -88,7 +88,7 @@ def test_profile_loads_all_live_policy_without_duplicating_mapping() -> None:
             lambda value: value["glove"].update(
                 {
                     "minimum_landmark_confidence": 0.95,
-                    "success_landmark_confidence": 0.90,
+                    "success_landmark_confidence": 0.60,
                 }
             ),
             "must not exceed",

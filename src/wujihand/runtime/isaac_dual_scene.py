@@ -70,6 +70,23 @@ class DualSideRuntime:
     attachment: AttachmentSpec
 
 
+@dataclass(frozen=True, slots=True)
+class SceneRigidBodySnapshot:
+    prim_path: str
+    position_m: tuple[float, float, float]
+    quat_wxyz: tuple[float, float, float, float]
+    linear_velocity_m_s: tuple[float, float, float] | None
+    angular_velocity_deg_s: tuple[float, float, float] | None
+    kinematic_enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SceneFixedBodySnapshot:
+    prim_path: str
+    position_m: tuple[float, float, float]
+    quat_wxyz: tuple[float, float, float, float]
+
+
 def _quat_multiply(
     left: tuple[float, float, float, float],
     right: tuple[float, float, float, float],
@@ -137,9 +154,7 @@ def _workcell_frame_pose(
 ) -> ScenePose:
     if frame_id in cache:
         return cache[frame_id]
-    frame = next(
-        item for item in resolved.workcell.frames if item.frame_id == frame_id
-    )
+    frame = next(item for item in resolved.workcell.frames if item.frame_id == frame_id)
     result = _compose(
         _workcell_frame_pose(resolved, frame.parent, cache),
         frame.transform,
@@ -186,9 +201,7 @@ def resolve_dual_side_runtimes(
         instance = resolved.instance(instance_id)
         profile = instance.asset.control_group(group_id).joint_profile
         if profile is None:
-            raise RuntimeError(
-                f"{instance_id}/{group_id} has no joint profile"
-            )
+            raise RuntimeError(f"{instance_id}/{group_id} has no joint profile")
         path = project_root / profile
         if not path.is_file():
             raise RuntimeError(f"joint profile not found: {path}")
@@ -200,41 +213,23 @@ def resolve_dual_side_runtimes(
         hand = resolved.instance(attachment.child.instance)
         side = hand.asset.side
         if side not in {"left", "right"}:
-            raise RuntimeError(
-                "Hand 2 attachment must declare an explicit side"
-            )
-        if (
-            arm.asset.product != "agilex_nero"
-            or hand.asset.product != "wuji_hand_2"
-        ):
-            raise RuntimeError(
-                "dual scene attachment must connect NERO to Hand 2"
-            )
+            raise RuntimeError("Hand 2 attachment must declare an explicit side")
+        if arm.asset.product != "agilex_nero" or hand.asset.product != "wuji_hand_2":
+            raise RuntimeError("dual scene attachment must connect NERO to Hand 2")
         if (
             resolved.assembly.instance(arm.instance_id).role != "arm"
-            or resolved.assembly.instance(hand.instance_id).role
-            != "end_effector"
+            or resolved.assembly.instance(hand.instance_id).role != "end_effector"
         ):
-            raise RuntimeError(
-                "dual scene attachment roles must be arm -> end_effector"
-            )
-        if (
-            attachment.parent.frame
-            != arm.asset.frame_name("tool_flange")
-            or attachment.child.frame != hand.asset.frame_name("base")
-        ):
-            raise RuntimeError(
-                "dual scene must connect tool flange to hand base"
-            )
+            raise RuntimeError("dual scene attachment roles must be arm -> end_effector")
+        if attachment.parent.frame != arm.asset.frame_name(
+            "tool_flange"
+        ) or attachment.child.frame != hand.asset.frame_name("base"):
+            raise RuntimeError("dual scene must connect tool flange to hand base")
         if arm.binding.loader != "usd" or hand.binding.loader != "usd":
             raise RuntimeError("dual scene requires USD bindings")
         if arm.artifact is None or hand.artifact is None:
-            raise RuntimeError(
-                "dual scene instances require source-locked USD artifacts"
-            )
-        mount = resolved.workcell.mount(
-            resolved.session.mount_for(arm.instance_id)
-        )
+            raise RuntimeError("dual scene instances require source-locked USD artifacts")
+        mount = resolved.workcell.mount(resolved.session.mount_for(arm.instance_id))
         title = side.capitalize()
         result.append(
             DualSideRuntime(
@@ -259,9 +254,7 @@ def resolve_dual_side_runtimes(
             )
         )
     if {item.side for item in result} != {"left", "right"} or len(result) != 2:
-        raise RuntimeError(
-            "dual scene must contain one left and one right attachment"
-        )
+        raise RuntimeError("dual scene must contain one left and one right attachment")
     return cast(
         tuple[DualSideRuntime, DualSideRuntime],
         tuple(sorted(result, key=lambda item: item.side)),
@@ -310,8 +303,8 @@ class DualNeroHand2IsaacScene:
             resolved.workcell,
             verify_content=True,
         )
-        self.workcell_materialization: IsaacWorkcellMaterialization = (
-            materialize_isaac_workcell(self.world, workcell_plan)
+        self.workcell_materialization: IsaacWorkcellMaterialization = materialize_isaac_workcell(
+            self.world, workcell_plan
         )
         UsdGeom.Xform.Define(self.stage, "/World/Robots")
         UsdGeom.Xform.Define(self.stage, "/World/Attachments")
@@ -338,20 +331,14 @@ class DualNeroHand2IsaacScene:
             xformable.ClearXformOpOrder()
             matrix = Gf.Matrix4d(1.0)
             matrix.SetRotate(Gf.Quatd(*runtime.mount_pose.quat_wxyz))
-            matrix.SetTranslateOnly(
-                Gf.Vec3d(*runtime.mount_pose.position_m)
-            )
-            xformable.AddTransformOp(
-                UsdGeom.XformOp.PrecisionDouble
-            ).Set(matrix)
+            matrix.SetTranslateOnly(Gf.Vec3d(*runtime.mount_pose.position_m))
+            xformable.AddTransformOp(UsdGeom.XformOp.PrecisionDouble).Set(matrix)
             arm_instance = resolved.instance(runtime.arm_instance_id)
             hand_instance = resolved.instance(runtime.hand_instance_id)
             parent_link = _one_prim(
                 self.stage,
                 prefix=runtime.arm_prim_path,
-                name=arm_instance.binding.backend_frame(
-                    runtime.attachment.parent.frame
-                ),
+                name=arm_instance.binding.backend_frame(runtime.attachment.parent.frame),
                 rigid_body=True,
             )
             wrist_housing = _one_prim(
@@ -362,12 +349,10 @@ class DualNeroHand2IsaacScene:
                 ),
                 rigid_body=True,
             )
-            self.geometry_alignments[runtime.side] = (
-                apply_isaac_nero_link_geometry_alignment(
-                    self.stage,
-                    link_path=str(wrist_housing.GetPath()),
-                    profile=alignment_profile,
-                )
+            self.geometry_alignments[runtime.side] = apply_isaac_nero_link_geometry_alignment(
+                self.stage,
+                link_path=str(wrist_housing.GetPath()),
+                profile=alignment_profile,
             )
             add_reference_to_stage(
                 str(runtime.hand_asset),
@@ -381,9 +366,7 @@ class DualNeroHand2IsaacScene:
             child_base = _one_prim(
                 self.stage,
                 prefix=runtime.hand_prim_path,
-                name=hand_instance.binding.backend_frame(
-                    runtime.attachment.child.frame
-                ),
+                name=hand_instance.binding.backend_frame(runtime.attachment.child.frame),
                 rigid_body=True,
             )
             hand_root_joint = _one_prim(
@@ -398,17 +381,12 @@ class DualNeroHand2IsaacScene:
                     side=runtime.side,
                     nero_prim_path=runtime.arm_prim_path,
                     hand_prim_path=runtime.hand_prim_path,
-                    nero_articulation_root_path=str(
-                        arm_articulation_root.GetPath()
-                    ),
+                    nero_articulation_root_path=str(arm_articulation_root.GetPath()),
                     parent_link_path=str(parent_link.GetPath()),
                     child_base_link_path=str(child_base.GetPath()),
-                    hand_root_joint_path=str(
-                        hand_root_joint.GetPath()
-                    ),
+                    hand_root_joint_path=str(hand_root_joint.GetPath()),
                     attachment_joint_path=(
-                        "/World/Attachments/"
-                        f"{runtime.attachment.attachment_id}"
+                        f"/World/Attachments/{runtime.attachment.attachment_id}"
                     ),
                     position_m=runtime.attachment.transform.position_m,
                     quat_wxyz=runtime.attachment.transform.quat_wxyz,
@@ -425,47 +403,34 @@ class DualNeroHand2IsaacScene:
             hand_profile = load_hand2_model_profile(runtime.hand_profile)
             self.arm_profiles[runtime.side] = arm_profile
             self.hand_profiles[runtime.side] = hand_profile
-            self.initial_arm_targets[runtime.side] = (
-                arm_profile.layout.validate_vector(
-                    qualification_profile.initial_position(
-                        runtime.arm_instance_id,
-                        "arm_joints",
-                        arm_profile.layout_id,
-                    )
-                ).copy()
-            )
+            self.initial_arm_targets[runtime.side] = arm_profile.layout.validate_vector(
+                qualification_profile.initial_position(
+                    runtime.arm_instance_id,
+                    "arm_joints",
+                    arm_profile.layout_id,
+                )
+            ).copy()
 
         self.expected_root_paths = tuple(
-            sorted(
-                handle.articulation_root_path
-                for handle in self.authored.values()
-            )
+            sorted(handle.articulation_root_path for handle in self.authored.values())
         )
         self.world.reset()
         (
             self.partitions,
             self.root_paths_before_reset,
         ) = self.validate_articulations()
-        self.arm_drive_runtime = self.apply_arm_drive_gains(
-            self.partitions
-        )
-        self.q27_execution = IsaacQ27ExecutionAdapter(
-            self.articulations
-        )
+        self.arm_drive_runtime = self.apply_arm_drive_gains(self.partitions)
+        self.q27_execution = IsaacQ27ExecutionAdapter(self.articulations)
         self.external_fixed_collider_paths = list(
             self.workcell_materialization.fixed_collider_paths
         )
         if not self.external_fixed_collider_paths:
-            raise RuntimeError(
-                "dual scene has no fixed external collider"
-            )
+            raise RuntimeError("dual scene has no fixed external collider")
         self.arm_targets = {
-            side: self.initial_arm_targets[side].copy()
-            for side in ("left", "right")
+            side: self.initial_arm_targets[side].copy() for side in ("left", "right")
         }
         self.hand_targets = {
-            side: self.hand_profiles[side].rest_position.copy()
-            for side in ("left", "right")
+            side: self.hand_profiles[side].rest_position.copy() for side in ("left", "right")
         }
 
     def feedback_q27(
@@ -474,7 +439,10 @@ class DualNeroHand2IsaacScene:
     ) -> npt.NDArray[np.float64]:
         return self.q27_execution.read_feedback_q27(side)
 
-    def apply_targets(self) -> None:
+    def apply_targets(
+        self,
+    ) -> dict[str, npt.NDArray[np.float64]]:
+        applied: dict[str, npt.NDArray[np.float64]] = {}
         for side in ("left", "right"):
             arm_profile = self.arm_profiles[side]
             hand_profile = self.hand_profiles[side]
@@ -486,22 +454,94 @@ class DualNeroHand2IsaacScene:
                 and np.all(hand >= np.asarray(hand_profile.layout.lower))
                 and np.all(hand <= np.asarray(hand_profile.layout.upper))
             ):
-                raise RuntimeError(
-                    f"{side} q7/q20 target exceeds limits"
-                )
-            self.q27_execution.apply_target_q27(
-                compose_partitioned_q27_target(
-                    side=side,
-                    arm_indices_q7=(
-                        self.partitions[side].arm_indices_q7
+                raise RuntimeError(f"{side} q7/q20 target exceeds limits")
+            target = compose_partitioned_q27_target(
+                side=side,
+                arm_indices_q7=(self.partitions[side].arm_indices_q7),
+                hand_indices_q20=(self.partitions[side].hand_indices_q20),
+                arm_q7=arm,
+                hand_q20=hand,
+            )
+            self.q27_execution.apply_target_q27(target)
+            applied[side] = target.positions.copy()
+        return applied
+
+    def rigid_body_snapshots(
+        self,
+    ) -> tuple[SceneRigidBodySnapshot, ...]:
+        """Read raw post-step state for the frozen Workcell inventory."""
+
+        from pxr import Usd, UsdGeom, UsdPhysics
+
+        cache = UsdGeom.XformCache(Usd.TimeCode.Default())
+        result: list[SceneRigidBodySnapshot] = []
+        for path in self.workcell_materialization.rigid_body_paths:
+            prim = self.stage.GetPrimAtPath(path)
+            if not prim.IsValid():
+                raise RuntimeError(f"recorded rigid body disappeared: {path}")
+            transform = cache.GetLocalToWorldTransform(prim)
+            position = transform.ExtractTranslation()
+            quaternion = transform.ExtractRotationQuat()
+            imaginary = quaternion.GetImaginary()
+            rigid_body = UsdPhysics.RigidBodyAPI(prim)
+            linear_velocity = _optional_vec3(rigid_body.GetVelocityAttr().Get())
+            angular_velocity = _optional_vec3(rigid_body.GetAngularVelocityAttr().Get())
+            kinematic = rigid_body.GetKinematicEnabledAttr().Get()
+            result.append(
+                SceneRigidBodySnapshot(
+                    prim_path=path,
+                    position_m=(
+                        float(position[0]),
+                        float(position[1]),
+                        float(position[2]),
                     ),
-                    hand_indices_q20=(
-                        self.partitions[side].hand_indices_q20
+                    quat_wxyz=(
+                        float(quaternion.GetReal()),
+                        float(imaginary[0]),
+                        float(imaginary[1]),
+                        float(imaginary[2]),
                     ),
-                    arm_q7=arm,
-                    hand_q20=hand,
+                    linear_velocity_m_s=linear_velocity,
+                    angular_velocity_deg_s=angular_velocity,
+                    kinematic_enabled=(False if kinematic is None else bool(kinematic)),
                 )
             )
+        return tuple(result)
+
+    def fixed_body_snapshots(
+        self,
+    ) -> tuple[SceneFixedBodySnapshot, ...]:
+        """Read one manifest-time pose for each immutable task fixture."""
+
+        from pxr import Usd, UsdGeom
+
+        cache = UsdGeom.XformCache(Usd.TimeCode.Default())
+        result: list[SceneFixedBodySnapshot] = []
+        for path in self.workcell_materialization.fixed_rigid_body_paths:
+            prim = self.stage.GetPrimAtPath(path)
+            if not prim.IsValid():
+                raise RuntimeError(f"fixed task fixture disappeared: {path}")
+            transform = cache.GetLocalToWorldTransform(prim)
+            position = transform.ExtractTranslation()
+            quaternion = transform.ExtractRotationQuat()
+            imaginary = quaternion.GetImaginary()
+            result.append(
+                SceneFixedBodySnapshot(
+                    prim_path=path,
+                    position_m=(
+                        float(position[0]),
+                        float(position[1]),
+                        float(position[2]),
+                    ),
+                    quat_wxyz=(
+                        float(quaternion.GetReal()),
+                        float(imaginary[0]),
+                        float(imaginary[1]),
+                        float(imaginary[2]),
+                    ),
+                )
+            )
+        return tuple(result)
 
     def validate_articulations(
         self,
@@ -541,9 +581,7 @@ class DualNeroHand2IsaacScene:
                 dtype=np.float64,
             )
             if limits.shape != (1, 27, 2):
-                raise RuntimeError(
-                    f"{runtime.side} q27 limits have shape {limits.shape}"
-                )
+                raise RuntimeError(f"{runtime.side} q27 limits have shape {limits.shape}")
             arm_limits = limits[
                 0,
                 np.asarray(partition.arm_indices_q7),
@@ -565,13 +603,9 @@ class DualNeroHand2IsaacScene:
                 )
             )
             if not np.allclose(arm_limits, expected_arm, atol=1e-4):
-                raise RuntimeError(
-                    f"{runtime.side} NERO q7 limits drifted"
-                )
+                raise RuntimeError(f"{runtime.side} NERO q7 limits drifted")
             if not np.allclose(hand_limits, expected_hand, atol=1e-4):
-                raise RuntimeError(
-                    f"{runtime.side} Hand 2 q20 limits drifted"
-                )
+                raise RuntimeError(f"{runtime.side} Hand 2 q20 limits drifted")
         return result, root_paths
 
     def apply_arm_drive_gains(
@@ -601,9 +635,7 @@ class DualNeroHand2IsaacScene:
                 kds=kds,
                 joint_indices=indices,
             )
-            actual_kps, actual_kds = articulation.get_gains(
-                joint_indices=indices
-            )
+            actual_kps, actual_kds = articulation.get_gains(joint_indices=indices)
             actual_kps = np.asarray(actual_kps, dtype=np.float64)
             actual_kds = np.asarray(actual_kds, dtype=np.float64)
             if (
@@ -612,9 +644,7 @@ class DualNeroHand2IsaacScene:
                 or not np.allclose(actual_kps, kps)
                 or not np.allclose(actual_kds, kds)
             ):
-                raise RuntimeError(
-                    f"{side} q7 drive gains were not applied"
-                )
+                raise RuntimeError(f"{side} q7 drive gains were not applied")
             result[side] = {
                 "stiffness": actual_kps[0].tolist(),
                 "damping": actual_kds[0].tolist(),
@@ -640,10 +670,7 @@ def _one_prim(
             continue
         if name is not None and prim.GetName() != name:
             continue
-        if (
-            articulation_root
-            and not prim.HasAPI(UsdPhysics.ArticulationRootAPI)
-        ):
+        if articulation_root and not prim.HasAPI(UsdPhysics.ArticulationRootAPI):
             continue
         if rigid_body and not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             continue
@@ -664,19 +691,29 @@ def _dof_paths(articulation: Any) -> tuple[str, ...]:
         dtype=object,
     )
     if paths.ndim != 2 or paths.shape[0] != 1:
-        raise RuntimeError(
-            f"expected one articulation DOF-path row, got {paths.shape}"
-        )
+        raise RuntimeError(f"expected one articulation DOF-path row, got {paths.shape}")
     result = tuple(str(path) for path in paths[0])
     if len(result) != len(articulation.dof_names):
         raise RuntimeError("Isaac DOF path/name counts differ")
     return result
 
 
+def _optional_vec3(
+    value: object,
+) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    vector = np.asarray(value, dtype=np.float64)
+    if vector.shape != (3,) or not np.isfinite(vector).all():
+        raise RuntimeError("rigid-body velocity must be a finite vec3")
+    return (float(vector[0]), float(vector[1]), float(vector[2]))
+
+
 __all__ = [
     "DualNeroHand2IsaacScene",
     "DualSideRuntime",
     "ScenePose",
+    "SceneRigidBodySnapshot",
     "resolve_dual_side_runtimes",
     "workcell_frame_position",
     "workcell_pose",

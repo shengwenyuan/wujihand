@@ -119,7 +119,7 @@ def test_retarget_uses_exact_float32_media_pipe_matrix_and_q20_provenance() -> N
     assert intent.retarget_model_id == "wuji_sdk.WujiHand2.2026.7.21"
     assert intent.retarget_config_id == (
         "wuji_sdk.builtin.WujiHand2.right.2026.7.21."
-        "confidence_floor_0.000.success_0.900"
+        "confidence_floor_0.000.success_0.600"
     )
 
 

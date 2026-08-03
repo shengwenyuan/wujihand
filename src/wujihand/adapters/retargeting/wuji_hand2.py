@@ -132,7 +132,7 @@ class WujiHand2RetargetAdapter:
         *,
         max_observation_age_s: float = 0.25,
         minimum_landmark_confidence: float = 0.0,
-        success_landmark_confidence: float = 0.9,
+        success_landmark_confidence: float = 0.6,
         session_factory: SessionFactory | None = None,
         sdk_version: str | None = None,
     ) -> None:

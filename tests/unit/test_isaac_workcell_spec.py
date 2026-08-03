@@ -31,6 +31,7 @@ def _profile() -> dict[str, Any]:
             "physics_scene": "project",
             "camera": "project",
             "collision": "preserve",
+            "fixed_rigid_body_paths": ["table", "fixtures/bowl"],
         },
         "lighting": {
             "mode": "selected_hdr",
@@ -61,7 +62,20 @@ def test_profile_round_trips_strict_source_locked_scene_and_hdr() -> None:
     assert profile.lighting.content is not None
     assert profile.lighting.visible_in_primary_ray is False
     assert profile.lighting.background_color_rgb == (0.12, 0.12, 0.12)
+    assert profile.policies.fixed_rigid_body_paths == (
+        "table",
+        "fixtures/bowl",
+    )
     assert profile.to_mapping() == _profile()
+
+
+def test_profile_keeps_v1_collision_policy_backward_compatible() -> None:
+    legacy = _profile()
+    del legacy["policies"]["fixed_rigid_body_paths"]
+
+    profile = IsaacStaticUsdWorkcellProfile.from_mapping(legacy)
+
+    assert profile.policies.fixed_rigid_body_paths == ()
 
 
 def test_profile_rejects_unpinned_or_conflicting_policy() -> None:
@@ -79,3 +93,10 @@ def test_profile_rejects_unpinned_or_conflicting_policy() -> None:
     invalid_background["lighting"]["background_color_rgb"] = [0.0, 2.0, 0.0]
     with pytest.raises(ValueError, match=r"must be in \[0, 1\]"):
         IsaacStaticUsdWorkcellProfile.from_mapping(invalid_background)
+
+    invalid_fixed_path = deepcopy(_profile())
+    invalid_fixed_path["policies"]["fixed_rigid_body_paths"] = [
+        "../table"
+    ]
+    with pytest.raises(ValueError, match="relative USD prim path"):
+        IsaacStaticUsdWorkcellProfile.from_mapping(invalid_fixed_path)
