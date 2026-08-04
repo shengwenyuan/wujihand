@@ -51,7 +51,43 @@ def parse_args() -> argparse.Namespace:
         required=True,
     )
     parser.add_argument("--frames", type=int, default=240)
+    parser.add_argument(
+        "--minimum-subscribers",
+        type=int,
+        default=0,
+        help="Wait for this many subscribers on every fixture topic before publishing.",
+    )
+    parser.add_argument(
+        "--discovery-timeout-s",
+        type=float,
+        default=180.0,
+    )
     return parser.parse_args()
+
+
+def _wait_for_subscribers(
+    publishers: tuple[object, ...],
+    *,
+    minimum_subscribers: int,
+    timeout_s: float,
+) -> None:
+    if minimum_subscribers == 0:
+        return
+    deadline = time.monotonic() + timeout_s
+    while True:
+        pending = [
+            publisher
+            for publisher in publishers
+            if publisher.get_subscription_count() < minimum_subscribers
+        ]
+        if not pending:
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                "fixture subscriber discovery timed out: "
+                f"{len(pending)} topic(s) below {minimum_subscribers}"
+            )
+        time.sleep(0.05)
 
 
 def _hand_observation(
@@ -95,6 +131,10 @@ def main() -> int:
     args = parse_args()
     if args.frames < 1:
         raise SystemExit("--frames must be positive")
+    if args.minimum_subscribers < 0:
+        raise SystemExit("--minimum-subscribers must be non-negative")
+    if args.discovery_timeout_s <= 0.0:
+        raise SystemExit("--discovery-timeout-s must be positive")
     resolved = RosDeploymentResolver(ROOT).resolve(
         args.deployment,
         local_binding=args.local_runtime_binding,
@@ -126,6 +166,15 @@ def main() -> int:
         qos_profile(
             resolved.qos_profile.policy("tracking_lifecycle")
         ),
+    )
+    _wait_for_subscribers(
+        (
+            *tracker_publishers.values(),
+            *hand_publishers.values(),
+            lifecycle_publisher,
+        ),
+        minimum_subscribers=args.minimum_subscribers,
+        timeout_s=args.discovery_timeout_s,
     )
     producer = "nv5-ros-fixture"
     epoch = 1

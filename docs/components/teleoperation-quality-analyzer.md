@@ -1,8 +1,8 @@
 # ROS2 遥操作离线质量分析器
 
 - 状态：已实现
-- 当前版本：`0.1.2`
-- 支持录制契约：`wujihand.teleoperation_tick_trace.v1`
+- 当前版本：`0.2.1`
+- 支持录制契约：`wujihand.teleoperation_tick_trace.v1`、`.v2`
 - 代码：[analysis/teleoperation_quality](../../analysis/teleoperation_quality/README.md)
 - CLI：[analyze_teleoperation_run.py](../../tools/analysis/analyze_teleoperation_run.py)
 
@@ -10,6 +10,8 @@
 
 分析器是独立 Python package，不被 `src/wujihand`、ROS2 节点或 Isaac 控制循环导入。
 生产主线只录制原始事实；所有 count、ratio、percentile、误差和图片均在完整 run 关闭后计算。
+v1/v2 分别使用 ROS 类型 `TeleoperationTickTrace` / `TeleoperationTickTraceV2`，避免用同名
+消息修改 CDR 布局而造成旧 MCAP 的伪兼容。
 
 输入 run 必须只读。分析器拒绝 incomplete/非零退出/未闭合录包、schema 或 run ID 不一致、
 topic/MCAP inventory 不一致、checksum 缺失或不匹配。输出必须位于输入 run 外的新目录；工具
@@ -44,15 +46,18 @@ raw Tracker/Glove 与 tick 中选中的 source 使用
   receive time。Glove acquisition time 缺失保持 `NA`，不补零。
 - actionability：`safety_state=tracking` 且 active source 存在；coverage 按相邻 tick 时间加权，
   同时保留 tick ratio。四流 coverage 要求左右 arm/hand 在同一 tick 全部 actionable。
-- inbox 对账：每路 `accepted = trace-selected + overwritten`。它只能解释 callback 已到达后的
+- inbox 对账：v2 每路 `accepted = drained + discarded + overwritten + pending`，且
+  `drained = trace-selected + rejected-future`；v1 receipt 缺少新 counter 时走兼容口径。它只能解释 callback 已到达后的
   latest-only inbox，不替代 DDS/executor 诊断。
 - command-feedback error：command 与同 tick `world.step()` 后 feedback 的逐关节误差；当前只做
   描述统计，不在没有关节归一化范围时比较 arm 与 hand 优劣。
-- stage duration：从录制的 monotonic stage timestamps 相减；pipeline 是总量，dominant stage
-  只在互斥的 spin/control/apply/world-step 中比较 P95。
+- stage duration：从录制的 monotonic stage timestamps 相减；v1 比较
+  spin/control/apply/world-step，v2 比较 snapshot/control/apply/two-substep physics。
+- v2 execution：离线核对每个 target 恰好跨两个连续 physics substep、scheduler 跳过数、
+  simulation advance/real-time factor，以及 GUI 20 Hz render cadence；不从 host tick 间隔猜测。
 
-默认 `60 Hz ±2%`、tick interval P95 `<=20 ms`、comparable input age P95 `<20 ms` 是
-NV-5.1 计划参考，不是未经重复试验冻结的数据发布阈值。
+默认 `60 Hz ±2%`、Headless tick interval P95 `<=20 ms`、GUI P95 `<=25 ms`、comparable
+input age P95 `<20 ms` 是 NV-5.1 计划参考，不是未经重复试验冻结的数据发布阈值。
 
 ## 4. 输出
 
@@ -60,7 +65,7 @@ NV-5.1 计划参考，不是未经重复试验冻结的数据发布阈值。
 
 - `summary.json` / `summary.csv`：机器可读总览；
 - 每项指标的 CSV 和 `derived/` 下完整对齐样本表；
-- 12 张确定性 PNG 和 `figure_manifest.csv`；
+- v1 固定 12 张、v2 固定 13 张确定性 PNG 和 `figure_manifest.csv`；
 - `report.html`；
 - `analyzer_manifest.json`：分析器版本、配置、输入 checksum、全部分析源码 hash；
 - `checksums.sha256`：除自身外所有输出文件的 hash。

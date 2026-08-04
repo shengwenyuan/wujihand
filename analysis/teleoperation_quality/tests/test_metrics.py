@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from teleoperation_quality.artifact import RunArtifact
 from teleoperation_quality.metrics import AnalysisConfig, compute_metrics
-from teleoperation_quality.model import BagDataset
+from teleoperation_quality.model import BagDataset, TickExecution
+from teleoperation_quality.plots import write_plots
 
 
 def _row(rows: tuple[dict[str, object], ...], *, side: str, chain: str) -> dict[str, object]:
@@ -83,6 +85,116 @@ def test_missing_acquisition_time_stays_missing(
     assert hand["source_age_ms_count"] == 0
     assert hand["source_age_ms_missing"] == 4
     assert hand["input_age_ms_count"] == 4
+
+
+def test_v2_execution_trace_enforces_100_50_25_schedule(
+    artifact: RunArtifact,
+    dataset: BagDataset,
+    tmp_path: Path,
+) -> None:
+    ticks = []
+    for tick in dataset.ticks:
+        simulation_before_s = tick.tick_id * 0.02
+        rendered = tick.tick_id % 2 == 1
+        ticks.append(
+            replace(
+                tick,
+                schema="wujihand.teleoperation_tick_trace.v2",
+                execution=TickExecution(
+                    control_index=tick.tick_id,
+                    schedule_slot=tick.tick_id,
+                    scheduled_control_time_ns=tick.times.tick_time_ns,
+                    control_lateness_ns=0,
+                    missed_control_periods_before_tick=0,
+                    simulation_time_before_s=simulation_before_s,
+                    simulation_time_after_s=simulation_before_s + 0.02,
+                    target_effective_start_sim_time_s=simulation_before_s,
+                    target_effective_end_sim_time_s=simulation_before_s + 0.02,
+                    physics_substep_indices=(tick.tick_id * 2, tick.tick_id * 2 + 1),
+                    physics_substep_sim_times_s=(
+                        simulation_before_s + 0.01,
+                        simulation_before_s + 0.02,
+                    ),
+                    physics_substep_start_ns=(
+                        tick.times.world_step_start_ns,
+                        tick.times.world_step_start_ns + 400_000,
+                    ),
+                    physics_substep_end_ns=(
+                        tick.times.world_step_start_ns + 400_000,
+                        tick.times.world_step_end_ns,
+                    ),
+                    rendered=rendered,
+                    render_index=(tick.tick_id // 2 if rendered else None),
+                ),
+            )
+        )
+    v2_input_health = {
+        route: {
+            **value,
+            "inbox": {
+                **value["inbox"],
+                "drained": value["inbox"]["accepted"],
+                "discarded": 0,
+                "pending": 0,
+            },
+        }
+        for route, value in artifact.receipt["input_health"].items()
+    }
+    v2_artifact = replace(
+        artifact,
+        manifest={
+            **artifact.manifest,
+            "simulation_timing": {
+                "gui": True,
+                "physics_hz": 100,
+                "control_hz": 50,
+                "rendering_hz": 25,
+                "physics_substeps_per_control": 2,
+                "control_ticks_per_render": 2,
+            },
+        },
+        receipt={
+            **artifact.receipt,
+            "completed_physics_steps": 8,
+            "completed_renders": 2,
+            "configured_timing": {
+                "physics_hz": 100,
+                "control_hz": 50,
+                "render_hz": 25,
+                "physics_substeps_per_control": 2,
+                "control_ticks_per_render": 2,
+            },
+            "input_health": v2_input_health,
+        },
+    )
+
+    bundle = compute_metrics(
+        v2_artifact,
+        replace(dataset, ticks=tuple(ticks)),
+        AnalysisConfig(
+            expected_control_hz=50.0,
+            expected_physics_hz=100.0,
+            expected_render_hz=25.0,
+            control_rate_tolerance_fraction=0.01,
+            p95_tick_interval_limit_ms=19.0,
+            gui_p95_tick_interval_limit_ms=20.1,
+            p95_comparable_input_age_limit_ms=10.0,
+        ),
+    )
+    gates = {row["name"]: row for row in bundle.tables["gates"]}
+
+    assert bundle.summary["structural_gates_passed"] is True
+    assert bundle.summary["planned_targets_passed"] is True
+    assert bundle.summary["control"]["execution"]["physics_substep_count"] == 8
+    assert bundle.summary["control"]["execution"]["render_effective_hz"] == pytest.approx(25.0)
+    assert bundle.summary["config"]["effective_p95_tick_interval_limit_ms"] == 20.1
+    assert bundle.summary["control"]["p95_limit_exceedance_ratio"] == 0.0
+    assert gates["v2_execution_facts_complete"]["passed"] is True
+    assert gates["physics_substep_dt"]["passed"] is True
+    assert gates["render_rate"]["passed"] is True
+    figures = write_plots(bundle, tmp_path / "v2-plots")
+    assert len(figures) == 13
+    assert (tmp_path / "v2-plots" / "13_scheduler_physics_render.png").is_file()
 
 
 def test_duration_weighted_coverage_is_not_a_frame_count(

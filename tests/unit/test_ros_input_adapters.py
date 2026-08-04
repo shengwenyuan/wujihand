@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from threading import Event, Thread
 from types import SimpleNamespace
 from typing import Any
 
@@ -22,6 +23,7 @@ from wujihand_ros2.conversion import (
 )
 from wujihand_ros2.input_adapters import (
     RosHandObservationInputAdapter,
+    RosInputSynchronization,
     RosTrackerInputAdapter,
     TrackerInputIdentity,
 )
@@ -195,3 +197,80 @@ def test_message_epoch_changes_are_signalled_once() -> None:
     )
     assert hand.take_epoch_change()
     assert not hand.take_epoch_change()
+
+
+def test_shared_tick_snapshot_excludes_callbacks_arriving_during_snapshot() -> None:
+    synchronization = RosInputSynchronization()
+    sample = running_sample()
+    tracker = RosTrackerInputAdapter(
+        tracker_input().identity,
+        synchronization=synchronization,
+    )
+    envelope = hand_envelope()
+    observation = envelope.observation
+    hand = RosHandObservationInputAdapter(
+        side=observation.side,
+        source_id=observation.source_id,
+        calibration_id=observation.calibration_id,
+        transform_id=observation.transform_id,
+        synchronization=synchronization,
+    )
+    hand.start()
+    assert tracker.offer_message(tracked_sample_to_message(sample, factory=message_factory))
+    assert hand.offer_message(hand_envelope_to_message(envelope, factory=message_factory))
+
+    next_sample = replace(sample, sequence=sample.sequence + 1, host_time_ns=1_000_001)
+    next_envelope = replace(
+        envelope,
+        observation=replace(
+            observation,
+            sequence=observation.sequence + 1,
+            source_time_ns=900_001,
+            receive_time_ns=1_000_001,
+        ),
+    )
+    tracker_attempting = Event()
+    hand_attempting = Event()
+
+    def offer_tracker() -> None:
+        tracker_attempting.set()
+        assert tracker.offer_message(
+            tracked_sample_to_message(next_sample, factory=message_factory)
+        )
+
+    def offer_hand() -> None:
+        hand_attempting.set()
+        assert hand.offer_message(
+            hand_envelope_to_message(next_envelope, factory=message_factory)
+        )
+
+    tracker_thread = Thread(target=offer_tracker)
+    hand_thread = Thread(target=offer_hand)
+    with synchronization.locked():
+        tracker_thread.start()
+        hand_thread.start()
+        assert tracker_attempting.wait(timeout=1.0)
+        assert hand_attempting.wait(timeout=1.0)
+        tracker_snapshot = tracker.snapshot_for_tick(now_ns=1_000_001)
+        hand_snapshot = hand.snapshot_for_tick(receive_time_ns=1_000_001)
+
+    tracker_thread.join(timeout=1.0)
+    hand_thread.join(timeout=1.0)
+    assert not tracker_thread.is_alive()
+    assert not hand_thread.is_alive()
+    assert tracker_snapshot.selection is not None
+    assert tracker_snapshot.selection.sample.sequence == sample.sequence
+    assert hand_snapshot.selection is not None
+    assert hand_snapshot.selection.envelope.observation.sequence == observation.sequence
+    assert tracker.receive_available(now_ns=1_000_001)[0].sequence == sample.sequence
+    assert hand.poll(receive_time_ns=1_000_001).sequence == observation.sequence
+
+    with synchronization.locked():
+        tracker_snapshot = tracker.snapshot_for_tick(now_ns=1_000_001)
+        hand_snapshot = hand.snapshot_for_tick(receive_time_ns=1_000_001)
+    assert tracker_snapshot.selection is not None
+    assert tracker_snapshot.selection.sample.sequence == next_sample.sequence
+    assert hand_snapshot.selection is not None
+    assert hand_snapshot.selection.envelope.observation.sequence == (
+        next_envelope.observation.sequence
+    )

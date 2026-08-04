@@ -11,6 +11,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RouteCommand.msg"
   "msg/SafetyEvent.msg"
   "msg/TeleoperationTickTrace.msg"
+  "msg/TeleoperationTickTraceV2.msg"
   "msg/SceneRigidBodyState.msg"
   "msg/RunRecordingStatus.msg"
 )

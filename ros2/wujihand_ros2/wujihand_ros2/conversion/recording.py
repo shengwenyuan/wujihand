@@ -17,6 +17,7 @@ from wujihand.domain import (
     SceneRigidBodyState,
     SourceSelectionTrace,
     TeleoperationTickTrace,
+    TickExecutionTrace,
     TickStageTimes,
 )
 
@@ -91,7 +92,7 @@ def teleoperation_tick_trace_to_message(
     *,
     factory: Callable[[], MessageT] | None = None,
 ) -> MessageT:
-    message = new_message(factory, class_name="TeleoperationTickTrace")
+    message = new_message(factory, class_name="TeleoperationTickTraceV2")
     target: Any = message
     target.schema = trace.schema
     target.run_id = trace.run_id
@@ -99,18 +100,39 @@ def teleoperation_tick_trace_to_message(
     target.side = trace.side
     target.clock_domain = "host_monotonic"
     for field in (
-        "spin_start_ns",
-        "spin_end_ns",
         "tick_time_ns",
+        "snapshot_start_ns",
+        "snapshot_end_ns",
         "control_start_ns",
         "control_end_ns",
         "apply_start_ns",
         "apply_end_ns",
-        "world_step_start_ns",
-        "world_step_end_ns",
+        "physics_start_ns",
+        "physics_end_ns",
         "trace_time_ns",
     ):
         setattr(target, field, getattr(trace.times, field))
+    execution = trace.execution
+    target.control_index = execution.control_index
+    target.schedule_slot = execution.schedule_slot
+    target.scheduled_control_time_ns = execution.scheduled_control_time_ns
+    target.control_lateness_ns = execution.control_lateness_ns
+    target.missed_control_periods_before_tick = (
+        execution.missed_control_periods_before_tick
+    )
+    target.simulation_time_before_s = execution.simulation_time_before_s
+    target.simulation_time_after_s = execution.simulation_time_after_s
+    target.target_effective_start_sim_time_s = (
+        execution.target_effective_start_sim_time_s
+    )
+    target.target_effective_end_sim_time_s = execution.target_effective_end_sim_time_s
+    target.physics_substep_indices = execution.physics_substep_indices
+    target.physics_substep_sim_times_s = execution.physics_substep_sim_times_s
+    target.physics_substep_start_ns = execution.physics_substep_start_ns
+    target.physics_substep_end_ns = execution.physics_substep_end_ns
+    target.rendered = execution.rendered
+    target.has_render_index = execution.render_index is not None
+    target.render_index = execution.render_index or 0
 
     arm = trace.arm
     _set_source(target, prefix="tracker", source=arm.source)
@@ -371,16 +393,39 @@ def teleoperation_tick_trace_from_message(
         tick_id=int(message.tick_id),
         side=str(message.side),
         times=TickStageTimes(
-            spin_start_ns=int(message.spin_start_ns),
-            spin_end_ns=int(message.spin_end_ns),
             tick_time_ns=int(message.tick_time_ns),
+            snapshot_start_ns=int(message.snapshot_start_ns),
+            snapshot_end_ns=int(message.snapshot_end_ns),
             control_start_ns=int(message.control_start_ns),
             control_end_ns=int(message.control_end_ns),
             apply_start_ns=int(message.apply_start_ns),
             apply_end_ns=int(message.apply_end_ns),
-            world_step_start_ns=int(message.world_step_start_ns),
-            world_step_end_ns=int(message.world_step_end_ns),
+            physics_start_ns=int(message.physics_start_ns),
+            physics_end_ns=int(message.physics_end_ns),
             trace_time_ns=int(message.trace_time_ns),
+        ),
+        execution=TickExecutionTrace(
+            control_index=int(message.control_index),
+            schedule_slot=int(message.schedule_slot),
+            scheduled_control_time_ns=int(message.scheduled_control_time_ns),
+            control_lateness_ns=int(message.control_lateness_ns),
+            missed_control_periods_before_tick=int(
+                message.missed_control_periods_before_tick
+            ),
+            simulation_time_before_s=float(message.simulation_time_before_s),
+            simulation_time_after_s=float(message.simulation_time_after_s),
+            target_effective_start_sim_time_s=float(
+                message.target_effective_start_sim_time_s
+            ),
+            target_effective_end_sim_time_s=float(
+                message.target_effective_end_sim_time_s
+            ),
+            physics_substep_indices=tuple(message.physics_substep_indices),
+            physics_substep_sim_times_s=tuple(message.physics_substep_sim_times_s),
+            physics_substep_start_ns=tuple(message.physics_substep_start_ns),
+            physics_substep_end_ns=tuple(message.physics_substep_end_ns),
+            rendered=bool(message.rendered),
+            render_index=(int(message.render_index) if message.has_render_index else None),
         ),
         pre_feedback_q27_rad=tuple(message.pre_feedback_q27_rad),
         applied_target_q27_rad=tuple(message.applied_target_q27_rad),

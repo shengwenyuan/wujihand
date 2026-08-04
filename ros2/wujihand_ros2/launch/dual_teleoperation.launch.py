@@ -16,7 +16,12 @@ from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 
-from wujihand.runtime import RosDeploymentResolver, new_run_id, run_root
+from wujihand.runtime import (
+    RosDeploymentResolver,
+    new_run_id,
+    parse_cpu_affinity,
+    run_root,
+)
 from wujihand_ros2.recording import recording_topics, source_topics
 
 
@@ -27,6 +32,13 @@ def _processes(context: object) -> list[object]:
     gui = LaunchConfiguration("gui").perform(context).lower() == "true"
     frames = int(LaunchConfiguration("frames").perform(context))
     record = LaunchConfiguration("record").perform(context).lower() == "true"
+    isaac_cpu_affinity = (
+        LaunchConfiguration("isaac_cpu_affinity", default="")
+        .perform(context)
+        .strip()
+    )
+    if isaac_cpu_affinity:
+        parse_cpu_affinity(isaac_cpu_affinity)
     requested_run_id = (
         LaunchConfiguration(
             "run_id",
@@ -109,6 +121,8 @@ def _processes(context: object) -> list[object]:
         local_path,
         "--gui" if gui else "--no-gui",
     ]
+    if isaac_cpu_affinity:
+        consumer_command.extend(["--cpu-affinity", isaac_cpu_affinity])
     if frames:
         consumer_command.extend(["--frames", str(frames)])
     if record:
@@ -219,6 +233,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("frames", default_value="0"),
             DeclareLaunchArgument("record", default_value="false"),
             DeclareLaunchArgument("run_id", default_value=""),
+            DeclareLaunchArgument("isaac_cpu_affinity", default_value=""),
             OpaqueFunction(function=_processes),
         ]
     )

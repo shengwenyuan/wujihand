@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>wujihand_ros2</name>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
   <description>ROS 2 Jazzy adapters for Wuji dual teleoperation.</description>
   <maintainer email="maintainers@wujihand.invalid">WujiHand maintainers</maintainer>
   <license>Apache-2.0</license>

@@ -83,6 +83,25 @@ class StageTimes:
 
 
 @dataclass(frozen=True, slots=True)
+class TickExecution:
+    control_index: int
+    schedule_slot: int
+    scheduled_control_time_ns: int
+    control_lateness_ns: int
+    missed_control_periods_before_tick: int
+    simulation_time_before_s: float
+    simulation_time_after_s: float
+    target_effective_start_sim_time_s: float
+    target_effective_end_sim_time_s: float
+    physics_substep_indices: tuple[int, int]
+    physics_substep_sim_times_s: tuple[float, float]
+    physics_substep_start_ns: tuple[int, int]
+    physics_substep_end_ns: tuple[int, int]
+    rendered: bool
+    render_index: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class ArmTick:
     source: SourceRef | None
     active_source: SourceRef | None
@@ -145,6 +164,8 @@ class TickRecord:
     pre_feedback_q27_rad: tuple[float, ...]
     applied_target_q27_rad: tuple[float, ...]
     post_feedback_q27_rad: tuple[float, ...]
+    schema: str = "wujihand.teleoperation_tick_trace.v1"
+    execution: TickExecution | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,7 @@ import argparse
 from collections import Counter
 from dataclasses import asdict
 from datetime import datetime, timezone
+import gc
 import json
 from pathlib import Path
 import platform
@@ -47,12 +48,15 @@ from wujihand.domain import (
     SceneRigidBodyState,
     SourceSelectionTrace,
     TeleoperationTickTrace,
+    TickExecutionTrace,
     TickStageTimes,
 )
 from wujihand.integrity import sha256_file
 from wujihand.runtime import (
+    FixedRateScheduler,
     RosDeploymentResolver,
     SignalStopRequest,
+    configure_current_process_cpu_affinity,
     write_consumer_receipt,
     write_manifest,
 )
@@ -76,6 +80,16 @@ NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
+CONTROL_HZ = 60
+RENDER_HZ = 20
+GUI_MAXIMUM_CATCH_UP_TICKS = 2
+GUI_BLOCK_ON_RENDER = False
+VIEWPORT_WIDTH = 800
+VIEWPORT_HEIGHT = 500
+ISAAC_RENDERER = "MinimalRendering"
+ISAAC_MINIMAL_SHADING_MODE = 2
+ISAAC_CPU_THREAD_LIMIT = 32
+PYTHON_GC_POLICY = "collect_and_freeze_during_control_v1"
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,7 +113,11 @@ def parse_args() -> argparse.Namespace:
         "--frames",
         type=int,
         default=0,
-        help="Bounded headless frames; zero runs until the app closes.",
+        help="Bounded 60 Hz control ticks; zero runs until the app closes.",
+    )
+    parser.add_argument(
+        "--cpu-affinity",
+        help="Linux CPU list for the Isaac consumer, for example 0-15.",
     )
     parser.add_argument("--report", type=Path)
     parser.add_argument(
@@ -130,6 +148,10 @@ def parse_args() -> argparse.Namespace:
 
 ARGS = parse_args()
 try:
+    PROCESS_CPU_AFFINITY = configure_current_process_cpu_affinity(ARGS.cpu_affinity)
+except (RuntimeError, ValueError) as exc:
+    raise SystemExit(f"NV-5 ROS CPU affinity preflight failed: {exc}") from exc
+try:
     RESOLVED = RosDeploymentResolver(ROOT).resolve(
         ARGS.deployment,
         local_binding=ARGS.local_runtime_binding,
@@ -142,6 +164,17 @@ if RESOLVED.deployment.execution_owner_process_id != "isaac_consumer":
     raise SystemExit("NV-5 requires isaac_consumer as the unique owner")
 if RESOLVED.session.session.backend != "isaac":
     raise SystemExit("NV-5 ROS consumer requires an Isaac Session")
+if RESOLVED.control_profile.physics_hz != 120:
+    raise SystemExit("NV-5.1 requires exactly 120 Hz physics")
+if RESOLVED.control_profile.physics_hz % CONTROL_HZ != 0:
+    raise SystemExit("physics_hz must be divisible by control_hz")
+if CONTROL_HZ % RENDER_HZ != 0:
+    raise SystemExit("control_hz must be divisible by render_hz")
+
+PHYSICS_SUBSTEPS_PER_CONTROL = RESOLVED.control_profile.physics_hz // CONTROL_HZ
+CONTROL_TICKS_PER_RENDER = CONTROL_HZ // RENDER_HZ
+if PHYSICS_SUBSTEPS_PER_CONTROL != 2 or CONTROL_TICKS_PER_RENDER != 3:
+    raise SystemExit("NV-5.1 requires 120/60/20 physics-control-render scheduling")
 
 SIDES = resolve_dual_side_runtimes(ROOT, RESOLVED.session)
 alignment_references = {
@@ -166,9 +199,13 @@ from isaacsim import SimulationApp  # type: ignore[import-not-found]
 simulation_app = SimulationApp(
     {
         "headless": not ARGS.gui,
-        "width": 1280,
-        "height": 800,
+        "width": VIEWPORT_WIDTH,
+        "height": VIEWPORT_HEIGHT,
         "anti_aliasing": 0,
+        "renderer": ISAAC_RENDERER,
+        "minimal_shading_mode": ISAAC_MINIMAL_SHADING_MODE,
+        "multi_gpu": False,
+        "limit_cpu_threads": ISAAC_CPU_THREAD_LIMIT,
     }
 )
 
@@ -186,7 +223,7 @@ from wujihand_interfaces.msg import (  # type: ignore[import-not-found]
     RouteCommand,
     SafetyEvent,
     SceneRigidBodyState as SceneRigidBodyStateMessage,
-    TeleoperationTickTrace as TeleoperationTickTraceMessage,
+    TeleoperationTickTraceV2 as TeleoperationTickTraceMessage,
     TrackedRigidBodySample,
     TrackingLifecycleEvent,
 )
@@ -203,9 +240,11 @@ from wujihand_ros2.conversion import (
     scene_rigid_body_state_to_message,
     teleoperation_tick_trace_to_message,
 )
+from wujihand_ros2.executor_thread import RosExecutorThread
 from wujihand_ros2.input_adapters import (
     RosHandSelection,
     RosHandObservationInputAdapter,
+    RosInputSynchronization,
     RosTrackerSelection,
     RosTrackerInputAdapter,
     TrackerInputIdentity,
@@ -226,9 +265,14 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
     scene.apply_targets()
     previous: dict[str, list[float]] | None = None
     deltas: list[float] = []
+    completed_physics_steps = 0
+    physics_steps_per_render = PHYSICS_SUBSTEPS_PER_CONTROL * CONTROL_TICKS_PER_RENDER
     for window in range(1, policy.maximum_windows + 1):
         for _ in range(policy.window_frames):
-            scene.world.step(render=ARGS.gui)
+            scene.world.step(render=False)
+            completed_physics_steps += 1
+            if ARGS.gui and completed_physics_steps % physics_steps_per_render == 0:
+                scene.world.render()
         current = {side: scene.feedback_q27(side).tolist() for side in ("left", "right")}
         if previous is not None:
             delta = q27_window_max_delta_rad(previous, current)
@@ -252,6 +296,13 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
 def _route_topic(side: str, group_id: str, leaf: str) -> str:
     kind = "arm" if group_id == "arm_joints" else "hand"
     return f"{side}/{kind}/{leaf}"
+
+
+def _simulation_time_s(scene: DualNeroHand2IsaacScene) -> float:
+    value = float(scene.world.current_time)
+    if not np.isfinite(value) or value < 0.0:
+        raise RuntimeError("Isaac simulation time must be finite and non-negative")
+    return value
 
 
 def _wait_for_recording_graph(
@@ -286,6 +337,9 @@ def main() -> int:
         qualification_profile=QUALIFICATION,
         physics_hz=RESOLVED.control_profile.physics_hz,
     )
+    scene.world.set_block_on_render(GUI_BLOCK_ON_RENDER)
+    if bool(scene.world.get_block_on_render()) is not GUI_BLOCK_ON_RENDER:
+        raise RuntimeError("Isaac render blocking policy was not applied")
     readiness = _settle(scene)
     # SimulationApp and rclpy both install process-level handlers by default.
     # The consumer must own SIGINT/SIGTERM so launch cannot bypass the terminal
@@ -297,6 +351,8 @@ def main() -> int:
     )
     executor = SingleThreadedExecutor()
     executor.add_node(node)
+    executor_worker = RosExecutorThread(executor)
+    input_synchronization = RosInputSynchronization()
 
     tracker_inputs: dict[str, RosTrackerInputAdapter] = {}
     hand_inputs: dict[HandSide, RosHandObservationInputAdapter] = {}
@@ -317,7 +373,8 @@ def main() -> int:
                     logical_role=arm_route.source.logical_role,
                     tracking_setup_revision=(RESOLVED.deployment.tracking_setup.setup_revision),
                     tracking_frame=RESOLVED.mapping.tracking_frame,
-                )
+                ),
+                synchronization=input_synchronization,
             )
             tracker_inputs[side] = adapter
             subscriptions.append(
@@ -343,6 +400,7 @@ def main() -> int:
                 source_id=hand_route.source.source_id,
                 calibration_id=local.calibration_id,
                 transform_id="wuji_glove.hand_skeleton.v1",
+                synchronization=input_synchronization,
             )
             hand_inputs[hand_side] = hand_adapter
             subscriptions.append(
@@ -355,8 +413,9 @@ def main() -> int:
             )
 
     def observe_lifecycle(message: TrackingLifecycleEvent) -> None:
-        for adapter in tracker_inputs.values():
-            adapter.offer_lifecycle_message(message)
+        with input_synchronization.locked():
+            for adapter in tracker_inputs.values():
+                adapter.offer_lifecycle_message(message)
 
     subscriptions.append(
         node.create_subscription(
@@ -467,7 +526,8 @@ def main() -> int:
     counters: Counter[str] = Counter()
     safety_state: dict[tuple[str, str], tuple[object, ...]] = {}
     completed_frames = 0
-    last_tick_ns = started_ns
+    completed_physics_steps = 0
+    completed_renders = 0
     active_tracker_sources: dict[
         str,
         SourceSelectionTrace | None,
@@ -496,31 +556,56 @@ def main() -> int:
         )
     stop_request = SignalStopRequest()
     previous_signal_handlers = {
-        current: signal.signal(current, stop_request)
-        for current in (signal.SIGINT, signal.SIGTERM)
+        current: signal.signal(current, stop_request) for current in (signal.SIGINT, signal.SIGTERM)
     }
     failure_reason: str | None = None
     recording_failure_reason: str | None = None
     loop_failed = False
     cleanup_error: Exception | None = None
     receipt_error: Exception | None = None
+    python_gc_frozen = False
+    python_gc_frozen_object_count = 0
+    python_gc_unfrozen_on_close = False
     try:
+        gc.collect()
+        gc.freeze()
+        python_gc_frozen = True
+        python_gc_frozen_object_count = gc.get_freeze_count()
+        executor_worker.start()
+        scheduler = FixedRateScheduler(
+            rate_hz=CONTROL_HZ,
+            start_ns=time.monotonic_ns(),
+            maximum_catch_up_ticks=(GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui else 0),
+        )
         while (
             not stop_request.requested
             and simulation_app.is_running()
             and (ARGS.frames == 0 or completed_frames < ARGS.frames)
         ):
-            spin_start_ns = time.monotonic_ns()
-            executor.spin_once(timeout_sec=0.0)
-            spin_end_ns = time.monotonic_ns()
-            tick_ns = max(spin_end_ns, last_tick_ns + 1)
-            for side, tracker_adapter in tracker_inputs.items():
-                if tracker_adapter.take_reference_invalidation():
+            executor_worker.raise_if_failed()
+            scheduled_tick = scheduler.wait_next()
+            counters["scheduler.missed_control_periods"] += (
+                scheduled_tick.missed_periods_before_tick
+            )
+            with input_synchronization.locked():
+                tick_ns = time.monotonic_ns()
+                snapshot_start_ns = tick_ns
+                tracker_snapshots = {
+                    side: adapter.snapshot_for_tick(now_ns=tick_ns)
+                    for side, adapter in tracker_inputs.items()
+                }
+                hand_snapshots = {
+                    side: adapter.snapshot_for_tick(receive_time_ns=tick_ns)
+                    for side, adapter in hand_inputs.items()
+                }
+                snapshot_end_ns = time.monotonic_ns()
+            for side, snapshot in tracker_snapshots.items():
+                if snapshot.reference_invalidated:
                     application.arm_controllers[side].invalidate_reference()
                     active_tracker_sources[side] = None
                     counters[f"{side}.tracker_epoch_changes"] += 1
-            for side, hand_adapter in hand_inputs.items():
-                if hand_adapter.take_epoch_change():
+            for side, snapshot in hand_snapshots.items():
+                if snapshot.epoch_changed:
                     application.hand_controllers.invalidate_input_epoch(
                         side,
                     )
@@ -580,9 +665,31 @@ def main() -> int:
             apply_start_ns = time.monotonic_ns()
             applied_targets = scene.apply_targets()
             apply_end_ns = time.monotonic_ns()
-            world_step_start_ns = time.monotonic_ns()
-            scene.world.step(render=ARGS.gui)
-            world_step_end_ns = time.monotonic_ns()
+            simulation_time_before_s = _simulation_time_s(scene)
+            physics_start_ns = time.monotonic_ns()
+            physics_substep_indices: list[int] = []
+            physics_substep_sim_times_s: list[float] = []
+            physics_substep_start_ns: list[int] = []
+            physics_substep_end_ns: list[int] = []
+            render_due = (
+                ARGS.gui and (scheduled_tick.control_index + 1) % CONTROL_TICKS_PER_RENDER == 0
+            )
+            render_index = completed_renders if render_due else None
+            for substep in range(PHYSICS_SUBSTEPS_PER_CONTROL):
+                physics_substep_indices.append(completed_physics_steps)
+                physics_substep_start_ns.append(time.monotonic_ns())
+                scene.world.step(render=False)
+                physics_substep_end_ns.append(time.monotonic_ns())
+                physics_substep_sim_times_s.append(_simulation_time_s(scene))
+                completed_physics_steps += 1
+            physics_end_ns = time.monotonic_ns()
+            simulation_time_after_s = _simulation_time_s(scene)
+            if render_due:
+                # World.step(render=True) advances by rendering_dt and therefore
+                # cannot represent one 120 Hz physics substep. Render separately
+                # so the UI never changes simulation time.
+                scene.world.render()
+                completed_renders += 1
             post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
             for arm_labelled in result.arm_steps:
                 side = arm_labelled.side
@@ -624,18 +731,37 @@ def main() -> int:
                 try:
                     _publish_recording_tick(
                         run_id=current_run_id,
-                        tick_id=completed_frames,
+                        tick_id=scheduled_tick.control_index,
                         stage_times=TickStageTimes(
-                            spin_start_ns=spin_start_ns,
-                            spin_end_ns=spin_end_ns,
                             tick_time_ns=tick_ns,
+                            snapshot_start_ns=snapshot_start_ns,
+                            snapshot_end_ns=snapshot_end_ns,
                             control_start_ns=control_start_ns,
                             control_end_ns=control_end_ns,
                             apply_start_ns=apply_start_ns,
                             apply_end_ns=apply_end_ns,
-                            world_step_start_ns=world_step_start_ns,
-                            world_step_end_ns=world_step_end_ns,
+                            physics_start_ns=physics_start_ns,
+                            physics_end_ns=physics_end_ns,
                             trace_time_ns=trace_time_ns,
+                        ),
+                        execution=TickExecutionTrace(
+                            control_index=scheduled_tick.control_index,
+                            schedule_slot=scheduled_tick.schedule_slot,
+                            scheduled_control_time_ns=scheduled_tick.deadline_ns,
+                            control_lateness_ns=(tick_ns - scheduled_tick.deadline_ns),
+                            missed_control_periods_before_tick=(
+                                scheduled_tick.missed_periods_before_tick
+                            ),
+                            simulation_time_before_s=simulation_time_before_s,
+                            simulation_time_after_s=simulation_time_after_s,
+                            target_effective_start_sim_time_s=(simulation_time_before_s),
+                            target_effective_end_sim_time_s=simulation_time_after_s,
+                            physics_substep_indices=tuple(physics_substep_indices),
+                            physics_substep_sim_times_s=tuple(physics_substep_sim_times_s),
+                            physics_substep_start_ns=tuple(physics_substep_start_ns),
+                            physics_substep_end_ns=tuple(physics_substep_end_ns),
+                            rendered=render_due,
+                            render_index=render_index,
                         ),
                         trace_publisher=trace_publisher,
                         scene_state_publisher=scene_state_publisher,
@@ -659,16 +785,32 @@ def main() -> int:
                         flush=True,
                     )
             completed_frames += 1
-            last_tick_ns = tick_ns
+            scheduler.complete(completed_ns=time.monotonic_ns())
     except BaseException as exc:
         loop_failed = True
         failure_reason = _bounded_reason(exc)
         raise
     finally:
         try:
-            application.close()
+            executor_worker.stop()
         except Exception as exc:
             cleanup_error = exc
+            if failure_reason is None:
+                failure_reason = _bounded_reason(exc)
+        try:
+            if python_gc_frozen:
+                gc.unfreeze()
+                python_gc_unfrozen_on_close = gc.get_freeze_count() == 0
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
+            if failure_reason is None:
+                failure_reason = _bounded_reason(exc)
+        try:
+            application.close()
+        except Exception as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
             if failure_reason is None:
                 failure_reason = _bounded_reason(exc)
         closed_ns = time.monotonic_ns()
@@ -683,11 +825,7 @@ def main() -> int:
                     terminal_reason = (
                         "consumer_completed"
                         if state is RunRecordingState.CONSUMER_COMPLETED
-                        else (
-                            failure_reason
-                            or recording_failure_reason
-                            or "recording_incomplete"
-                        )
+                        else (failure_reason or recording_failure_reason or "recording_incomplete")
                     )
                     recording_status_publisher.publish(
                         run_recording_status_to_message(
@@ -699,19 +837,13 @@ def main() -> int:
                             )
                         )
                     )
-                    if not recording_status_publisher.wait_for_all_acked(
-                        Duration(seconds=2.0)
-                    ):
-                        recording_failure_reason = (
-                            "recording_status_ack_timeout"
-                        )
+                    if not recording_status_publisher.wait_for_all_acked(Duration(seconds=2.0)):
+                        recording_failure_reason = "recording_status_ack_timeout"
                         state = RunRecordingState.INCOMPLETE
                     else:
                         counters["recording.terminal_status_acked"] += 1
                 except Exception as exc:
-                    recording_failure_reason = (
-                        f"recording_status_failed:{type(exc).__name__}"
-                    )
+                    recording_failure_reason = f"recording_status_failed:{type(exc).__name__}"
                     state = RunRecordingState.INCOMPLETE
             try:
                 # The recorder wrapper treats this atomic receipt as the final
@@ -722,12 +854,17 @@ def main() -> int:
                     state=state,
                     payload=_run_receipt_payload(
                         completed_frames=completed_frames,
+                        completed_physics_steps=completed_physics_steps,
+                        completed_renders=completed_renders,
                         started_ns=started_ns,
                         closed_ns=closed_ns,
                         readiness=readiness,
                         counters=counters,
                         tracker_inputs=tracker_inputs,
                         hand_inputs=hand_inputs,
+                        executor_metrics=asdict(executor_worker.metrics),
+                        python_gc_frozen_object_count=(python_gc_frozen_object_count),
+                        python_gc_unfrozen_on_close=(python_gc_unfrozen_on_close),
                         stop_signal=stop_request.requested_signal,
                         failure_reason=failure_reason,
                         recording_failure_reason=(recording_failure_reason),
@@ -736,7 +873,6 @@ def main() -> int:
             except Exception as exc:
                 receipt_error = exc
         try:
-            executor.shutdown()
             node.destroy_node()
             rclpy.try_shutdown()
         finally:
@@ -768,6 +904,8 @@ def main() -> int:
         "session_hash": RESOLVED.session.session_hash,
         "mapping_sha256": RESOLVED.mapping_sha256,
         "completed_frames": completed_frames,
+        "completed_physics_steps": completed_physics_steps,
+        "completed_renders": completed_renders,
         "readiness": readiness,
         "counters": dict(counters),
         "input_metrics": {
@@ -785,6 +923,13 @@ def main() -> int:
                 }
                 for side, adapter in hand_inputs.items()
             },
+        },
+        "executor": asdict(executor_worker.metrics),
+        "block_on_render": GUI_BLOCK_ON_RENDER,
+        "python_gc": {
+            "policy": PYTHON_GC_POLICY,
+            "frozen_object_count": python_gc_frozen_object_count,
+            "unfrozen_on_close": python_gc_unfrozen_on_close,
         },
         "state": "consumer_completed",
     }
@@ -882,6 +1027,7 @@ def _publish_recording_tick(
     run_id: str,
     tick_id: int,
     stage_times: TickStageTimes,
+    execution: TickExecutionTrace,
     trace_publisher: Any,
     scene_state_publisher: Any | None,
     scene: DualNeroHand2IsaacScene,
@@ -946,6 +1092,7 @@ def _publish_recording_tick(
                     tick_id=tick_id,
                     side=side,
                     times=stage_times,
+                    execution=execution,
                     pre_feedback=pre_feedback[side],
                     applied_target=applied_targets[side],
                     post_feedback=post_feedback[side],
@@ -988,6 +1135,7 @@ def _tick_trace(
     tick_id: int,
     side: str,
     times: TickStageTimes,
+    execution: TickExecutionTrace,
     pre_feedback: NDArray[np.float64],
     applied_target: NDArray[np.float64],
     post_feedback: NDArray[np.float64],
@@ -1094,6 +1242,7 @@ def _tick_trace(
         tick_id=tick_id,
         side=side,
         times=times,
+        execution=execution,
         pre_feedback_q27_rad=tuple(float(value) for value in pre_feedback),
         applied_target_q27_rad=tuple(float(value) for value in applied_target),
         post_feedback_q27_rad=tuple(float(value) for value in post_feedback),
@@ -1176,12 +1325,30 @@ def _run_manifest_payload(
         "simulation_timing": {
             "physics_hz": RESOLVED.control_profile.physics_hz,
             "physics_dt_s": 1.0 / RESOLVED.control_profile.physics_hz,
-            "rendering_hz": 30,
-            "rendering_dt_s": 1.0 / 30.0,
+            "control_hz": CONTROL_HZ,
+            "control_dt_s": 1.0 / CONTROL_HZ,
+            "rendering_hz": RENDER_HZ,
+            "rendering_dt_s": 1.0 / RENDER_HZ,
+            "physics_substeps_per_control": PHYSICS_SUBSTEPS_PER_CONTROL,
+            "control_ticks_per_render": CONTROL_TICKS_PER_RENDER,
+            "scheduler": (
+                "monotonic_fixed_rate_bounded_catch_up_v1"
+                if ARGS.gui
+                else "monotonic_fixed_rate_skip_missed_v1"
+            ),
+            "maximum_consecutive_catch_up_ticks": (GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui else 0),
+            "executor": "background_single_threaded_spin_v1",
             "gui": ARGS.gui,
-            "viewport_width": 1280,
-            "viewport_height": 800,
+            "viewport_width": VIEWPORT_WIDTH,
+            "viewport_height": VIEWPORT_HEIGHT,
             "anti_aliasing": 0,
+            "renderer": ISAAC_RENDERER,
+            "minimal_shading_mode": ISAAC_MINIMAL_SHADING_MODE,
+            "multi_gpu": False,
+            "cpu_thread_limit": ISAAC_CPU_THREAD_LIMIT,
+            "process_cpu_affinity": PROCESS_CPU_AFFINITY,
+            "block_on_render": bool(scene.world.get_block_on_render()),
+            "python_gc_policy": PYTHON_GC_POLICY,
         },
         "resolved_control_artifacts": {
             "qualification_path": str(QUALIFICATION_PATH.relative_to(ROOT)),
@@ -1206,6 +1373,9 @@ def _run_manifest_payload(
                 "atomic applied q27 target",
                 "pre-apply and post-step q27 feedback",
                 "raw stage timestamps",
+                "control deadline, slot and missed-period count",
+                "two physics substep indices, host times and simulation times",
+                "target-effective simulation interval and render index",
                 "Workcell dynamic rigid-body state",
             ],
         },
@@ -1242,6 +1412,12 @@ def _run_manifest_payload(
             "task_truth": False,
             "rosbag_internal_queue_depth": False,
             "rosbag_internal_drop_counter": False,
+            "executor_internal_queue_depth": False,
+            "executor_internal_drop_counter": False,
+            "latest_mailbox_superseded_counter": True,
+            "control_schedule_missed_period_counter": True,
+            "physics_substep_trace": True,
+            "render_trace": True,
             "sequence_and_join_gap_detection": "offline",
         },
         "privacy": {
@@ -1254,12 +1430,17 @@ def _run_manifest_payload(
 def _run_receipt_payload(
     *,
     completed_frames: int,
+    completed_physics_steps: int,
+    completed_renders: int,
     started_ns: int,
     closed_ns: int,
     readiness: dict[str, object],
     counters: Counter[str],
     tracker_inputs: dict[str, RosTrackerInputAdapter],
     hand_inputs: dict[HandSide, RosHandObservationInputAdapter],
+    executor_metrics: dict[str, object],
+    python_gc_frozen_object_count: int,
+    python_gc_unfrozen_on_close: bool,
     stop_signal: int | None,
     failure_reason: str | None,
     recording_failure_reason: str | None,
@@ -1267,6 +1448,24 @@ def _run_receipt_payload(
     return {
         "scope": "consumer_and_trace_producer_only",
         "completed_ticks": completed_frames,
+        "completed_physics_steps": completed_physics_steps,
+        "completed_renders": completed_renders,
+        "configured_timing": {
+            "physics_hz": RESOLVED.control_profile.physics_hz,
+            "control_hz": CONTROL_HZ,
+            "render_hz": RENDER_HZ,
+            "physics_substeps_per_control": PHYSICS_SUBSTEPS_PER_CONTROL,
+            "control_ticks_per_render": CONTROL_TICKS_PER_RENDER,
+            "maximum_consecutive_catch_up_ticks": (GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui else 0),
+            "process_cpu_affinity": PROCESS_CPU_AFFINITY,
+            "block_on_render": GUI_BLOCK_ON_RENDER,
+            "python_gc_policy": PYTHON_GC_POLICY,
+        },
+        "python_gc": {
+            "policy": PYTHON_GC_POLICY,
+            "frozen_object_count": python_gc_frozen_object_count,
+            "unfrozen_on_close": python_gc_unfrozen_on_close,
+        },
         "control_started_monotonic_ns": started_ns,
         "closed_monotonic_ns": closed_ns,
         "stop_signal": stop_signal,
@@ -1290,6 +1489,7 @@ def _run_receipt_payload(
                 for side, adapter in hand_inputs.items()
             },
         },
+        "executor": executor_metrics,
         "quality_metrics_computed": False,
     }
 

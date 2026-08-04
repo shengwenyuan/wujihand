@@ -178,7 +178,7 @@ def _tick_interval_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
     figure, axis = plt.subplots(figsize=(8.8, 4.8), constrained_layout=True)
     _plot_ecdf(axis, intervals, label="control tick interval", color=COLORS[0])
     target_hz = float(bundle.summary["config"]["expected_control_hz"])
-    limit = float(bundle.summary["config"]["p95_tick_interval_limit_ms"])
+    limit = float(bundle.summary["config"]["effective_p95_tick_interval_limit_ms"])
     axis.axvline(
         1000.0 / target_hz,
         color=COLORS[2],
@@ -384,14 +384,24 @@ def _stage_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
     rows = _rows(bundle, "stage_samples", derived=True)
     figure, axis = plt.subplots(figsize=(8.8, 5.0), constrained_layout=True)
     fields = (
-        ("spin_ms", "ROS spin", COLORS[0]),
-        ("control_ms", "control", COLORS[1]),
-        ("apply_ms", "apply", COLORS[2]),
-        ("world_step_ms", "world step", COLORS[3]),
-        ("pipeline_ms", "full pipeline", COLORS[4]),
+        (
+            ("snapshot_ms", "input snapshot", COLORS[0]),
+            ("control_ms", "control", COLORS[1]),
+            ("apply_ms", "apply", COLORS[2]),
+            ("physics_ms", "two physics substeps", COLORS[3]),
+            ("pipeline_ms", "full pipeline", COLORS[4]),
+        )
+        if rows and "snapshot_ms" in rows[0]
+        else (
+            ("spin_ms", "ROS spin", COLORS[0]),
+            ("control_ms", "control", COLORS[1]),
+            ("apply_ms", "apply", COLORS[2]),
+            ("world_step_ms", "world step", COLORS[3]),
+            ("pipeline_ms", "full pipeline", COLORS[4]),
+        )
     )
     for field, label, color in fields:
-        _plot_ecdf(axis, [row[field] for row in rows], label=label, color=color)
+        _plot_ecdf(axis, [row.get(field) for row in rows], label=label, color=color)
     axis.set_xlabel("Duration (ms)")
     axis.set_ylabel("ECDF")
     axis.set_ylim(0.0, 1.01)
@@ -400,6 +410,62 @@ def _stage_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
     path = output / "08_stage_duration_ecdf.png"
     _save(figure, path)
     return {"file": path.name, "title": "Stage duration ECDF", "data": "derived/stage_samples.csv"}
+
+
+def _execution_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
+    rows = _rows(bundle, "execution_samples", derived=True)
+    figure, axes = plt.subplots(1, 2, figsize=(11.0, 4.7), constrained_layout=True)
+    lateness = [row["control_lateness_ms"] for row in rows]
+    substep_host = [
+        row[field]
+        for row in rows
+        for field in ("physics_substep_0_host_ms", "physics_substep_1_host_ms")
+    ]
+    _plot_ecdf(axes[0], lateness, label="control deadline lateness", color=COLORS[0])
+    _plot_ecdf(axes[0], substep_host, label="physics substep host time", color=COLORS[1])
+    axes[0].set_xlabel("Duration (ms)")
+    axes[0].set_ylabel("ECDF")
+    axes[0].set_ylim(0.0, 1.01)
+    axes[0].set_title("Scheduler and physics execution")
+    axes[0].legend(loc="lower right")
+
+    tick_ids = [int(row["tick_id"]) for row in rows]
+    simulation_advance_ms = [float(row["simulation_advance_s"]) * 1000.0 for row in rows]
+    axes[1].plot(
+        tick_ids,
+        simulation_advance_ms,
+        color=COLORS[2],
+        linewidth=1.2,
+        label="simulation advance",
+    )
+    expected_control_ms = 1000.0 / float(bundle.summary["config"]["expected_control_hz"])
+    axes[1].axhline(
+        expected_control_ms,
+        color="#555555",
+        linestyle="--",
+        label="target control period",
+    )
+    render_ticks = [int(row["tick_id"]) for row in rows if bool(row["rendered"])]
+    if render_ticks:
+        axes[1].scatter(
+            render_ticks,
+            [expected_control_ms] * len(render_ticks),
+            color=COLORS[4],
+            marker="|",
+            s=80,
+            label="rendered tick",
+        )
+    axes[1].set_xlabel("Control tick")
+    axes[1].set_ylabel("Simulation advance (ms)")
+    axes[1].set_title("Two-substep and render cadence")
+    axes[1].legend(loc="best")
+    path = output / "13_scheduler_physics_render.png"
+    _save(figure, path)
+    return {
+        "file": path.name,
+        "title": "Scheduler, physics and render cadence",
+        "data": "derived/execution_samples.csv",
+    }
 
 
 def _glove_confidence_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
@@ -631,6 +697,8 @@ def write_plots(bundle: MetricBundle, output_root: str | Path) -> tuple[dict[str
         _ik_plot(bundle, output),
         _skew_plot(bundle, output),
     ]
+    if bundle.derived_tables["execution_samples"]:
+        figures.append(_execution_plot(bundle, output))
     return tuple(figures)
 
 
