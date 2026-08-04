@@ -148,6 +148,33 @@ sources:
       realsense2_description/package.xml: 73c0fe593f574dd3cea0e57378c437c2671d3fdb2db2d32341d599799ee2be59
       realsense2_description/meshes/d405.stl: a248f41149d12b28311829feecbe7a80cf1481fd05e0f5df2c4c7ecd556edd48
       realsense2_description/urdf/_d405.urdf.xacro: 5a39829166a7d1a0a90b15afc6a3b074438bb990c9a53d6d2218dbe6848f9616
+  - name: isaac-d405-wrist-rig-v2
+    kind: generated
+    sha256: 044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
+    generated_by: tools/build_d405_wrist_rig_assets.py
+    generator_sha256: 42dc5de3b34a93ce78b6c11aa8c8212f10c69bacc519b330dbcb90b03305aaab
+    generation_adapter: src/wujihand/adapters/simulation/d405_wrist_rig_assets.py
+    generation_adapter_sha256: 583b8dc9c873c3ac9f998785f406d6eba016bae6013e14340b6a7bb6064d56e8
+    generator_recipe: configs/profiles/isaac_d405_wrist_rig_asset_generation_v1.yaml
+    generator_recipe_sha256: dd292bd4c53107ffc5ea5824bcd25ddf66b5436f1c9297a01510dd24deb7863d
+    mount_scad: hardware/camera_mounts/nero_hand2_beta1_realsense_d405/nero_hand2_beta1_realsense_d405_wrist_mount_v2.scad
+    mount_scad_sha256: bf6ea6483f340ad525e9836c507dd4ffb4dddd317e72ba8aa9a16717ae455894
+    openscad_version: "2021.01"
+    derived_from: realsense-ros-d405-description@bafc21080c5c8e259dadbb309797949aee0dd950
+    inherited_license: Apache-2.0
+    local_runtime_path: hardware/camera_mounts/nero_hand2_beta1_realsense_d405/generated
+    artifacts:
+      collision/d405_left.yaml: dfb19a0dc8fb72ba3d9381cca02b1d6d31f2b978d2a19ff97b264c885ea3061f
+      collision/d405_right.yaml: f21e7bd719884eb9389890f4a033ac11f2c52aee068f122abc909671dadee437
+      collision/mount_v2_left.yaml: 5338ecb8bf6249e81dace39fcc5e8829da585620c8c8b3a059227f7c33633dbb
+      collision/mount_v2_right.yaml: 52ac54c38151c5037aaa5b3dfef628fd100e995d8f6764a6208879c965d84ba0
+      generation_report.json: 54c1a4ad8d332be47be35328f7d45830e5832f26116531664454186ed50f7e7b
+      visual/d405_left.stl: e39e14ff66aa5ffc033aa136ed26e5ab04549ac20502ab5111608b9f3e424dd6
+      visual/d405_right.stl: 8df401010384b957ac510263799250e8a2c44004f9cb2701b2fd124f594da95c
+      visual/mount_v2_left.stl: f4a4a7452f6abf203ed0f19d13a253403da930d92fb56b5ab010b61c34ea6d85
+      visual/mount_v2_right.stl: b4d21eea0e980d2582e90aae33858426763d1352842e49977b5f878946cba41b
+    asset_trees:
+      .: 044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
   - name: mujoco-menagerie-fr3-v2
     kind: git
     url: https://github.com/google-deepmind/mujoco_menagerie.git

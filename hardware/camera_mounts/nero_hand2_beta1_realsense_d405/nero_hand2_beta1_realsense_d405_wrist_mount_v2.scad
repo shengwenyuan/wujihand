@@ -23,6 +23,11 @@ cable bend, payload and collision envelope before powered use.
 
 $fn = 56;
 
+// Export "right" as the accepted canonical geometry.  Export "left" as a
+// separate, baked Y-reflection; never mirror this mesh with a negative USD
+// scale because that would corrupt winding, normals and collision semantics.
+mount_side = "right";
+
 // ---------------- Placement parameters ----------------
 
 // Right-hand base convention: -X is dorsal, +Y is the thumb/inside edge,
@@ -292,6 +297,18 @@ module printable_mount() {
     }
 }
 
+module side_specific_printable_mount() {
+    assert(
+        mount_side == "right" || mount_side == "left",
+        "mount_side must be right or left"
+    );
+    if (mount_side == "right") {
+        printable_mount();
+    } else {
+        mirror([0, 1, 0]) printable_mount();
+    }
+}
+
 // ---------------- Preview-only envelopes ----------------
 
 module reference_preview() {
@@ -308,5 +325,11 @@ module reference_preview() {
                 cylinder(h = 150, d = 1.2);
 }
 
-printable_mount();
-if (show_reference_preview) reference_preview();
+side_specific_printable_mount();
+if (show_reference_preview) {
+    if (mount_side == "right") {
+        reference_preview();
+    } else {
+        mirror([0, 1, 0]) reference_preview();
+    }
+}

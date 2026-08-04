@@ -1,0 +1,34 @@
+schema: wujihand.compound_collision_proxy.v1
+component: realsense_d405_housing_sim
+side: right
+canonical_frame: rear_mount
+units: mm
+rigid_body_policy: child_shapes_only_no_mass_or_rigid_body_api
+frames:
+  rear_mount_to_optical:
+    translation_mm:
+    - -8.881784197001252e-16
+    - 9.000000000000002
+    - 23.999999999999996
+    rotation:
+    - - 0.0
+      - 1.0
+      - 0.0
+    - - -1.0
+      - 0.0
+      - 0.0
+    - - 0.0
+      - 0.0
+      - 0.9999999999999999
+primitives:
+- name: housing_box
+  type: box
+  center_mm:
+  - 0.0
+  - 0.0
+  - 11.5
+  size_mm:
+  - 42.0
+  - 42.0
+  - 23.0
+required_clear_points_mm: []

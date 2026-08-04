@@ -58,7 +58,7 @@ class ResolvedInstance:
         return self.qualify_backend_name(self.binding.root)
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        mapping: dict[str, object] = {
             "instance_id": self.instance_id,
             "asset_path": self.asset_path,
             "asset": self.asset.to_mapping(),
@@ -66,11 +66,6 @@ class ResolvedInstance:
             "binding": self.binding.to_mapping(),
             "artifact": (
                 None if self.artifact is None else self.artifact.to_mapping()
-            ),
-            "collision_artifact": (
-                None
-                if self.collision_artifact is None
-                else self.collision_artifact.to_mapping()
             ),
             "resource_trees": [
                 resource.to_mapping() for resource in self.resource_trees
@@ -93,6 +88,13 @@ class ResolvedInstance:
                 for group in self.binding.group_bindings
             },
         }
+        if self.binding.schema == BACKEND_BINDING_SCHEMA_V2:
+            mapping["collision_artifact"] = (
+                None
+                if self.collision_artifact is None
+                else self.collision_artifact.to_mapping()
+            )
+        return mapping
 
 
 @dataclass(frozen=True, slots=True)

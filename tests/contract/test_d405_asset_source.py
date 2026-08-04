@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+import yaml
 
-from wujihand.integrity import sha256_file
+from wujihand.integrity import sha256_file, sha256_tree
 from wujihand.runtime.config_repository import ConfigRepository
 from wujihand.runtime.source_lock import SourceLock
 
 
 ROOT = Path(__file__).parents[2]
 SOURCE_NAME = "realsense-ros-d405-description"
+GENERATED_SOURCE_NAME = "isaac-d405-wrist-rig-v2"
 
 
 def test_d405_source_lock_is_an_exact_official_release_pin() -> None:
@@ -52,3 +55,58 @@ def test_restored_d405_source_files_match_the_lock() -> None:
 
     for relative_path, expected_sha256 in source.artifacts:
         assert sha256_file(source_root / relative_path) == expected_sha256
+
+
+def test_generated_wrist_rig_assets_and_derivation_match_the_lock() -> None:
+    repository = ConfigRepository(ROOT)
+    source = SourceLock.load(repository).record(GENERATED_SOURCE_NAME)
+    source_root = ROOT / source.local_runtime_path
+
+    assert dict(source.revision) == {
+        "kind": "generated",
+        "sha256": "044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c",
+    }
+    assert sha256_tree(source_root) == dict(source.revision)["sha256"]
+    for relative_path, expected_sha256 in source.artifacts:
+        assert sha256_file(source_root / relative_path) == expected_sha256
+
+    document = yaml.safe_load(
+        (ROOT / "third_party/sources.lock.yaml").read_text(encoding="utf-8")
+    )
+    generated = next(
+        item
+        for item in document["sources"]
+        if item["name"] == GENERATED_SOURCE_NAME
+    )
+    for path_key, digest_key in (
+        ("generated_by", "generator_sha256"),
+        ("generation_adapter", "generation_adapter_sha256"),
+        ("generator_recipe", "generator_recipe_sha256"),
+        ("mount_scad", "mount_scad_sha256"),
+    ):
+        assert sha256_file(ROOT / generated[path_key]) == generated[digest_key]
+
+
+def test_generated_wrist_rig_report_records_baked_mirror_and_single_bodies() -> None:
+    report = json.loads(
+        (
+            ROOT
+            / "hardware/camera_mounts/nero_hand2_beta1_realsense_d405/generated/"
+            "generation_report.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert report["status"] == "qualified"
+    assert report["mirror_gate"]["usd_negative_scale_required"] is False
+    assert report["camera_warning"].startswith("SIMULATION ONLY: synthetic 140-degree")
+    for audit in report["mesh_audits"].values():
+        assert audit["body_count"] == 1
+        assert audit["shared_edge_component_count"] == 1
+        assert audit["watertight"] is True
+        assert audit["winding_consistent"] is True
+    assert report["collision_proxy_audits"]["mount_collision_right"][
+        "covered_vertex_fraction"
+    ] > 0.98
+    assert report["collision_proxy_audits"]["mount_collision_left"][
+        "clear_points_preserved"
+    ] is True

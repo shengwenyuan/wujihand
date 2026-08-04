@@ -1,0 +1,76 @@
+schema: wujihand.d405_wrist_rig_asset_generation.v1
+recipe_id: isaac_d405_wrist_rig_asset_generation_v1
+status: simulation_only
+toolchain:
+  openscad_version: "2021.01"
+source:
+  mount_scad: hardware/camera_mounts/nero_hand2_beta1_realsense_d405/nero_hand2_beta1_realsense_d405_wrist_mount_v2.scad
+  d405_lock_id: realsense-ros-d405-description
+  d405_commit: bafc21080c5c8e259dadbb309797949aee0dd950
+  d405_mesh: realsense2_description/meshes/d405.stl
+  d405_mesh_sha256: a248f41149d12b28311829feecbe7a80cf1481fd05e0f5df2c4c7ecd556edd48
+output:
+  root: hardware/camera_mounts/nero_hand2_beta1_realsense_d405/generated
+  mount_visual_right: visual/mount_v2_right.stl
+  mount_visual_left: visual/mount_v2_left.stl
+  d405_visual_right: visual/d405_right.stl
+  d405_visual_left: visual/d405_left.stl
+  mount_collision_right: collision/mount_v2_right.yaml
+  mount_collision_left: collision/mount_v2_left.yaml
+  d405_collision_right: collision/d405_right.yaml
+  d405_collision_left: collision/d405_left.yaml
+  report: generation_report.json
+geometry:
+  units: mm
+  hand_frame_axes: [x_dorsal_axis, y_thumb_axis_on_right, z_fingertip_axis]
+  canonical_side: right
+  mirror_plane: xz
+  mirror_operation: y_to_negative_y_baked_during_export
+  weld_tolerance_mm: 0.00001
+  minimum_proxy_visual_vertex_coverage: 0.75
+mount:
+  camera_interface_in_right_hand:
+    translation_mm: [-55.0, 90.0, 30.0]
+    azimuth_deg: -55.0
+    tilt_deg: 58.0
+  plate:
+    size_mm: [34.0, 30.0, 3.2]
+  base:
+    thickness_mm: 4.0
+    rail_center_mm: [0.0, 30.0, -2.0]
+    rail_size_mm: [58.0, 9.0, 4.0]
+    flange_centers_right_mm:
+      - [-20.1525, 20.1525, -2.0]
+      - [20.1525, 20.1525, -2.0]
+    screw_hole_diameter_mm: 3.4
+    key_size_mm: [13.4, 5.8, 2.1]
+    key_center_z_mm: 0.75
+    connector_target_y_mm: 30.0
+    connector_width_mm: 9.0
+  struts:
+    base_points_right_mm:
+      - [-22.0, 31.0, -4.0]
+      - [22.0, 31.0, -4.0]
+      - [-22.0, 32.0, -4.0]
+      - [22.0, 32.0, -4.0]
+    camera_anchor_y_mm: [-11.5, 11.5, 11.5, -11.5]
+    radius_mm: [3.4, 3.4, 2.788, 2.788]
+    route_x_mm: 26.0
+    route_z_mm: -4.0
+    plate_z_mm: 0.8
+  required_clear_points_right_mm:
+    - [0.0, 20.0, -2.0]
+    - [0.0, 58.0, 8.0]
+d405:
+  raw_mesh_contract: raw_x_width_raw_y_height_raw_z_front_normal_rear_at_negative_23_mm
+  aligned_mesh_contract: x_negative_raw_y_y_raw_x_z_rear_to_front_mm
+  body_size_mm: [42.0, 42.0, 23.0]
+  optical_origin_from_rear_right_mm: [0.0, 9.0, 24.0]
+  optical_axes_in_body:
+    forward: [0.0, 0.0, 1.0]
+    up: [-1.0, 0.0, 0.0]
+camera_warning: "SIMULATION ONLY: synthetic 140-degree HFOV; not a physical RealSense D405 specification or calibration."
+assumptions:
+  - mount_and_camera_assets_are_passive_child_shapes_of_hand2_base
+  - collision_proxies_do_not_author_mass_inertia_rigid_body_joint_or_articulation_apis
+  - d405_upstream_mesh_is_used_for_housing_geometry_not_physical_calibration

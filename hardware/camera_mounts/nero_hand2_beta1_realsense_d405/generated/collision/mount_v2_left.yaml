@@ -1,0 +1,212 @@
+schema: wujihand.compound_collision_proxy.v1
+component: nero_hand2_beta1_d405_mount_v2
+side: left
+canonical_frame: hand_interface
+units: mm
+rigid_body_policy: child_shapes_only_no_mass_or_rigid_body_api
+primitives:
+- name: base_outer_rail
+  type: box
+  center_mm:
+  - 0.0
+  - -30.0
+  - -2.0
+  size_mm:
+  - 58.0
+  - 9.0
+  - 4.0
+- name: base_connector_0
+  type: box
+  center_mm:
+  - -21.07625
+  - -25.07625
+  - -2.0
+  size_mm:
+  - 10.019306987012625
+  - 9.0
+  - 4.0
+  rotation:
+  - - -0.18439399076151605
+    - 0.9828524081320867
+    - 0.0
+  - - -0.9828524081320867
+    - -0.18439399076151605
+    - -0.0
+  - - 0.0
+    - -0.0
+    - 1.0
+- name: flange_key_0
+  type: box
+  center_mm:
+  - -20.1525
+  - -20.1525
+  - 0.75
+  size_mm:
+  - 13.4
+  - 5.8
+  - 2.1
+  rotation:
+  - - 0.7071067811865476
+    - -0.7071067811865475
+    - 0.0
+  - - 0.7071067811865475
+    - 0.7071067811865476
+    - -0.0
+  - - 0.0
+    - -0.0
+    - 1.0
+- name: base_connector_1
+  type: box
+  center_mm:
+  - 21.07625
+  - -25.07625
+  - -2.0
+  size_mm:
+  - 10.019306987012625
+  - 9.0
+  - 4.0
+  rotation:
+  - - 0.1843939907615162
+    - 0.9828524081320866
+    - 0.0
+  - - -0.9828524081320866
+    - 0.1843939907615162
+    - -0.0
+  - - 0.0
+    - -0.0
+    - 1.0
+- name: flange_key_1
+  type: box
+  center_mm:
+  - 20.1525
+  - -20.1525
+  - 0.75
+  size_mm:
+  - 13.4
+  - 5.8
+  - 2.1
+  rotation:
+  - - 0.7071067811865476
+    - 0.7071067811865475
+    - 0.0
+  - - -0.7071067811865475
+    - 0.7071067811865476
+    - -0.0
+  - - 0.0
+    - -0.0
+    - 1.0
+- name: strut_0_base_to_route
+  type: capsule_segment
+  start_mm:
+  - -22.0
+  - -31.0
+  - -4.0
+  end_mm:
+  - -58.46325084726527
+  - -74.8963966447272
+  - 5.831072443000107
+  radius_mm: 3.4
+- name: strut_0_route_to_plate
+  type: capsule_segment
+  start_mm:
+  - -58.46325084726527
+  - -74.8963966447272
+  - 5.831072443000107
+  end_mm:
+  - -64.03111218544525
+  - -82.84812671666543
+  - 30.423935411386562
+  radius_mm: 3.4
+- name: strut_1_base_to_route
+  type: capsule_segment
+  start_mm:
+  - 22.0
+  - -31.0
+  - -4.0
+  end_mm:
+  - -39.62275382861846
+  - -88.08865468080127
+  - 5.831072443000107
+  radius_mm: 3.4
+- name: strut_1_route_to_plate
+  type: capsule_segment
+  start_mm:
+  - -39.62275382861846
+  - -88.08865468080127
+  - 5.831072443000107
+  end_mm:
+  - -45.19061516679844
+  - -96.0403847527395
+  - 30.423935411386562
+  radius_mm: 3.4
+- name: strut_2_base_to_route
+  type: capsule_segment
+  start_mm:
+  - -22.0
+  - -32.0
+  - -4.0
+  end_mm:
+  - -39.62275382861846
+  - -88.08865468080127
+  - 5.831072443000107
+  radius_mm: 2.788
+- name: strut_2_route_to_plate
+  type: capsule_segment
+  start_mm:
+  - -39.62275382861846
+  - -88.08865468080127
+  - 5.831072443000107
+  end_mm:
+  - -45.19061516679844
+  - -96.0403847527395
+  - 30.423935411386562
+  radius_mm: 2.788
+- name: strut_3_base_to_route
+  type: capsule_segment
+  start_mm:
+  - 22.0
+  - -32.0
+  - -4.0
+  end_mm:
+  - -58.46325084726527
+  - -74.8963966447272
+  - 5.831072443000107
+  radius_mm: 2.788
+- name: strut_3_route_to_plate
+  type: capsule_segment
+  start_mm:
+  - -58.46325084726527
+  - -74.8963966447272
+  - 5.831072443000107
+  end_mm:
+  - -64.03111218544525
+  - -82.84812671666543
+  - 30.423935411386562
+  radius_mm: 2.788
+- name: camera_plate
+  type: box
+  center_mm:
+  - -54.22172735224369
+  - -88.88851146940492
+  - 30.847870822773128
+  size_mm:
+  - 34.0
+  - 30.0
+  - 3.2
+  rotation:
+  - - 0.30394920313265006
+    - -0.8191520442889918
+    - 0.4864204048476921
+  - - 0.4340844486047482
+    - 0.5735764363510462
+    - 0.6946803316219238
+  - - -0.848048096156426
+    - -0.0
+    - 0.5299192642332049
+required_clear_points_mm:
+- - 0.0
+  - -20.0
+  - -2.0
+- - 0.0
+  - -58.0
+  - 8.0
