@@ -18,9 +18,11 @@ from .common import (
 )
 
 
-BACKEND_BINDING_SCHEMA = "wujihand.backend_binding.v1"
+BACKEND_BINDING_SCHEMA_V1 = "wujihand.backend_binding.v1"
+BACKEND_BINDING_SCHEMA_V2 = "wujihand.backend_binding.v2"
+BACKEND_BINDING_SCHEMA = BACKEND_BINDING_SCHEMA_V1
 SUPPORTED_BACKENDS = frozenset({"mujoco", "isaac"})
-SUPPORTED_LOADERS = frozenset({"mjcf", "usd", "procedural"})
+SUPPORTED_LOADERS = frozenset({"mjcf", "usd", "procedural", "mesh"})
 SUPPORTED_NAMESPACE_POLICIES = frozenset({"preserve", "prefix"})
 BUILDER_REGISTRY = frozenset({"hand2_rotation_mount_d6_v1"})
 SUPPORTED_SOURCE_REVISION_KINDS = frozenset({"commit", "tag", "sha256"})
@@ -157,15 +159,31 @@ class BackendBinding:
     namespace_policy: str
     loader: str
     artifact: ArtifactSpec | None
+    collision_artifact: ArtifactSpec | None
     resource_trees: tuple[ArtifactSpec, ...]
     root: str
     frame_map: tuple[tuple[str, str], ...]
     group_bindings: tuple[GroupBindingSpec, ...]
     builder: str | None
     compatibility_profile: str | None
+    sensor_profile: str | None
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str = "binding") -> Self:
+        if not isinstance(value, Mapping):
+            raise ValueError(f"{field} must be a mapping")
+        raw = cast(Mapping[str, object], value)
+        schema = require_string(raw.get("schema"), field=f"{field}.schema")
+        if schema not in {BACKEND_BINDING_SCHEMA_V1, BACKEND_BINDING_SCHEMA_V2}:
+            raise ValueError(
+                f"{field}.schema must be one of "
+                f"{[BACKEND_BINDING_SCHEMA_V1, BACKEND_BINDING_SCHEMA_V2]}"
+            )
+        v2_fields = (
+            frozenset({"collision_artifact", "sensor_profile"})
+            if schema == BACKEND_BINDING_SCHEMA_V2
+            else frozenset()
+        )
         data = require_exact_mapping(
             value,
             expected=frozenset(
@@ -186,12 +204,10 @@ class BackendBinding:
                     "builder",
                     "compatibility_profile",
                 }
-            ),
+            )
+            | v2_fields,
             field=field,
         )
-        schema = require_string(data["schema"], field=f"{field}.schema")
-        if schema != BACKEND_BINDING_SCHEMA:
-            raise ValueError(f"{field}.schema must be {BACKEND_BINDING_SCHEMA!r}")
         asset_side = require_string(data["asset_side"], field=f"{field}.asset_side")
         if asset_side not in SUPPORTED_SIDES:
             raise ValueError(
@@ -215,11 +231,25 @@ class BackendBinding:
             raise ValueError(f"{field}.loader mjcf requires backend mujoco")
         if loader == "usd" and backend != "isaac":
             raise ValueError(f"{field}.loader usd requires backend isaac")
+        if loader == "mesh":
+            if schema != BACKEND_BINDING_SCHEMA_V2:
+                raise ValueError(f"{field}.loader mesh requires backend binding v2")
+            if backend != "isaac":
+                raise ValueError(f"{field}.loader mesh requires backend isaac")
 
         artifact = (
             None
             if data["artifact"] is None
             else ArtifactSpec.from_mapping(data["artifact"], field=f"{field}.artifact")
+        )
+        collision_artifact = (
+            None
+            if schema == BACKEND_BINDING_SCHEMA_V1
+            or data["collision_artifact"] is None
+            else ArtifactSpec.from_mapping(
+                data["collision_artifact"],
+                field=f"{field}.collision_artifact",
+            )
         )
         builder = (
             None
@@ -261,7 +291,7 @@ class BackendBinding:
                 require_sequence(data["group_bindings"], field=f"{field}.group_bindings")
             )
         )
-        if not groups:
+        if schema == BACKEND_BINDING_SCHEMA_V1 and not groups:
             raise ValueError(f"{field}.group_bindings must not be empty")
         group_ids = tuple(group.group_id for group in groups)
         if len(set(group_ids)) != len(group_ids):
@@ -287,6 +317,7 @@ class BackendBinding:
             namespace_policy=namespace_policy,
             loader=loader,
             artifact=artifact,
+            collision_artifact=collision_artifact,
             resource_trees=resource_trees,
             root=require_string(data["root"], field=f"{field}.root"),
             frame_map=_frame_pairs(data["frame_map"], field=f"{field}.frame_map"),
@@ -295,6 +326,14 @@ class BackendBinding:
             compatibility_profile=optional_project_reference(
                 data["compatibility_profile"],
                 field=f"{field}.compatibility_profile",
+            ),
+            sensor_profile=(
+                None
+                if schema == BACKEND_BINDING_SCHEMA_V1
+                else optional_project_reference(
+                    data["sensor_profile"],
+                    field=f"{field}.sensor_profile",
+                )
             ),
         )
 
@@ -311,7 +350,7 @@ class BackendBinding:
         raise KeyError(group_id)
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        mapping: dict[str, object] = {
             "schema": self.schema,
             "binding_id": self.binding_id,
             "asset_id": self.asset_id,
@@ -328,11 +367,21 @@ class BackendBinding:
             "builder": self.builder,
             "compatibility_profile": self.compatibility_profile,
         }
+        if self.schema == BACKEND_BINDING_SCHEMA_V2:
+            mapping["collision_artifact"] = (
+                None
+                if self.collision_artifact is None
+                else self.collision_artifact.to_mapping()
+            )
+            mapping["sensor_profile"] = self.sensor_profile
+        return mapping
 
 
 __all__ = [
     "ArtifactSpec",
     "BACKEND_BINDING_SCHEMA",
+    "BACKEND_BINDING_SCHEMA_V1",
+    "BACKEND_BINDING_SCHEMA_V2",
     "BUILDER_REGISTRY",
     "BackendBinding",
     "GroupBindingSpec",

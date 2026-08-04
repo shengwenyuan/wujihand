@@ -44,6 +44,39 @@ def _binding() -> dict[str, Any]:
     }
 
 
+def _passive_binding(*, sensor_profile: str | None = None) -> dict[str, Any]:
+    return {
+        "schema": "wujihand.backend_binding.v2",
+        "binding_id": "nero_hand2_beta1_d405_mount_v2_right_isaac_v1",
+        "asset_id": "nero_hand2_beta1_d405_mount_v2_right",
+        "asset_revision": "v2",
+        "asset_side": "right",
+        "backend": "isaac",
+        "namespace_policy": "prefix",
+        "loader": "mesh",
+        "artifact": {
+            "source": "d405-wrist-rig-assets",
+            "source_revision": f"sha256:{'a' * 64}",
+            "path": "mount_right_visual.stl",
+        },
+        "collision_artifact": {
+            "source": "d405-wrist-rig-assets",
+            "source_revision": f"sha256:{'a' * 64}",
+            "path": "mount_right_collision.json",
+        },
+        "resource_trees": [],
+        "root": "mount",
+        "frame_map": {
+            "hand_interface": "HandInterface",
+            "camera_interface": "CameraInterface",
+        },
+        "group_bindings": [],
+        "builder": None,
+        "compatibility_profile": None,
+        "sensor_profile": sensor_profile,
+    }
+
+
 def test_backend_binding_round_trip() -> None:
     binding = BackendBinding.from_mapping(_binding())
 
@@ -139,3 +172,41 @@ def test_procedural_binding_uses_closed_builder_registry() -> None:
     procedural["builder"] = "arbitrary_python"
     with pytest.raises(ValueError, match="builder must be one of"):
         BackendBinding.from_mapping(procedural)
+
+
+def test_backend_binding_v2_round_trips_passive_mesh_representation() -> None:
+    binding = BackendBinding.from_mapping(_passive_binding())
+
+    assert binding.group_bindings == ()
+    assert binding.loader == "mesh"
+    assert binding.collision_artifact is not None
+    assert binding.sensor_profile is None
+    assert BackendBinding.from_mapping(binding.to_mapping()) == binding
+
+
+def test_backend_binding_v2_accepts_explicit_sensor_profile() -> None:
+    value = _passive_binding(
+        sensor_profile="configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml"
+    )
+
+    binding = BackendBinding.from_mapping(value)
+
+    assert binding.sensor_profile == value["sensor_profile"]
+
+
+def test_backend_binding_versions_preserve_loader_and_group_boundaries() -> None:
+    v1_empty = _binding()
+    v1_empty["group_bindings"] = []
+    with pytest.raises(ValueError, match="must not be empty"):
+        BackendBinding.from_mapping(v1_empty)
+
+    v1_mesh = _binding()
+    v1_mesh["loader"] = "mesh"
+    with pytest.raises(ValueError, match="requires backend binding v2"):
+        BackendBinding.from_mapping(v1_mesh)
+
+    v1_with_passive_fields = _binding()
+    v1_with_passive_fields["collision_artifact"] = None
+    v1_with_passive_fields["sensor_profile"] = None
+    with pytest.raises(ValueError, match="unexpected"):
+        BackendBinding.from_mapping(v1_with_passive_fields)

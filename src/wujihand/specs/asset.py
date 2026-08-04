@@ -16,10 +16,14 @@ from .common import (
 )
 
 
-ASSET_MANIFEST_SCHEMA = "wujihand.asset_manifest.v1"
-SUPPORTED_ASSET_KINDS = frozenset(
+ASSET_MANIFEST_SCHEMA_V1 = "wujihand.asset_manifest.v1"
+ASSET_MANIFEST_SCHEMA_V2 = "wujihand.asset_manifest.v2"
+ASSET_MANIFEST_SCHEMA = ASSET_MANIFEST_SCHEMA_V1
+CONTROLLED_ASSET_KINDS = frozenset(
     {"robot_arm", "robot_hand", "virtual_mechanism"}
 )
+PASSIVE_ASSET_KINDS = frozenset({"passive_component", "simulated_sensor"})
+SUPPORTED_ASSET_KINDS = CONTROLLED_ASSET_KINDS | PASSIVE_ASSET_KINDS
 SUPPORTED_SIDES = frozenset({"left", "right", "none"})
 
 
@@ -140,12 +144,20 @@ class AssetManifest:
             field=field,
         )
         schema = require_string(data["schema"], field=f"{field}.schema")
-        if schema != ASSET_MANIFEST_SCHEMA:
-            raise ValueError(f"{field}.schema must be {ASSET_MANIFEST_SCHEMA!r}")
-        kind = require_string(data["kind"], field=f"{field}.kind")
-        if kind not in SUPPORTED_ASSET_KINDS:
+        if schema not in {ASSET_MANIFEST_SCHEMA_V1, ASSET_MANIFEST_SCHEMA_V2}:
             raise ValueError(
-                f"{field}.kind must be one of {sorted(SUPPORTED_ASSET_KINDS)}"
+                f"{field}.schema must be one of "
+                f"{[ASSET_MANIFEST_SCHEMA_V1, ASSET_MANIFEST_SCHEMA_V2]}"
+            )
+        kind = require_string(data["kind"], field=f"{field}.kind")
+        supported_kinds = (
+            CONTROLLED_ASSET_KINDS
+            if schema == ASSET_MANIFEST_SCHEMA_V1
+            else SUPPORTED_ASSET_KINDS
+        )
+        if kind not in supported_kinds:
+            raise ValueError(
+                f"{field}.kind must be one of {sorted(supported_kinds)}"
             )
         side = require_string(data["side"], field=f"{field}.side")
         if side not in SUPPORTED_SIDES:
@@ -158,8 +170,17 @@ class AssetManifest:
                 require_sequence(data["control_groups"], field=f"{field}.control_groups")
             )
         )
-        if not groups:
+        if schema == ASSET_MANIFEST_SCHEMA_V1 and not groups:
             raise ValueError(f"{field}.control_groups must not be empty")
+        if schema == ASSET_MANIFEST_SCHEMA_V2:
+            if kind in CONTROLLED_ASSET_KINDS and not groups:
+                raise ValueError(
+                    f"{field}.control_groups must not be empty for controlled assets"
+                )
+            if kind in PASSIVE_ASSET_KINDS and groups:
+                raise ValueError(
+                    f"{field}.control_groups must be empty for passive assets"
+                )
         group_ids = tuple(group.group_id for group in groups)
         if len(set(group_ids)) != len(group_ids):
             raise ValueError(f"{field}.control_groups group_id values must be unique")
@@ -209,8 +230,12 @@ class AssetManifest:
 
 __all__ = [
     "ASSET_MANIFEST_SCHEMA",
+    "ASSET_MANIFEST_SCHEMA_V1",
+    "ASSET_MANIFEST_SCHEMA_V2",
     "AssetManifest",
+    "CONTROLLED_ASSET_KINDS",
     "ControlGroupSpec",
+    "PASSIVE_ASSET_KINDS",
     "SUPPORTED_ASSET_KINDS",
     "SUPPORTED_SIDES",
 ]

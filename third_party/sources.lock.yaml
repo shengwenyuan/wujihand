@@ -127,6 +127,27 @@ sources:
       hand2_beta/body/meshes/right: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
       hand2_beta/body/usd/left: bbe2f1939f3e36ddf58b5a3864440a618e0be9118c3d5cb9ce5132b929cd9d22
       hand2_beta/body/usd/right: 1992b90288b6d414cc487e2bc37ba6853970cae7cb74b6177bf56d46342383b4
+  - name: realsense-ros-d405-description
+    kind: git
+    url: https://github.com/realsenseai/realsense-ros.git
+    tag: 4.56.4
+    commit: bafc21080c5c8e259dadbb309797949aee0dd950
+    retrieved_at: 2026-08-04
+    local_runtime_path: third_party/src/realsense-ros
+    license_path: LICENSE
+    license_sha256: 1c72ac904e86caaa9dbf1740d8d4737264712699e8a7f416cfe15591f21a2cbf
+    sparse_paths:
+      - LICENSE
+      - realsense2_description/CMakeLists.txt
+      - realsense2_description/package.xml
+      - realsense2_description/meshes/d405.stl
+      - realsense2_description/urdf/_d405.urdf.xacro
+    artifacts:
+      LICENSE: 1c72ac904e86caaa9dbf1740d8d4737264712699e8a7f416cfe15591f21a2cbf
+      realsense2_description/CMakeLists.txt: 76b86457163c8fab0b9f67dea3a86da373847e65e0a19e162da80605b712ef62
+      realsense2_description/package.xml: 73c0fe593f574dd3cea0e57378c437c2671d3fdb2db2d32341d599799ee2be59
+      realsense2_description/meshes/d405.stl: a248f41149d12b28311829feecbe7a80cf1481fd05e0f5df2c4c7ecd556edd48
+      realsense2_description/urdf/_d405.urdf.xacro: 5a39829166a7d1a0a90b15afc6a3b074438bb990c9a53d6d2218dbe6848f9616
   - name: mujoco-menagerie-fr3-v2
     kind: git
     url: https://github.com/google-deepmind/mujoco_menagerie.git

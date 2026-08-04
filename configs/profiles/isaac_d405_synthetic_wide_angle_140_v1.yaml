@@ -1,0 +1,49 @@
+schema: wujihand.isaac_camera_profile.v1
+profile_id: isaac_d405_synthetic_wide_angle_140_v1
+simulation_only: true
+warning: "SIMULATION ONLY: synthetic 140-degree HFOV; not a physical RealSense D405 specification or calibration."
+projection_classification: synthetic_wide_angle_140_simulation_only
+capture:
+  width_px: 640
+  height_px: 480
+  rate_hz: 30.0
+  warmup_frames: 8
+optics:
+  projection: perspective
+  lens_model: pinhole
+  horizontal_fov_deg: 140.0
+  focal_length_mm: 10.0
+  horizontal_aperture_mm: 54.94954838909243
+  vertical_aperture_mm: 41.21216129181932
+  horizontal_aperture_offset_mm: 0.0
+  vertical_aperture_offset_mm: 0.0
+  clipping_range_m: [0.02, 5.0]
+  pixel_geometry_convention: usd_aperture_to_ros_raster_v1
+  distortion_model: plumb_bob
+  distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
+payloads:
+  rgb:
+    annotator: rgb
+    source_shape: [480, 640, 4]
+    source_dtype: uint8
+    source_encoding: RGBA
+    source_no_hit_encoding: none
+    output_encoding: rgb8
+    invalid_value_policy: none
+  depth:
+    annotator: distance_to_image_plane
+    source_shape: [480, 640]
+    source_dtype: float32
+    source_encoding: optical_z_m
+    source_no_hit_encoding: positive_infinity
+    output_encoding: 32FC1
+    invalid_value_policy: nonfinite_or_nonpositive_to_qnan_0x7fc00000
+schedule:
+  physics_substeps_per_capture: 4
+  control_ticks_per_capture: 2
+  capture_phase: completed_fourth_physics_substep
+  completed_frame_identity: camera_sensor_writer_reference_time_v1
+assumptions:
+  - The 140-degree pinhole projection is an intentionally synthetic simulation-only lens.
+  - D405 identifies the pinned housing mesh and mount interface only.
+  - RGB and optical-Z depth share one render product and one synchronous capture transaction.
