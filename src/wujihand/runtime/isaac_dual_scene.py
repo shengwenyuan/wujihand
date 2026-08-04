@@ -23,6 +23,10 @@ from wujihand.adapters.simulation.nero_hand2_twin import (
     author_nero_hand2_attachment,
     discover_nero_hand2_dofs,
 )
+from wujihand.adapters.simulation.nero_hand2_self_collision import (
+    NeroHand2SelfCollisionFilterProfile,
+    author_isaac_self_collision_filters,
+)
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
     NeroLinkGeometryAlignment,
     NeroLinkGeometryAlignmentHandles,
@@ -273,6 +277,8 @@ class DualNeroHand2IsaacScene:
         alignment_profile: NeroLinkGeometryAlignment,
         qualification_profile: NeroDualTabletopQualificationProfile,
         physics_hz: int,
+        self_collision_sides: frozenset[str] = frozenset(),
+        self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
@@ -286,6 +292,8 @@ class DualNeroHand2IsaacScene:
             UsdGeom,
         )
 
+        if not self_collision_sides <= {"left", "right"}:
+            raise ValueError("self_collision_sides must contain only left/right")
         self.resolved = resolved
         self.sides = sides
         self.alignment_profile = alignment_profile
@@ -390,7 +398,7 @@ class DualNeroHand2IsaacScene:
                     ),
                     position_m=runtime.attachment.transform.position_m,
                     quat_wxyz=runtime.attachment.transform.quat_wxyz,
-                    enable_self_collisions=False,
+                    enable_self_collisions=runtime.side in self_collision_sides,
                 ),
             )
             self.articulations[runtime.side] = self.world.scene.add(
@@ -411,6 +419,16 @@ class DualNeroHand2IsaacScene:
                 )
             ).copy()
 
+        self.self_collision_filtered_pairs = (
+            author_isaac_self_collision_filters(
+                self.stage,
+                arm_prim_paths={runtime.side: runtime.arm_prim_path for runtime in sides},
+                enabled_sides=self_collision_sides,
+                profile=self_collision_filter_profile,
+            )
+            if self_collision_filter_profile is not None
+            else ()
+        )
         self.expected_root_paths = tuple(
             sorted(handle.articulation_root_path for handle in self.authored.values())
         )

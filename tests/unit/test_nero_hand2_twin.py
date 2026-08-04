@@ -5,7 +5,6 @@ import pytest
 
 from wujihand.adapters.simulation import (
     NeroHand2AttachmentConfig,
-    author_nero_hand2_attachment,
     discover_nero_hand2_dofs,
 )
 from wujihand.domain import HAND2_LEFT_LAYOUT
@@ -62,12 +61,10 @@ def test_attachment_config_rejects_ambiguous_topology(
         _config(**{field: value})
 
 
-def test_attachment_authoring_rejects_unqualified_self_collision_before_pxr() -> None:
-    with pytest.raises(RuntimeError, match="not qualified"):
-        author_nero_hand2_attachment(
-            None,
-            _config(enable_self_collisions=True),
-        )
+def test_attachment_config_requires_explicit_boolean_self_collision_policy() -> None:
+    assert _config(enable_self_collisions=True).enable_self_collisions is True
+    with pytest.raises(ValueError, match="bool"):
+        _config(enable_self_collisions=1)
 
 
 def test_discover_q27_partition_uses_names_and_joint_paths() -> None:
