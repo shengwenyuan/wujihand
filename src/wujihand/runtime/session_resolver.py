@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import cast
 
 from wujihand.specs import (
+    ASSET_MANIFEST_SCHEMA_V1,
+    ASSET_MANIFEST_SCHEMA_V2,
+    BACKEND_BINDING_SCHEMA_V1,
+    BACKEND_BINDING_SCHEMA_V2,
     AssemblySpec,
     AssetManifest,
     BackendBinding,
@@ -19,6 +23,7 @@ from wujihand.specs import (
     SessionSpec,
     WorkcellSpec,
     NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT,
+    PASSIVE_ASSET_KINDS,
 )
 
 from .config_repository import ConfigRepository
@@ -39,6 +44,7 @@ class ResolvedInstance:
     binding_path: str
     binding: BackendBinding
     artifact: ResolvedArtifact | None
+    collision_artifact: ResolvedArtifact | None
     resource_trees: tuple[ResolvedArtifact, ...]
     namespace: str
 
@@ -52,7 +58,7 @@ class ResolvedInstance:
         return self.qualify_backend_name(self.binding.root)
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        mapping: dict[str, object] = {
             "instance_id": self.instance_id,
             "asset_path": self.asset_path,
             "asset": self.asset.to_mapping(),
@@ -82,6 +88,13 @@ class ResolvedInstance:
                 for group in self.binding.group_bindings
             },
         }
+        if self.binding.schema == BACKEND_BINDING_SCHEMA_V2:
+            mapping["collision_artifact"] = (
+                None
+                if self.collision_artifact is None
+                else self.collision_artifact.to_mapping()
+            )
+        return mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,12 +252,25 @@ class SessionResolver:
                     referenced_paths.add(group.joint_profile)
             if binding.compatibility_profile is not None:
                 referenced_paths.add(binding.compatibility_profile)
+            if binding.sensor_profile is not None:
+                self.repository.load_isaac_camera_profile(
+                    binding.sensor_profile
+                )
+                referenced_paths.add(binding.sensor_profile)
 
             artifact = (
                 None
                 if binding.artifact is None
                 else self.source_lock.resolve(
                     binding.artifact,
+                    verify=verify_artifacts,
+                )
+            )
+            collision_artifact = (
+                None
+                if binding.collision_artifact is None
+                else self.source_lock.resolve(
+                    binding.collision_artifact,
                     verify=verify_artifacts,
                 )
             )
@@ -258,6 +284,8 @@ class SessionResolver:
             )
             if artifact is not None:
                 used_source_names.add(artifact.source.name)
+            if collision_artifact is not None:
+                used_source_names.add(collision_artifact.source.name)
             used_source_names.update(resource.source.name for resource in resources)
             resolved_instances.append(
                 ResolvedInstance(
@@ -267,6 +295,7 @@ class SessionResolver:
                     binding_path=binding_ref.path,
                     binding=binding,
                     artifact=artifact,
+                    collision_artifact=collision_artifact,
                     resource_trees=resources,
                     namespace=instance.namespace,
                 )
@@ -397,6 +426,15 @@ class SessionResolver:
     def _validate_asset_binding(
         self, asset: AssetManifest, binding: BackendBinding
     ) -> None:
+        schema_pairs = {
+            (ASSET_MANIFEST_SCHEMA_V1, BACKEND_BINDING_SCHEMA_V1),
+            (ASSET_MANIFEST_SCHEMA_V2, BACKEND_BINDING_SCHEMA_V2),
+        }
+        if (asset.schema, binding.schema) not in schema_pairs:
+            raise ValueError(
+                f"asset {asset.asset_id!r} schema {asset.schema!r} and binding "
+                f"{binding.binding_id!r} schema {binding.schema!r} must use matching versions"
+            )
         asset_frame_names = {name for _, name in asset.frames}
         binding_frame_names = {name for name, _ in binding.frame_map}
         if binding_frame_names != asset_frame_names:
@@ -430,8 +468,36 @@ class SessionResolver:
                     f"MuJoCo binding {binding.binding_id!r} group "
                     f"{control_group.group_id!r} requires one actuator per DoF"
                 )
+        passive = asset.kind in PASSIVE_ASSET_KINDS
+        if passive:
+            if binding.namespace_policy != "prefix":
+                raise ValueError(
+                    f"passive binding {binding.binding_id!r} must use prefix namespace policy"
+                )
+            if binding.loader != "mesh":
+                raise ValueError(
+                    f"passive binding {binding.binding_id!r} must use the mesh loader"
+                )
+            if binding.artifact is None or binding.collision_artifact is None:
+                raise ValueError(
+                    f"passive binding {binding.binding_id!r} requires visual and collision artifacts"
+                )
+            if asset.kind == "simulated_sensor" and binding.sensor_profile is None:
+                raise ValueError(
+                    f"simulated sensor binding {binding.binding_id!r} requires a sensor profile"
+                )
+            if asset.kind == "passive_component" and binding.sensor_profile is not None:
+                raise ValueError(
+                    f"passive component binding {binding.binding_id!r} must not use a sensor profile"
+                )
+        elif binding.collision_artifact is not None or binding.sensor_profile is not None:
+            raise ValueError(
+                f"controlled binding {binding.binding_id!r} must not declare passive representation fields"
+            )
         if binding.artifact is not None:
             self.source_lock.resolve(binding.artifact)
+        if binding.collision_artifact is not None:
+            self.source_lock.resolve(binding.collision_artifact)
         for resource in binding.resource_trees:
             self.source_lock.resolve(resource, tree=True)
 

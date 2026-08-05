@@ -84,7 +84,10 @@ def write_report(
         ("kind", "Kind"),
         ("side", "Side"),
         ("accepted", "Inbox accepted"),
+        ("drained", "Inbox drained"),
+        ("discarded", "Inbox discarded"),
         ("overwritten", "Inbox overwritten"),
+        ("pending", "Inbox pending"),
         ("trace_selected_count", "Trace-selected"),
         ("accepted_selection_accounted", "Accounted"),
     )

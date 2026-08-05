@@ -151,6 +151,25 @@ def test_low_confidence_is_degraded_and_reset_admits_new_source_epoch() -> None:
     assert len(session.inputs) == 2
 
 
+def test_reset_prepares_sdk_session_before_the_first_control_tick() -> None:
+    session = _Session()
+    factory_calls: list[HandSide] = []
+    adapter = WujiHand2RetargetAdapter(
+        HandSide.LEFT,
+        session_factory=_factory(session, factory_calls),
+        sdk_version="2026.7.21",
+    )
+
+    adapter.reset()
+
+    assert factory_calls == [HandSide.LEFT]
+    assert session.reset_calls == 1
+    assert len(session.inputs) == 1
+    assert session.inputs[0].shape == (21, 3)
+    assert session.inputs[0].dtype == np.float32
+    assert session.inputs[0].flags.c_contiguous
+
+
 @pytest.mark.parametrize(
     ("observation", "produced_time_ns", "message"),
     (

@@ -18,6 +18,7 @@ from wujihand.specs import (
     ConfigRef,
     DeploymentSpec,
     DualTeleoperationProfile,
+    IsaacCameraProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
     RosDeploymentSpec,
@@ -39,6 +40,7 @@ SpecT = TypeVar(
     SessionSpec,
     DeploymentSpec,
     DualTeleoperationProfile,
+    IsaacCameraProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
     RosDeploymentSpec,
@@ -202,6 +204,17 @@ class ConfigRepository:
             field="ROS local runtime binding",
             spec_type=RosLocalRuntimeBindingSpec,
             id_attribute="binding_id",
+        )
+
+    def load_isaac_camera_profile(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> IsaacCameraProfile:
+        return self._load(
+            reference,
+            field="Isaac camera profile",
+            spec_type=IsaacCameraProfile,
+            id_attribute="profile_id",
         )
 
     def validate_profile_reference(self, reference: ConfigRef) -> str:

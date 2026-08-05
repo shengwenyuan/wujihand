@@ -117,6 +117,37 @@ def _positive_seconds(value: object, *, field: str) -> float:
     return result
 
 
+def _warmup_keypoints(side: HandSide) -> npt.NDArray[np.float32]:
+    """Return a deterministic complete skeleton used only to warm the SDK."""
+
+    indices = np.arange(len(MEDIAPIPE_HAND_LANDMARK_NAMES), dtype=np.float32)
+    side_sign = -1.0 if side is HandSide.LEFT else 1.0
+    return np.ascontiguousarray(
+        np.column_stack(
+            (
+                side_sign * indices / 1_000.0,
+                indices / 500.0,
+                indices / 750.0,
+            )
+        ),
+        dtype=np.float32,
+    )
+
+
+def _validated_sdk_q20(value: object) -> npt.NDArray[np.float64]:
+    try:
+        q20 = np.asarray(value, dtype=np.float64)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Wuji SDK returned a non-numeric q20 result") from exc
+    if q20.shape != (20,):
+        raise ValueError(
+            f"Wuji SDK q20 result must have shape (20,), got {q20.shape}"
+        )
+    if not np.isfinite(q20).all():
+        raise ValueError("Wuji SDK q20 result contains NaN or infinity")
+    return q20
+
+
 class WujiHand2RetargetAdapter:
     """Retarget canonical landmarks into one explicit Hand 2 q20 intent.
 
@@ -166,6 +197,7 @@ class WujiHand2RetargetAdapter:
         self._session_factory = session_factory
         self._sdk_version = None if sdk_version is None else _sdk_version_identifier(sdk_version)
         self._session: _RetargetSession | None = None
+        self._session_prepared = False
         self._closed = False
         self._source_key: tuple[str, str, str, str] | None = None
         self._last_observation_sequence = -1
@@ -253,14 +285,8 @@ class WujiHand2RetargetAdapter:
             raw_q20 = session.step(keypoints)
         except Exception as exc:
             raise RuntimeError("Wuji SDK Hand 2 retargeting step failed") from exc
-        try:
-            q20 = np.asarray(raw_q20, dtype=np.float64)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("Wuji SDK returned a non-numeric q20 result") from exc
-        if q20.shape != (20,):
-            raise ValueError(f"Wuji SDK q20 result must have shape (20,), got {q20.shape}")
-        if not np.isfinite(q20).all():
-            raise ValueError("Wuji SDK q20 result contains NaN or infinity")
+        q20 = _validated_sdk_q20(raw_q20)
+        self._session_prepared = True
 
         status = (
             RetargetStatus.SUCCESS
@@ -289,12 +315,21 @@ class WujiHand2RetargetAdapter:
         return intent
 
     def reset(self) -> None:
-        """Clear SDK warm-start/filter state and admit a new source epoch."""
+        """Prepare the SDK session and admit a new source epoch."""
 
         if self._closed:
             raise RuntimeError("retarget adapter is closed")
-        if self._session is not None:
-            self._session.reset()
+        session, _ = self._ensure_session()
+        if not self._session_prepared:
+            try:
+                warmup_q20 = session.step(_warmup_keypoints(self.side))
+            except Exception as exc:
+                raise RuntimeError(
+                    "Wuji SDK Hand 2 retargeting warm-up failed"
+                ) from exc
+            _validated_sdk_q20(warmup_q20)
+            self._session_prepared = True
+        session.reset()
         self._source_key = None
         self._last_observation_sequence = -1
         self._last_receive_time_ns = -1
@@ -307,6 +342,7 @@ class WujiHand2RetargetAdapter:
         self._closed = True
         session = self._session
         self._session = None
+        self._session_prepared = False
         self._source_key = None
         self._last_observation_sequence = -1
         self._last_receive_time_ns = -1

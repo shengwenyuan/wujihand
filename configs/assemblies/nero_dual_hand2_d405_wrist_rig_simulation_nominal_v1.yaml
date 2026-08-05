@@ -1,0 +1,107 @@
+schema: wujihand.assembly_spec.v1
+assembly_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1
+instances:
+  - instance_id: nero_left
+    asset:
+      path: configs/assets/agilex_nero_v1.yaml
+      expected_id: agilex_nero
+    role: arm
+    namespace: nero_left
+  - instance_id: hand_left
+    asset:
+      path: configs/assets/wuji_hand2_beta1_left_v1.yaml
+      expected_id: wuji_hand2_beta1_left
+    role: end_effector
+    namespace: hand2_left
+  - instance_id: mount_left
+    asset:
+      path: configs/assets/nero_hand2_beta1_d405_mount_v2_left.yaml
+      expected_id: nero_hand2_beta1_d405_mount_v2_left
+    role: mount
+    namespace: d405_mount_left
+  - instance_id: d405_left
+    asset:
+      path: configs/assets/realsense_d405_housing_sim_left.yaml
+      expected_id: realsense_d405_housing_sim_left
+    role: sensor
+    namespace: d405_left
+  - instance_id: nero_right
+    asset:
+      path: configs/assets/agilex_nero_v1.yaml
+      expected_id: agilex_nero
+    role: arm
+    namespace: nero_right
+  - instance_id: hand_right
+    asset:
+      path: configs/assets/wuji_hand2_beta1_right_v1.yaml
+      expected_id: wuji_hand2_beta1_right
+    role: end_effector
+    namespace: hand2_right
+  - instance_id: mount_right
+    asset:
+      path: configs/assets/nero_hand2_beta1_d405_mount_v2_right.yaml
+      expected_id: nero_hand2_beta1_d405_mount_v2_right
+    role: mount
+    namespace: d405_mount_right
+  - instance_id: d405_right
+    asset:
+      path: configs/assets/realsense_d405_housing_sim_right.yaml
+      expected_id: realsense_d405_housing_sim_right
+    role: sensor
+    namespace: d405_right
+roots: [nero_left, nero_right]
+attachments:
+  - attachment_id: nero_left_link7_to_hand2_left_base
+    parent: {instance: nero_left, frame: link7}
+    child: {instance: hand_left, frame: hand_base}
+    transform:
+      position_m: [0.023, 0.0, -0.0235]
+      quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
+    assumption: mesh_nominal_mount_couples_hand_base_face_to_aligned_link6_positive_x_face
+  - attachment_id: hand2_left_base_to_mount_v2
+    parent: {instance: hand_left, frame: hand_base}
+    child:
+      instance: mount_left
+      frame: nero_hand2_beta1_d405_mount_v2_left_hand_interface
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    assumption: generated_mount_coordinates_are_authored_in_the_hand_base_frame
+  - attachment_id: mount_v2_left_to_d405_rear
+    parent:
+      instance: mount_left
+      frame: nero_hand2_beta1_d405_mount_v2_left_camera_interface
+    child:
+      instance: d405_left
+      frame: realsense_d405_housing_sim_left_rear_mount
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    assumption: generated_d405_visual_origin_is_the_mount_camera_interface_rear_plane
+  - attachment_id: nero_right_link7_to_hand2_right_base
+    parent: {instance: nero_right, frame: link7}
+    child: {instance: hand_right, frame: hand_base}
+    transform:
+      position_m: [0.023, 0.0, -0.0235]
+      quat_wxyz: [0.7071067811865476, 0.0, 0.7071067811865475, 0.0]
+    assumption: mesh_nominal_mount_couples_hand_base_face_to_aligned_link6_positive_x_face
+  - attachment_id: hand2_right_base_to_mount_v2
+    parent: {instance: hand_right, frame: hand_base}
+    child:
+      instance: mount_right
+      frame: nero_hand2_beta1_d405_mount_v2_right_hand_interface
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    assumption: generated_mount_coordinates_are_authored_in_the_hand_base_frame
+  - attachment_id: mount_v2_right_to_d405_rear
+    parent:
+      instance: mount_right
+      frame: nero_hand2_beta1_d405_mount_v2_right_camera_interface
+    child:
+      instance: d405_right
+      frame: realsense_d405_housing_sim_right_rear_mount
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    assumption: generated_d405_visual_origin_is_the_mount_camera_interface_rear_plane

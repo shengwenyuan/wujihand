@@ -1,0 +1,20 @@
+schema: wujihand.nero_hand2_self_collision_filtered_pairs.v1
+profile_id: isaac_nero_hand2_self_collision_filtered_pairs_v1
+status: simulation_only_evidence_based
+source_contract:
+  nero_source: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  isaac_asset: agilex-nero-isaac-6-0-1@07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0
+filtered_pairs:
+  - pair_id: nero_link5_link7_intrinsic_mesh_overlap_v1
+    sides: [left, right]
+    first_rigid_body_name: link5
+    second_rigid_body_name: link7
+    evidence:
+      left_minimum_separation_m: -0.0022952640429139137
+      right_minimum_separation_m: -0.0023869480937719345
+      observation: persistent_for_all_1080_frames_at_rest_grasp_and_slow_open_close
+      scope: pinned_nero_collision_mesh_only
+assumptions:
+  - root_self_collision_remains_enabled
+  - only_the_observed_link5_link7_pair_is_filtered
+  - hand2_internal_and_all_accessory_collision_pairs_remain_unfiltered

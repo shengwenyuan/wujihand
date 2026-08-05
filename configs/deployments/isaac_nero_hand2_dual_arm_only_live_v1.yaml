@@ -1,8 +1,8 @@
 schema: wujihand.deployment.v1
 deployment_id: isaac_nero_hand2_dual_arm_only_live_v1
 session:
-  path: configs/sessions/isaac_nero_dual_hand2_teleop_v1.yaml
-  expected_id: isaac_nero_dual_hand2_teleop_v1
+  path: configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_teleop_v1.yaml
+  expected_id: isaac_nero_dual_hand2_d405_wrist_rig_teleop_v1
 local_binding_id: workstation2_nv4_v1
 tracking_setup:
   setup_revision: workstation2_steamvr_standing_unqualified_v1

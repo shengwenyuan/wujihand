@@ -54,6 +54,11 @@ from .run_recording import (
     write_consumer_receipt,
     write_manifest,
 )
+from .fixed_rate import FixedRateScheduler, ScheduledTick
+from .cpu_affinity import (
+    configure_current_process_cpu_affinity,
+    parse_cpu_affinity,
+)
 from .native_dual_plan import (
     NATIVE_DUAL_RUNTIME_COMPONENT,
     NativeDualRoutePlan,
@@ -90,11 +95,13 @@ __all__ = [
     "BallConfig",
     "ConfigRepository",
     "CommonDeploymentProjection",
+    "configure_current_process_cpu_affinity",
     "DeploymentRouteFacts",
     "DualTeleoperationRoute",
     "DualTeleoperationRoutePlan",
     "DeploymentResolver",
     "FlangeConfig",
+    "FixedRateScheduler",
     "QualificationConfig",
     "RotationBallConfig",
     "MujocoTableSceneConfig",
@@ -124,6 +131,7 @@ __all__ = [
     "ResolvedSession",
     "SessionResolver",
     "SessionControlFacts",
+    "ScheduledTick",
     "SourceLock",
     "SourceRecord",
     "SignalStopRequest",
@@ -142,6 +150,7 @@ __all__ = [
     "consumer_receipt_is_terminal",
     "finalize_rosbag_recording",
     "new_run_id",
+    "parse_cpu_affinity",
     "resolve_isaac_workcell_plan",
     "run_root",
     "validate_transport_pair",

@@ -154,6 +154,129 @@ def _dual_hand_project(tmp_path: Path, *, namespace_policy: str) -> Path:
     return root
 
 
+def _passive_sensor_project(tmp_path: Path) -> tuple[Path, Path]:
+    root = _copy_project(tmp_path)
+    asset_path = root / "configs/assets/d405_sim_right_v1.yaml"
+    binding_path = root / "configs/bindings/isaac/d405_sim_right_v1.yaml"
+    assembly_path = root / "configs/assemblies/d405_sim_right_v1.yaml"
+    workcell_path = root / "configs/workcells/d405_sim_right_v1.yaml"
+    session_path = root / "configs/sessions/d405_sim_right_v1.yaml"
+    identity = {
+        "position_m": [0.0, 0.0, 0.0],
+        "quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+    }
+    artifact = {
+        "source": "realsense-ros-d405-description",
+        "source_revision": "commit:bafc21080c5c8e259dadbb309797949aee0dd950",
+        "path": "realsense2_description/meshes/d405.stl",
+    }
+    _write_yaml(
+        asset_path,
+        {
+            "schema": "wujihand.asset_manifest.v2",
+            "asset_id": "realsense_d405_housing_sim_right",
+            "revision": "source_bafc2108_sim_v1",
+            "kind": "simulated_sensor",
+            "product": "realsense_d405_housing",
+            "side": "right",
+            "frames": {"rear_mount": "rear_mount", "optical": "optical"},
+            "control_groups": [],
+            "provenance_source": (
+                "third_party/sources.lock.yaml#realsense-ros-d405-description"
+            ),
+            "canonical_profile": None,
+        },
+    )
+    _write_yaml(
+        binding_path,
+        {
+            "schema": "wujihand.backend_binding.v2",
+            "binding_id": "realsense_d405_housing_sim_right_isaac_v1",
+            "asset_id": "realsense_d405_housing_sim_right",
+            "asset_revision": "source_bafc2108_sim_v1",
+            "asset_side": "right",
+            "backend": "isaac",
+            "namespace_policy": "prefix",
+            "loader": "mesh",
+            "artifact": artifact,
+            "collision_artifact": artifact,
+            "resource_trees": [],
+            "root": "D405",
+            "frame_map": {"rear_mount": "rear_mount", "optical": "optical"},
+            "group_bindings": [],
+            "builder": None,
+            "compatibility_profile": None,
+            "sensor_profile": (
+                "configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml"
+            ),
+        },
+    )
+    _write_yaml(
+        assembly_path,
+        {
+            "schema": "wujihand.assembly_spec.v1",
+            "assembly_id": "d405_sim_right_v1",
+            "instances": [
+                {
+                    "instance_id": "d405_right",
+                    "asset": {
+                        "path": "configs/assets/d405_sim_right_v1.yaml",
+                        "expected_id": "realsense_d405_housing_sim_right",
+                    },
+                    "role": "right_wrist_camera",
+                    "namespace": "right/wrist_camera",
+                }
+            ],
+            "roots": ["d405_right"],
+            "attachments": [],
+        },
+    )
+    _write_yaml(
+        workcell_path,
+        {
+            "schema": "wujihand.workcell.v1",
+            "workcell_id": "d405_sim_right_v1",
+            "world_frame": "world",
+            "frames": [],
+            "mounts": [
+                {"mount_id": "camera_mount", "frame": "world", "transform": identity}
+            ],
+            "entities": [],
+            "compatibility_profile": None,
+        },
+    )
+    _write_yaml(
+        session_path,
+        {
+            "schema": "wujihand.session.v1",
+            "session_id": "d405_sim_right_v1",
+            "backend": "isaac",
+            "runtime_role": "simulation",
+            "assembly": {
+                "path": "configs/assemblies/d405_sim_right_v1.yaml",
+                "expected_id": "d405_sim_right_v1",
+            },
+            "workcell": {
+                "path": "configs/workcells/d405_sim_right_v1.yaml",
+                "expected_id": "d405_sim_right_v1",
+            },
+            "bindings": {
+                "d405_right": {
+                    "path": "configs/bindings/isaac/d405_sim_right_v1.yaml",
+                    "expected_id": "realsense_d405_housing_sim_right_isaac_v1",
+                }
+            },
+            "placements": {"d405_right": "camera_mount"},
+            "runtime": {
+                "compatibility_profile": None,
+                "transport_contract": None,
+                "control_layouts": [],
+            },
+        },
+    )
+    return root, session_path
+
+
 def test_prefix_namespace_policy_resolves_repeated_asset_multi_root_forest(
     tmp_path: Path,
 ) -> None:
@@ -182,6 +305,39 @@ def test_preserve_namespace_policy_rejects_repeated_backend_root(
         SessionResolver(root).resolve(
             "configs/sessions/dual_hand_forest_session_v1.yaml"
         )
+
+
+def test_resolver_accepts_v2_simulated_sensor_without_dummy_control_route(
+    tmp_path: Path,
+) -> None:
+    root, session_path = _passive_sensor_project(tmp_path)
+
+    resolved = SessionResolver(root).resolve(session_path)
+    camera = resolved.instance("d405_right")
+
+    assert camera.asset.kind == "simulated_sensor"
+    assert camera.asset.control_groups == ()
+    assert camera.binding.group_bindings == ()
+    assert camera.artifact is not None
+    assert camera.collision_artifact is not None
+    assert dict(resolved.referenced_file_hashes).keys() >= {
+        "configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml"
+    }
+
+
+def test_resolver_rejects_invalid_camera_profile_at_sensor_boundary(
+    tmp_path: Path,
+) -> None:
+    root, session_path = _passive_sensor_project(tmp_path)
+    profile_path = (
+        root / "configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml"
+    )
+    profile = _load_yaml(profile_path)
+    profile["simulation_only"] = False
+    _write_yaml(profile_path, profile)
+
+    with pytest.raises(ValueError, match="simulation_only must be true"):
+        SessionResolver(root).resolve(session_path)
 
 
 @pytest.mark.parametrize(

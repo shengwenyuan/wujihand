@@ -32,6 +32,24 @@ def _asset() -> dict[str, Any]:
     }
 
 
+def _passive_asset(*, kind: str = "passive_component") -> dict[str, Any]:
+    return {
+        "schema": "wujihand.asset_manifest.v2",
+        "asset_id": "nero_hand2_beta1_d405_mount_v2_right",
+        "revision": "v2",
+        "kind": kind,
+        "product": "nero_hand2_beta1_d405_wrist_mount",
+        "side": "right",
+        "canonical_profile": None,
+        "frames": {
+            "hand_interface": "hand_interface",
+            "camera_interface": "camera_interface",
+        },
+        "control_groups": [],
+        "provenance_source": "hardware/camera_mounts/d405/README.md",
+    }
+
+
 def test_asset_manifest_round_trip_and_lookup() -> None:
     manifest = AssetManifest.from_mapping(_asset())
 
@@ -84,3 +102,36 @@ def test_asset_manifest_requires_explicit_valid_layout_and_safe_profile() -> Non
     invalid_dof_count["control_groups"][0]["dof_count"] = 0
     with pytest.raises(ValueError, match="positive integer"):
         AssetManifest.from_mapping(invalid_dof_count)
+
+
+@pytest.mark.parametrize("kind", ("passive_component", "simulated_sensor"))
+def test_asset_manifest_v2_allows_only_passive_kinds_without_control_groups(
+    kind: str,
+) -> None:
+    manifest = AssetManifest.from_mapping(_passive_asset(kind=kind))
+
+    assert manifest.kind == kind
+    assert manifest.control_groups == ()
+    assert AssetManifest.from_mapping(manifest.to_mapping()) == manifest
+
+
+def test_asset_manifest_versions_preserve_control_group_boundary() -> None:
+    v1_empty = _asset()
+    v1_empty["control_groups"] = []
+    with pytest.raises(ValueError, match="must not be empty"):
+        AssetManifest.from_mapping(v1_empty)
+
+    v1_passive = _asset()
+    v1_passive["kind"] = "passive_component"
+    with pytest.raises(ValueError, match="kind must be one of"):
+        AssetManifest.from_mapping(v1_passive)
+
+    controlled_v2 = _passive_asset()
+    controlled_v2["kind"] = "robot_hand"
+    with pytest.raises(ValueError, match="must not be empty for controlled assets"):
+        AssetManifest.from_mapping(controlled_v2)
+
+    passive_with_group = _passive_asset()
+    passive_with_group["control_groups"] = deepcopy(_asset()["control_groups"])
+    with pytest.raises(ValueError, match="must be empty for passive assets"):
+        AssetManifest.from_mapping(passive_with_group)

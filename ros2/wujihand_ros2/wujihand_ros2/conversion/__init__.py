@@ -11,6 +11,12 @@ from .command import (
     safety_event_from_message,
     safety_event_to_message,
 )
+from .camera import (
+    SimulationCameraRosMessages,
+    camera_dynamic_transform,
+    camera_static_transform,
+    simulation_camera_frame_to_messages,
+)
 from .hand import (
     HAND_OBSERVATION_ENVELOPE_SCHEMA,
     HandObservationTransportEnvelope,
@@ -39,6 +45,9 @@ __all__ = [
     "HandObservationTransportEnvelope",
     "RouteCommandObservation",
     "SafetyEventObservation",
+    "SimulationCameraRosMessages",
+    "camera_dynamic_transform",
+    "camera_static_transform",
     "hand_envelope_from_message",
     "hand_envelope_to_message",
     "lifecycle_event_from_message",
@@ -50,6 +59,7 @@ __all__ = [
     "run_recording_status_to_message",
     "safety_event_from_message",
     "safety_event_to_message",
+    "simulation_camera_frame_to_messages",
     "scene_rigid_body_state_from_message",
     "scene_rigid_body_state_to_message",
     "teleoperation_tick_trace_from_message",

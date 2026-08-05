@@ -19,8 +19,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--expected-control-hz", type=float, default=60.0)
+    parser.add_argument("--expected-physics-hz", type=float, default=120.0)
+    parser.add_argument("--expected-render-hz", type=float, default=20.0)
     parser.add_argument("--control-rate-tolerance-fraction", type=float, default=0.02)
     parser.add_argument("--p95-tick-interval-limit-ms", type=float, default=20.0)
+    parser.add_argument("--gui-p95-tick-interval-limit-ms", type=float, default=25.0)
     parser.add_argument("--p95-active-input-age-limit-ms", type=float, default=20.0)
     parser.add_argument("--q27-composition-atol-rad", type=float, default=1e-12)
     return parser
@@ -34,8 +37,11 @@ def run(argv: Sequence[str] | None = None) -> int:
             arguments.output_root,
             config=AnalysisConfig(
                 expected_control_hz=arguments.expected_control_hz,
+                expected_physics_hz=arguments.expected_physics_hz,
+                expected_render_hz=arguments.expected_render_hz,
                 control_rate_tolerance_fraction=(arguments.control_rate_tolerance_fraction),
                 p95_tick_interval_limit_ms=arguments.p95_tick_interval_limit_ms,
+                gui_p95_tick_interval_limit_ms=(arguments.gui_p95_tick_interval_limit_ms),
                 p95_comparable_input_age_limit_ms=(arguments.p95_active_input_age_limit_ms),
                 q27_composition_atol_rad=arguments.q27_composition_atol_rad,
             ),

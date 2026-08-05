@@ -1,0 +1,101 @@
+schema: wujihand.ros_qos_profile.v1
+profile_id: ros2_jazzy_dual_teleoperation_d405_qos_v1
+policies:
+  - channel: tracker_sample
+    history: keep_last
+    depth: 1
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: glove_observation
+    history: keep_last
+    depth: 1
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: tracking_lifecycle
+    history: keep_last
+    depth: 1
+    reliability: reliable
+    durability: transient_local
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: run_status
+    history: keep_last
+    depth: 1
+    reliability: reliable
+    durability: transient_local
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: route_command
+    history: keep_last
+    depth: 1
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: route_feedback
+    history: keep_last
+    depth: 1
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: safety_event
+    history: keep_last
+    depth: 16
+    reliability: reliable
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: trace_event
+    history: keep_last
+    depth: 8
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: scene_state
+    history: keep_last
+    depth: 32
+    reliability: best_effort
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: camera_image
+    history: keep_last
+    depth: 4
+    reliability: reliable
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: camera_info
+    history: keep_last
+    depth: 8
+    reliability: reliable
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: camera_truth
+    history: keep_last
+    depth: 32
+    reliability: reliable
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: tf_dynamic
+    history: keep_last
+    depth: 100
+    reliability: reliable
+    durability: volatile
+    deadline_ms: null
+    lifespan_ms: null
+  - channel: tf_static
+    history: keep_last
+    depth: 1
+    reliability: reliable
+    durability: transient_local
+    deadline_ms: null
+    lifespan_ms: null

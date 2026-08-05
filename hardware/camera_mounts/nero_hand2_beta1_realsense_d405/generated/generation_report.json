@@ -1,0 +1,377 @@
+{
+  "camera_warning": "SIMULATION ONLY: synthetic 140-degree HFOV; not a physical RealSense D405 specification or calibration.",
+  "collision_proxy_audits": {
+    "d405_collision_left": {
+      "clear_points_preserved": true,
+      "covered_vertex_fraction": 1.0,
+      "primitive_count": 1,
+      "uncovered_clear_points_mm": []
+    },
+    "d405_collision_right": {
+      "clear_points_preserved": true,
+      "covered_vertex_fraction": 1.0,
+      "primitive_count": 1,
+      "uncovered_clear_points_mm": []
+    },
+    "mount_collision_left": {
+      "clear_points_preserved": true,
+      "covered_vertex_fraction": 0.9898287845397525,
+      "primitive_count": 14,
+      "uncovered_clear_points_mm": [
+        [
+          0.0,
+          -20.0,
+          -2.0
+        ],
+        [
+          0.0,
+          -58.0,
+          8.0
+        ]
+      ]
+    },
+    "mount_collision_right": {
+      "clear_points_preserved": true,
+      "covered_vertex_fraction": 0.9898287845397525,
+      "primitive_count": 14,
+      "uncovered_clear_points_mm": [
+        [
+          0.0,
+          20.0,
+          -2.0
+        ],
+        [
+          0.0,
+          58.0,
+          8.0
+        ]
+      ]
+    }
+  },
+  "coordinate_contract": {
+    "canonical_side": "right",
+    "hand_frame_axes": [
+      "x_dorsal_axis",
+      "y_thumb_axis_on_right",
+      "z_fingertip_axis"
+    ],
+    "minimum_proxy_visual_vertex_coverage": 0.75,
+    "mirror_operation": "y_to_negative_y_baked_during_export",
+    "mirror_plane": "xz",
+    "units": "mm",
+    "weld_tolerance_mm": 1e-05
+  },
+  "feature_contract": {
+    "camera_plate": "34x30x3.2_mm_with_two_round_m3_clearance_holes",
+    "capsule_keys": 2,
+    "circular_flange_holes": "robot_screw_holes",
+    "routed_strut_segments": 8
+  },
+  "generator": {
+    "openscad_command": [
+      "/usr/bin/openscad"
+    ],
+    "openscad_version": "2021.01",
+    "path": "tools/build_d405_wrist_rig_assets.py",
+    "sha256": "42dc5de3b34a93ce78b6c11aa8c8212f10c69bacc519b330dbcb90b03305aaab"
+  },
+  "inputs": {
+    "d405_mesh": {
+      "commit": "bafc21080c5c8e259dadbb309797949aee0dd950",
+      "path": "realsense2_description/meshes/d405.stl",
+      "sha256": "a248f41149d12b28311829feecbe7a80cf1481fd05e0f5df2c4c7ecd556edd48",
+      "source": "realsense-ros-d405-description"
+    },
+    "mount_scad": {
+      "path": "hardware/camera_mounts/nero_hand2_beta1_realsense_d405/nero_hand2_beta1_realsense_d405_wrist_mount_v2.scad",
+      "sha256": "bf6ea6483f340ad525e9836c507dd4ffb4dddd317e72ba8aa9a16717ae455894"
+    }
+  },
+  "mesh_audits": {
+    "d405_visual_left": {
+      "body_count": 1,
+      "bounds_mm": [
+        [
+          -21.0,
+          -21.0,
+          0.0
+        ],
+        [
+          21.0,
+          21.09000015258789,
+          23.0
+        ]
+      ],
+      "degenerate_triangle_count": 0,
+      "non_manifold_edge_count": 0,
+      "shared_edge_component_count": 1,
+      "triangle_count": 3892,
+      "watertight": true,
+      "welded_vertex_count": 1948,
+      "winding_consistent": true
+    },
+    "d405_visual_right": {
+      "body_count": 1,
+      "bounds_mm": [
+        [
+          -21.0,
+          -21.09000015258789,
+          0.0
+        ],
+        [
+          21.0,
+          21.0,
+          23.0
+        ]
+      ],
+      "degenerate_triangle_count": 0,
+      "non_manifold_edge_count": 0,
+      "shared_edge_component_count": 1,
+      "triangle_count": 3892,
+      "watertight": true,
+      "welded_vertex_count": 1948,
+      "winding_consistent": true
+    },
+    "mount_visual_left": {
+      "body_count": 1,
+      "bounds_mm": [
+        [
+          -71.70580291748047,
+          -105.11699676513672,
+          -7.394649982452393
+        ],
+        [
+          29.0,
+          -14.0,
+          46.11259841918945
+        ]
+      ],
+      "degenerate_triangle_count": 0,
+      "non_manifold_edge_count": 0,
+      "shared_edge_component_count": 1,
+      "triangle_count": 23624,
+      "watertight": true,
+      "welded_vertex_count": 11798,
+      "winding_consistent": true
+    },
+    "mount_visual_right": {
+      "body_count": 1,
+      "bounds_mm": [
+        [
+          -71.70580291748047,
+          14.0,
+          -7.394649982452393
+        ],
+        [
+          29.0,
+          105.11699676513672,
+          46.11259841918945
+        ]
+      ],
+      "degenerate_triangle_count": 0,
+      "non_manifold_edge_count": 0,
+      "shared_edge_component_count": 1,
+      "triangle_count": 23624,
+      "watertight": true,
+      "welded_vertex_count": 11798,
+      "winding_consistent": true
+    }
+  },
+  "mirror_gate": {
+    "d405_bounds_max_error_mm": 0.0,
+    "mount_bounds_max_error_mm": 0.0,
+    "proper_rotation_determinant_max_error": 0.0,
+    "usd_negative_scale_required": false
+  },
+  "optical_frames": {
+    "left": {
+      "body_rotation_in_hand": [
+        [
+          0.30394920313265006,
+          -0.8191520442889918,
+          0.4864204048476921
+        ],
+        [
+          0.4340844486047482,
+          0.5735764363510462,
+          0.6946803316219238
+        ],
+        [
+          -0.848048096156426,
+          -0.0,
+          0.5299192642332049
+        ]
+      ],
+      "body_translation_in_hand_mm": [
+        -55.0,
+        -90.0,
+        30.0
+      ],
+      "determinants": {
+        "body": 1.0,
+        "optical": 1.0
+      },
+      "optical_origin_in_hand_mm": [
+        -35.95354188505446,
+        -78.48985996823325,
+        42.71806234159692
+      ],
+      "optical_rotation_in_hand": [
+        [
+          0.8191520442889918,
+          0.30394920313265006,
+          0.4864204048476921
+        ],
+        [
+          -0.5735764363510462,
+          0.4340844486047482,
+          0.6946803316219238
+        ],
+        [
+          -0.0,
+          -0.848048096156426,
+          0.5299192642332049
+        ]
+      ],
+      "rear_mount_to_optical": {
+        "rotation": [
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.9999999999999999
+          ]
+        ],
+        "translation_mm": [
+          -8.881784197001252e-16,
+          -9.000000000000002,
+          23.999999999999996
+        ]
+      }
+    },
+    "right": {
+      "body_rotation_in_hand": [
+        [
+          0.30394920313265006,
+          0.8191520442889918,
+          0.4864204048476921
+        ],
+        [
+          -0.4340844486047482,
+          0.5735764363510462,
+          -0.6946803316219238
+        ],
+        [
+          -0.848048096156426,
+          0.0,
+          0.5299192642332049
+        ]
+      ],
+      "body_translation_in_hand_mm": [
+        -55.0,
+        90.0,
+        30.0
+      ],
+      "determinants": {
+        "body": 1.0,
+        "optical": 1.0
+      },
+      "optical_origin_in_hand_mm": [
+        -35.95354188505446,
+        78.48985996823325,
+        42.71806234159692
+      ],
+      "optical_rotation_in_hand": [
+        [
+          -0.8191520442889918,
+          0.30394920313265006,
+          0.4864204048476921
+        ],
+        [
+          -0.5735764363510462,
+          -0.4340844486047482,
+          -0.6946803316219238
+        ],
+        [
+          0.0,
+          -0.848048096156426,
+          0.5299192642332049
+        ]
+      ],
+      "rear_mount_to_optical": {
+        "rotation": [
+          [
+            0.0,
+            1.0,
+            0.0
+          ],
+          [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.9999999999999999
+          ]
+        ],
+        "translation_mm": [
+          -8.881784197001252e-16,
+          9.000000000000002,
+          23.999999999999996
+        ]
+      }
+    }
+  },
+  "outputs": {
+    "d405_collision_left": {
+      "path": "collision/d405_left.yaml",
+      "sha256": "dfb19a0dc8fb72ba3d9381cca02b1d6d31f2b978d2a19ff97b264c885ea3061f"
+    },
+    "d405_collision_right": {
+      "path": "collision/d405_right.yaml",
+      "sha256": "f21e7bd719884eb9389890f4a033ac11f2c52aee068f122abc909671dadee437"
+    },
+    "d405_visual_left": {
+      "path": "visual/d405_left.stl",
+      "sha256": "e39e14ff66aa5ffc033aa136ed26e5ab04549ac20502ab5111608b9f3e424dd6"
+    },
+    "d405_visual_right": {
+      "path": "visual/d405_right.stl",
+      "sha256": "8df401010384b957ac510263799250e8a2c44004f9cb2701b2fd124f594da95c"
+    },
+    "mount_collision_left": {
+      "path": "collision/mount_v2_left.yaml",
+      "sha256": "5338ecb8bf6249e81dace39fcc5e8829da585620c8c8b3a059227f7c33633dbb"
+    },
+    "mount_collision_right": {
+      "path": "collision/mount_v2_right.yaml",
+      "sha256": "52ac54c38151c5037aaa5b3dfef628fd100e995d8f6764a6208879c965d84ba0"
+    },
+    "mount_visual_left": {
+      "path": "visual/mount_v2_left.stl",
+      "sha256": "f4a4a7452f6abf203ed0f19d13a253403da930d92fb56b5ab010b61c34ea6d85"
+    },
+    "mount_visual_right": {
+      "path": "visual/mount_v2_right.stl",
+      "sha256": "b4d21eea0e980d2582e90aae33858426763d1352842e49977b5f878946cba41b"
+    }
+  },
+  "recipe": {
+    "path": "configs/profiles/isaac_d405_wrist_rig_asset_generation_v1.yaml",
+    "sha256": "dd292bd4c53107ffc5ea5824bcd25ddf66b5436f1c9297a01510dd24deb7863d"
+  },
+  "schema": "wujihand.d405_wrist_rig_asset_generation_result.v1",
+  "scope": "simulation_only passive visual and collision assets",
+  "status": "qualified"
+}

@@ -1,8 +1,8 @@
 schema: wujihand.deployment.v2
 deployment_id: isaac_nero_hand2_ros_dual_robolab_banana_bowl_live_v2
 session:
-  path: configs/sessions/isaac_nero_dual_hand2_robolab_banana_bowl_teleop_v1.yaml
-  expected_id: isaac_nero_dual_hand2_robolab_banana_bowl_teleop_v1
+  path: configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_robolab_banana_bowl_teleop_v1.yaml
+  expected_id: isaac_nero_dual_hand2_d405_wrist_rig_robolab_banana_bowl_teleop_v1
 local_binding_id: workstation2_nv5_ros_v2
 tracking_setup:
   setup_revision: workstation2_steamvr_standing_unqualified_v1
@@ -66,8 +66,8 @@ report_root: artifacts/runs/nv5/robolab-banana-bowl
 root_namespace: wujihand/v1/teleop
 interface_set_id: wujihand_interfaces_v2
 qos_profile:
-  path: configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml
-  expected_id: ros2_jazzy_dual_teleoperation_qos_v1
+  path: configs/profiles/ros2_jazzy_dual_teleoperation_d405_qos_v1.yaml
+  expected_id: ros2_jazzy_dual_teleoperation_d405_qos_v1
 node_bindings:
   - process_id: vive_source
     node_name: vive_source

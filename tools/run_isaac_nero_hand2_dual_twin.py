@@ -92,16 +92,11 @@ from wujihand.specs import (
 
 
 DEFAULT_SESSION = (
-    ROOT / "configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
+    ROOT / "configs/sessions/"
+    "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
 )
-DEFAULT_DEPLOYMENT = (
-    ROOT
-    / "configs/deployments/"
-    "isaac_nero_hand2_native_dual_live_v1.yaml"
-)
-DEFAULT_LOCAL_BINDING = (
-    ROOT / "configs/local/workstation2_nv4_v1.yaml"
-)
+DEFAULT_DEPLOYMENT = ROOT / "configs/deployments/isaac_nero_hand2_native_dual_live_v1.yaml"
+DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv4_v1.yaml"
 DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2.yaml"
 
 
@@ -332,11 +327,7 @@ TRACKER_MAX_TRANSLATION_DELTA_M: float | None = None
 TRACKER_ROTATION_SCALE: float | None = None
 TRACKER_MAX_ROTATION_DELTA_RAD: float | None = None
 if NATIVE_DUAL_LIVE:
-    deployment_path = (
-        DEFAULT_DEPLOYMENT
-        if ARGS.deployment is None
-        else ARGS.deployment
-    )
+    deployment_path = DEFAULT_DEPLOYMENT if ARGS.deployment is None else ARGS.deployment
     try:
         RESOLVED_DEPLOYMENT = DeploymentResolver(ROOT).resolve(
             deployment_path,
@@ -348,41 +339,24 @@ if NATIVE_DUAL_LIVE:
     RESOLVED = RESOLVED_DEPLOYMENT.session
     profile_path = RESOLVED.session.runtime.compatibility_profile
     if profile_path is None:
-        raise SystemExit(
-            "NV-4 live Session is missing its compatibility profile"
-        )
-    NATIVE_PROFILE = ConfigRepository(
-        ROOT
-    ).load_dual_teleoperation_profile(
-        profile_path
-    )
+        raise SystemExit("NV-4 live Session is missing its compatibility profile")
+    NATIVE_PROFILE = ConfigRepository(ROOT).load_dual_teleoperation_profile(profile_path)
     TRACKER_MAPPING = RESOLVED_DEPLOYMENT.mapping
-    TRACKER_MAPPING_PATH = (
-        ROOT / RESOLVED_DEPLOYMENT.mapping_path
-    ).resolve()
+    TRACKER_MAPPING_PATH = (ROOT / RESOLVED_DEPLOYMENT.mapping_path).resolve()
     TRACKER_TRANSLATION_SCALE = TRACKER_MAPPING.translation_scale
-    TRACKER_MAX_TRANSLATION_DELTA_M = (
-        TRACKER_MAPPING.max_translation_delta_m
-    )
+    TRACKER_MAX_TRANSLATION_DELTA_M = TRACKER_MAPPING.max_translation_delta_m
     TRACKER_ROTATION_SCALE = TRACKER_MAPPING.rotation_scale
-    TRACKER_MAX_ROTATION_DELTA_RAD = (
-        TRACKER_MAPPING.max_rotation_delta_rad
-    )
+    TRACKER_MAX_ROTATION_DELTA_RAD = TRACKER_MAPPING.max_rotation_delta_rad
 else:
     assert ARGS.session is not None
     RESOLVED = SessionResolver(ROOT).resolve(
         ARGS.session,
         verify_artifacts=ARGS.verify_artifacts,
     )
-    if (
-        RESOLVED.session.backend != "isaac"
-        or RESOLVED.session.runtime_role != "simulation"
-    ):
+    if RESOLVED.session.backend != "isaac" or RESOLVED.session.runtime_role != "simulation":
         raise SystemExit("NV-2 runner requires an Isaac simulation Session")
     if RESOLVED.session.runtime.transport_contract is not None:
-        raise SystemExit(
-            "NV-2 scripted runner must not declare a transport contract"
-        )
+        raise SystemExit("NV-2 scripted runner must not declare a transport contract")
 
 if ARGS.tracker_live:
     TRACKER_MAPPING_PATH = (
@@ -670,13 +644,10 @@ ALIGNMENT_PROFILE = load_nero_link_geometry_alignment(ALIGNMENT_PROFILE_PATH)
 NERO_LULA_SOURCE_URDF = (ROOT / ALIGNMENT_PROFILE.source_urdf_path).resolve()
 if RESOLVED.session.runtime.compatibility_profile is None:
     raise RuntimeError("NV-2 tabletop qualification requires a Session compatibility profile")
-TABLETOP_PROFILE_PATH = (
-    ROOT
-    / (
-        RESOLVED.session.runtime.compatibility_profile
-        if NATIVE_PROFILE is None
-        else NATIVE_PROFILE.base_qualification.path
-    )
+TABLETOP_PROFILE_PATH = ROOT / (
+    RESOLVED.session.runtime.compatibility_profile
+    if NATIVE_PROFILE is None
+    else NATIVE_PROFILE.base_qualification.path
 )
 TABLETOP_PROFILE = load_nero_dual_tabletop_qualification_profile(TABLETOP_PROFILE_PATH)
 
@@ -1520,9 +1491,7 @@ def _run_tracker_interactive(
                                         else list(sample.position_m)
                                     ),
                                     "tracker_reference_orientation_wxyz": (
-                                        None
-                                        if sample.quat_wxyz is None
-                                        else list(sample.quat_wxyz)
+                                        None if sample.quat_wxyz is None else list(sample.quat_wxyz)
                                     ),
                                     "tracker_tracking_state": sample.tracking_state.value,
                                     "tracker_quality": sample.quality,
@@ -1762,11 +1731,9 @@ def _run_tracker_interactive(
                                     supervisor.layout,
                                     solver_candidate_q7,
                                 )
-                                candidate_orientation_error_rad = (
-                                    quaternion_geodesic_distance_rad(
-                                        candidate_orientation_wxyz,
-                                        mapping.target_orientation_wxyz,
-                                    )
+                                candidate_orientation_error_rad = quaternion_geodesic_distance_rad(
+                                    candidate_orientation_wxyz,
+                                    mapping.target_orientation_wxyz,
                                 )
                                 failure_event["solver_candidate_residual"] = {
                                     "position_m": float(
@@ -2464,17 +2431,11 @@ def _run_native_dual_live(
     profile = NATIVE_PROFILE
     mapping = TRACKER_MAPPING
     if resolved is None or profile is None or mapping is None:
-        raise RuntimeError(
-            "native dual Deployment was not resolved before Isaac startup"
-        )
-    if sha256_file(NERO_LULA_SOURCE_URDF) != (
-        ALIGNMENT_PROFILE.source_urdf_sha256
-    ):
+        raise RuntimeError("native dual Deployment was not resolved before Isaac startup")
+    if sha256_file(NERO_LULA_SOURCE_URDF) != (ALIGNMENT_PROFILE.source_urdf_sha256):
         raise RuntimeError("source-locked NERO URDF hash drifted")
     if not NERO_LULA_DESCRIPTION.is_file():
-        raise RuntimeError(
-            f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}"
-        )
+        raise RuntimeError(f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}")
     articulations = scene.articulations
     arm_targets = scene.arm_targets
     hand_targets = scene.hand_targets
@@ -2496,9 +2457,7 @@ def _run_native_dual_live(
             glove_routes[side] = hand_route
     stream_by_side = {stream.side: stream for stream in launch.streams}
     if set(stream_by_side) != set(tracker_routes):
-        raise RuntimeError(
-            "OpenVR streams differ from Deployment Tracker routes"
-        )
+        raise RuntimeError("OpenVR streams differ from Deployment Tracker routes")
 
     receivers = {
         side: UdpTrackingSampleReceiver(
@@ -2547,9 +2506,7 @@ def _run_native_dual_live(
         if side not in tracker_routes:
             arm_targets[side] = initial_arm_targets[side].copy()
         if side not in glove_routes:
-            hand_targets[side] = (
-                hand_profiles[side].rest_position.copy()
-            )
+            hand_targets[side] = hand_profiles[side].rest_position.copy()
     apply_targets()
     set_camera_view(
         eye=np.asarray(
@@ -2602,12 +2559,8 @@ def _run_native_dual_live(
                 for side, receiver in receivers.items():
                     receiver.authorize_epoch(
                         producer_instance=launch.producer_instance,
-                        transport_epoch=(
-                            lifecycle.new_transport_epoch
-                        ),
-                        tracking_setup_revision=(
-                            launch.tracking_setup_revision
-                        ),
+                        transport_epoch=(lifecycle.new_transport_epoch),
+                        tracking_setup_revision=(launch.tracking_setup_revision),
                     )
                     arm_controllers[side].invalidate_reference()
                 print(
@@ -2621,9 +2574,7 @@ def _run_native_dual_live(
             arm_states: dict[str, str] = {}
             cycle_result = cycle.step(
                 feedback_q7_rad={
-                    side: _positions(articulations[side])[
-                        arm_indices[side]
-                    ]
+                    side: _positions(articulations[side])[arm_indices[side]]
                     for side in arm_controllers
                 },
                 now_ns=tick_ns,
@@ -2637,8 +2588,7 @@ def _run_native_dual_live(
                 if step.reference_established:
                     references_established[side] += 1
                     print(
-                        f"NV4 {side.upper()} ARM REFERENCE "
-                        f"epoch={step.reference_epoch}",
+                        f"NV4 {side.upper()} ARM REFERENCE epoch={step.reference_epoch}",
                         flush=True,
                     )
                 if step.reference_revoked:
@@ -2652,27 +2602,18 @@ def _run_native_dual_live(
                         ik_successes[side] += 1
                     else:
                         ik_failures[side] += 1
-                if (
-                    step.mapping is not None
-                    and step.mapping.input_host_time_ns is not None
-                ):
-                    fresh_source_times.append(
-                        step.mapping.input_host_time_ns
-                    )
+                if step.mapping is not None and step.mapping.input_host_time_ns is not None:
+                    fresh_source_times.append(step.mapping.input_host_time_ns)
 
             hand_states: dict[str, str] = {}
             for hand_labelled in cycle_result.hand_steps:
                 side = hand_labelled.side.value
                 step = hand_labelled.step
                 hand_targets[side] = step.decision.command.copy()
-                hand_reasons[side][
-                    step.rejection_reason or step.decision.reason
-                ] += 1
+                hand_reasons[side][step.rejection_reason or step.decision.reason] += 1
                 hand_states[side] = step.decision.state.value
                 if step.intent is not None:
-                    fresh_source_times.append(
-                        step.intent.source_observation.receive_time_ns
-                    )
+                    fresh_source_times.append(step.intent.source_observation.receive_time_ns)
 
             if len(fresh_source_times) >= 2:
                 max_source_skew_ns = max(
@@ -2714,21 +2655,14 @@ def _run_native_dual_live(
         "mapping": {
             "mapping_id": mapping.mapping_id,
             "translation_scale": mapping.translation_scale,
-            "max_translation_delta_each_axis_m": (
-                mapping.max_translation_delta_m
-            ),
-            "max_diagonal_delta_m": (
-                math.sqrt(3.0) * mapping.max_translation_delta_m
-            ),
+            "max_translation_delta_each_axis_m": (mapping.max_translation_delta_m),
+            "max_diagonal_delta_m": (math.sqrt(3.0) * mapping.max_translation_delta_m),
             "rotation_scale": mapping.rotation_scale,
             "max_rotation_delta_deg": mapping.max_rotation_delta_deg,
         },
         "runtime": {
             "completed_frames": completed_frames,
-            "wall_duration_s": (
-                time.monotonic_ns() - loop_started_ns
-            )
-            / 1_000_000_000,
+            "wall_duration_s": (time.monotonic_ns() - loop_started_ns) / 1_000_000_000,
             "producer_restarts": producer_restarts,
             "max_fresh_source_skew_ms": max_source_skew_ns / 1_000_000,
         },
@@ -2744,19 +2678,14 @@ def _run_native_dual_live(
             }
             for side in arm_reasons
         },
-        "hands": {
-            side: {"reasons": dict(hand_reasons[side])}
-            for side in hand_reasons
-        },
+        "hands": {side: {"reasons": dict(hand_reasons[side])} for side in hand_reasons},
         "tracking_setup_qualified": resolved.tracking_qualified,
         "qualification_evaluated": False,
         "passed": None,
     }
     report_path = ARGS.report
     if report_path is None:
-        timestamp = datetime.now(timezone.utc).strftime(
-            "%Y%m%dT%H%M%SZ"
-        )
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         report_path = (
             ROOT
             / resolved.deployment.report_root
@@ -2788,6 +2717,8 @@ def main() -> int:
         alignment_profile=ALIGNMENT_PROFILE,
         qualification_profile=TABLETOP_PROFILE,
         physics_hz=PHYSICS_HZ,
+        self_collision_sides=frozenset(),
+        wrist_rig_collision_mode="all",
     )
     world = scene.world
     stage = scene.stage
@@ -2802,9 +2733,7 @@ def main() -> int:
     hand_targets = scene.hand_targets
     root_paths_before_reset = scene.root_paths_before_reset
     arm_drive_runtime = scene.arm_drive_runtime
-    external_fixed_collider_paths = (
-        scene.external_fixed_collider_paths
-    )
+    external_fixed_collider_paths = scene.external_fixed_collider_paths
 
     def validate_articulations() -> tuple[
         dict[str, NeroHand2DofPartition],
@@ -2912,8 +2841,7 @@ def main() -> int:
     apply_targets()
     if NATIVE_DUAL_LIVE:
         print(
-            "NV4 LIVE READINESS: settling the shared two-q27 scene "
-            "before opening external inputs.",
+            "NV4 LIVE READINESS: settling the shared two-q27 scene before opening external inputs.",
             flush=True,
         )
         settle_until_stable(
@@ -3541,9 +3469,7 @@ def main() -> int:
         "scope": "NV-2 simulation only; no ROS, CAN, NERO hardware, or Hand 2 hardware",
         "session_id": RESOLVED.session.session_id,
         "session_hash": RESOLVED.session_hash,
-        "workcell_materialization": (
-            scene.workcell_materialization.to_mapping()
-        ),
+        "workcell_materialization": (scene.workcell_materialization.to_mapping()),
         "isaac_distribution": version("isaacsim"),
         "physics_hz": PHYSICS_HZ,
         "frames_per_phase": ARGS.frames_per_phase,

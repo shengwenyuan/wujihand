@@ -21,20 +21,32 @@ from .statistics import (
     sequence_metrics,
 )
 
+TICK_SCHEMA_V2 = "wujihand.teleoperation_tick_trace.v2"
+
 
 @dataclass(frozen=True, slots=True)
 class AnalysisConfig:
     expected_control_hz: float = 60.0
+    expected_physics_hz: float = 120.0
+    expected_render_hz: float = 20.0
     control_rate_tolerance_fraction: float = 0.02
+    render_rate_tolerance_fraction: float = 0.05
+    minimum_real_time_factor: float = 0.95
     p95_tick_interval_limit_ms: float = 20.0
+    gui_p95_tick_interval_limit_ms: float = 25.0
     p95_comparable_input_age_limit_ms: float = 20.0
     q27_composition_atol_rad: float = 1e-12
 
     def __post_init__(self) -> None:
         positive = (
             self.expected_control_hz,
+            self.expected_physics_hz,
+            self.expected_render_hz,
             self.control_rate_tolerance_fraction,
+            self.render_rate_tolerance_fraction,
+            self.minimum_real_time_factor,
             self.p95_tick_interval_limit_ms,
+            self.gui_p95_tick_interval_limit_ms,
             self.p95_comparable_input_age_limit_ms,
             self.q27_composition_atol_rad,
         )
@@ -44,8 +56,13 @@ class AnalysisConfig:
     def to_mapping(self) -> dict[str, float]:
         return {
             "expected_control_hz": self.expected_control_hz,
+            "expected_physics_hz": self.expected_physics_hz,
+            "expected_render_hz": self.expected_render_hz,
             "control_rate_tolerance_fraction": self.control_rate_tolerance_fraction,
+            "render_rate_tolerance_fraction": self.render_rate_tolerance_fraction,
+            "minimum_real_time_factor": self.minimum_real_time_factor,
             "p95_tick_interval_limit_ms": self.p95_tick_interval_limit_ms,
+            "gui_p95_tick_interval_limit_ms": self.gui_p95_tick_interval_limit_ms,
             "p95_comparable_input_age_limit_ms": (self.p95_comparable_input_age_limit_ms),
             "q27_composition_atol_rad": self.q27_composition_atol_rad,
         }
@@ -364,7 +381,11 @@ def _tick_integrity(
     for tick_id in paired:
         left = by_tick[tick_id]["left"]
         right = by_tick[tick_id]["right"]
-        if left.times != right.times:
+        if (
+            left.schema != right.schema
+            or left.times != right.times
+            or left.execution != right.execution
+        ):
             time_mismatches += 1
     tick_ids = sorted(by_tick)
     inferred_missing_tick_ids = (
@@ -396,22 +417,162 @@ def _stage_metrics(
     rows: list[dict[str, Any]] = []
     for tick in representatives:
         times = tick.times
+        input_name = "snapshot_ms" if tick.execution is not None else "spin_ms"
+        simulation_name = "physics_ms" if tick.execution is not None else "world_step_ms"
+        pipeline_start_ns = (
+            times.tick_time_ns if tick.execution is not None else times.spin_start_ns
+        )
         durations = {
-            "spin_ms": finite_non_negative_delta_ms(times.spin_end_ns, times.spin_start_ns),
+            input_name: finite_non_negative_delta_ms(times.spin_end_ns, times.spin_start_ns),
             "control_ms": finite_non_negative_delta_ms(
                 times.control_end_ns, times.control_start_ns
             ),
             "apply_ms": finite_non_negative_delta_ms(times.apply_end_ns, times.apply_start_ns),
-            "world_step_ms": finite_non_negative_delta_ms(
+            simulation_name: finite_non_negative_delta_ms(
                 times.world_step_end_ns, times.world_step_start_ns
             ),
-            "pipeline_ms": finite_non_negative_delta_ms(times.trace_time_ns, times.spin_start_ns),
+            "pipeline_ms": finite_non_negative_delta_ms(times.trace_time_ns, pipeline_start_ns),
         }
         rows.append({"tick_id": tick.tick_id, **durations})
         for name, value in durations.items():
             stage_values[name].append(value)
     summary = {name: distribution(values) for name, values in sorted(stage_values.items())}
     return rows, summary
+
+
+def _execution_metrics(
+    representatives: list[TickRecord],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    schema_counts = Counter(tick.schema for tick in representatives)
+    rows: list[dict[str, Any]] = []
+    substep_host_durations_ms: list[float] = []
+    substep_simulation_dt_s: list[float] = []
+    substep_indices: list[int] = []
+    render_tick_times_ns: list[int] = []
+    missed_periods = 0
+    for tick in representatives:
+        execution = tick.execution
+        if execution is None:
+            continue
+        first_simulation_dt = (
+            execution.physics_substep_sim_times_s[0] - execution.simulation_time_before_s
+        )
+        second_simulation_dt = (
+            execution.physics_substep_sim_times_s[1] - execution.physics_substep_sim_times_s[0]
+        )
+        substep_simulation_dt_s.extend((first_simulation_dt, second_simulation_dt))
+        substep_indices.extend(execution.physics_substep_indices)
+        for start_ns, end_ns in zip(
+            execution.physics_substep_start_ns,
+            execution.physics_substep_end_ns,
+            strict=True,
+        ):
+            substep_host_durations_ms.append((end_ns - start_ns) / 1e6)
+        missed_periods += execution.missed_control_periods_before_tick
+        if execution.rendered:
+            render_tick_times_ns.append(tick.times.tick_time_ns)
+        rows.append(
+            {
+                "tick_id": tick.tick_id,
+                "schema": tick.schema,
+                "schedule_slot": execution.schedule_slot,
+                "scheduled_control_time_ns": execution.scheduled_control_time_ns,
+                "actual_control_time_ns": tick.times.tick_time_ns,
+                "control_lateness_ms": execution.control_lateness_ns / 1e6,
+                "missed_control_periods_before_tick": (
+                    execution.missed_control_periods_before_tick
+                ),
+                "simulation_time_before_s": execution.simulation_time_before_s,
+                "simulation_time_after_s": execution.simulation_time_after_s,
+                "simulation_advance_s": (
+                    execution.simulation_time_after_s - execution.simulation_time_before_s
+                ),
+                "physics_substep_0_index": execution.physics_substep_indices[0],
+                "physics_substep_1_index": execution.physics_substep_indices[1],
+                "physics_substep_0_sim_time_s": (execution.physics_substep_sim_times_s[0]),
+                "physics_substep_1_sim_time_s": (execution.physics_substep_sim_times_s[1]),
+                "physics_substep_0_host_ms": (
+                    execution.physics_substep_end_ns[0] - execution.physics_substep_start_ns[0]
+                )
+                / 1e6,
+                "physics_substep_1_host_ms": (
+                    execution.physics_substep_end_ns[1] - execution.physics_substep_start_ns[1]
+                )
+                / 1e6,
+                "rendered": execution.rendered,
+                "render_index": execution.render_index,
+            }
+        )
+    executions = [tick.execution for tick in representatives if tick.execution is not None]
+    wall_span_s = (
+        (representatives[-1].times.world_step_end_ns - representatives[0].times.world_step_start_ns)
+        / 1e9
+        if len(executions) == len(representatives) and representatives
+        else None
+    )
+    simulation_advance_s = sum(
+        execution.simulation_time_after_s - execution.simulation_time_before_s
+        for execution in executions
+    )
+    consecutive_substep_indices = all(
+        second == first + 1 for first, second in pairwise(substep_indices)
+    )
+    schedule_slots = [execution.schedule_slot for execution in executions]
+    control_indices = [execution.control_index for execution in executions]
+    render_indices = [
+        execution.render_index for execution in executions if execution.render_index is not None
+    ]
+    schedule_gap_matches_missed_periods = bool(executions) and (
+        executions[0].schedule_slot == 0
+        and executions[0].missed_control_periods_before_tick == 0
+        and all(
+            second.schedule_slot - first.schedule_slot - 1
+            == second.missed_control_periods_before_tick
+            for first, second in pairwise(executions)
+        )
+    )
+    simulation_time_continuous = all(
+        np.isclose(
+            first.simulation_time_after_s,
+            second.simulation_time_before_s,
+            rtol=0.0,
+            atol=1e-9,
+        )
+        for first, second in pairwise(executions)
+    )
+    return rows, {
+        "trace_schema_counts": dict(sorted(schema_counts.items())),
+        "uniform_trace_schema": len(schema_counts) <= 1,
+        "execution_record_count": len(executions),
+        "execution_facts_complete": len(executions) == len(representatives),
+        "physics_substep_count": len(substep_indices),
+        "consecutive_physics_substep_indices": consecutive_substep_indices,
+        "strictly_increasing_schedule_slots": all(
+            second > first for first, second in pairwise(schedule_slots)
+        ),
+        "schedule_gap_matches_missed_periods": schedule_gap_matches_missed_periods,
+        "simulation_time_continuous": simulation_time_continuous,
+        "sequential_control_indices": control_indices == list(range(len(control_indices))),
+        "sequential_render_indices": render_indices == list(range(len(render_indices))),
+        "missed_control_periods": missed_periods,
+        "rendered_tick_count": len(render_tick_times_ns),
+        "rendered_control_indices": [
+            execution.control_index for execution in executions if execution.rendered
+        ],
+        "render_effective_hz": effective_rate_hz(render_tick_times_ns),
+        "simulation_advance_s": simulation_advance_s,
+        "wall_span_s": wall_span_s,
+        "real_time_factor": (
+            simulation_advance_s / wall_span_s
+            if wall_span_s is not None and wall_span_s > 0.0
+            else None
+        ),
+        "physics_substep_host_ms": distribution(substep_host_durations_ms),
+        "physics_substep_simulation_dt_s": distribution(substep_simulation_dt_s),
+        "control_lateness_ms": distribution(
+            [execution.control_lateness_ns / 1e6 for execution in executions]
+        ),
+    }
 
 
 def _route_metrics(
@@ -1018,13 +1179,21 @@ def _receipt_metrics(
                 inbox = {}
             accepted = int(inbox.get("accepted", 0))
             overwritten = int(inbox.get("overwritten", 0))
+            pending = int(inbox.get("pending", 0))
+            explicit_accounting = "drained" in inbox and "discarded" in inbox
+            drained = int(inbox["drained"]) if explicit_accounting else None
+            discarded = int(inbox["discarded"]) if explicit_accounting else None
             kind, _, side = route.partition("_")
             input_rows.append(
                 {
                     "kind": kind,
                     "side": side,
                     "accepted": accepted,
+                    "drained": drained,
+                    "discarded": discarded,
                     "overwritten": overwritten,
+                    "pending": pending,
+                    "explicit_accounting": explicit_accounting,
                     "overwrite_ratio": ratio(overwritten, accepted),
                     "rebinds": int(inbox.get("rebinds", 0)),
                     "rejected_old_epoch": int(inbox.get("rejected_old_epoch", 0)),
@@ -1256,6 +1425,243 @@ def _scene_integrity(
     }
 
 
+def _camera_metrics(
+    artifact: RunArtifact,
+    dataset: BagDataset,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
+    required = any("/wrist_camera/" in topic for topic in artifact.expected_topics) or isinstance(
+        artifact.manifest.get("synthetic_d405_wrist_cameras"),
+        dict,
+    )
+    frames_by_side = {
+        side: sorted(
+            (frame for frame in dataset.camera_frames if frame.side == side),
+            key=lambda frame: frame.camera_frame_index,
+        )
+        for side in ("left", "right")
+    }
+    rows: list[dict[str, Any]] = []
+    derived: list[dict[str, Any]] = []
+    for side, frames in frames_by_side.items():
+        rate = effective_rate_hz([frame.stamp_ns for frame in frames])
+        rows.append(
+            {
+                "side": side,
+                "frame_count": len(frames),
+                "effective_hz": rate,
+                "first_frame_index": (None if not frames else frames[0].camera_frame_index),
+                "last_frame_index": (None if not frames else frames[-1].camera_frame_index),
+                "first_stamp_ns": None if not frames else frames[0].stamp_ns,
+                "last_stamp_ns": None if not frames else frames[-1].stamp_ns,
+                "finite_depth_pixel_ratio": ratio(
+                    sum(frame.finite_depth_pixels for frame in frames),
+                    sum(frame.width_px * frame.height_px for frame in frames),
+                ),
+                "color_payload_bytes": sum(frame.color_payload_bytes for frame in frames),
+                "depth_payload_bytes": sum(frame.depth_payload_bytes for frame in frames),
+            }
+        )
+        for frame in frames:
+            derived.append(
+                {
+                    "side": side,
+                    "camera_frame_index": frame.camera_frame_index,
+                    "stamp_ns": frame.stamp_ns,
+                    "capture_sim_time_s": frame.capture_sim_time_s,
+                    "control_tick_id": frame.control_tick_id,
+                    "physics_substep_index": frame.physics_substep_index,
+                    "color_bag_time_ns": frame.color_bag_time_ns,
+                    "depth_bag_time_ns": frame.depth_bag_time_ns,
+                    "camera_info_bag_time_ns": frame.camera_info_bag_time_ns,
+                    "truth_bag_time_ns": frame.truth_bag_time_ns,
+                    "host_capture_duration_ms": (
+                        frame.host_capture_end_ns - frame.host_capture_start_ns
+                    )
+                    / 1e6,
+                    "finite_depth_pixels": frame.finite_depth_pixels,
+                }
+            )
+
+    transform_rows = [
+        {
+            "kind": "static" if item.static else "dynamic",
+            "stamp_ns": item.stamp_ns,
+            "bag_time_ns": item.bag_time_ns,
+            "parent_frame_id": item.parent_frame_id,
+            "child_frame_id": item.child_frame_id,
+            "parent_from_child_row_major": [
+                value for row in item.parent_from_child for value in row
+            ],
+        }
+        for item in dataset.transforms
+        if item.child_frame_id.endswith(("_hand_base", "_wrist_camera_optical"))
+    ]
+
+    topic_counts = {item.topic: item.count for item in dataset.topics}
+    metadata_counts = {
+        str(entry["topic_metadata"]["name"]): int(entry["message_count"])
+        for entry in artifact.rosbag_metadata["topics_with_message_count"]
+    }
+    per_side_topic_counts: dict[str, dict[str, int]] = {}
+    for side in ("left", "right"):
+        counts: dict[str, int] = {}
+        for kind, suffix in (
+            ("color", "/color/image_raw"),
+            ("depth", "/depth/image_raw"),
+            ("camera_info", "/camera_info"),
+            ("truth", "/frame_truth"),
+        ):
+            matches = [
+                topic
+                for topic in artifact.expected_topics
+                if f"/{side}/wrist_camera" in topic and topic.endswith(suffix)
+            ]
+            counts[kind] = topic_counts.get(matches[0], 0) if len(matches) == 1 else -1
+            if len(matches) == 1 and metadata_counts.get(matches[0]) != counts[kind]:
+                counts[kind] = -1
+        per_side_topic_counts[side] = counts
+    topic_bundle_counts_match = all(
+        all(count == len(frames_by_side[side]) for count in counts.values())
+        for side, counts in per_side_topic_counts.items()
+    )
+
+    receipt_camera = artifact.receipt.get("synthetic_d405_wrist_cameras")
+    receipt_sides = receipt_camera.get("sides") if isinstance(receipt_camera, dict) else None
+    receipt_counts: dict[str, dict[str, int]] = {}
+    for side in ("left", "right"):
+        value = receipt_sides.get(side) if isinstance(receipt_sides, dict) else None
+        receipt_counts[side] = {
+            "capture_count": int(value.get("capture_count", -1)) if isinstance(value, dict) else -1,
+            "publish_count": int(value.get("publish_count", -1)) if isinstance(value, dict) else -1,
+        }
+    expected_frames_per_side = int(artifact.receipt.get("completed_ticks", 0)) // 2
+    receipt_counts_match = all(
+        receipt_counts[side]["capture_count"]
+        == receipt_counts[side]["publish_count"]
+        == len(frames_by_side[side])
+        == expected_frames_per_side
+        for side in ("left", "right")
+    )
+    receipt_closed = isinstance(receipt_camera, dict) and receipt_camera.get("closed") is True
+
+    manifest_camera = artifact.manifest.get("synthetic_d405_wrist_cameras")
+    inventory = manifest_camera.get("cameras") if isinstance(manifest_camera, dict) else None
+    inventory_by_side = (
+        {str(value.get("side")): value for value in inventory if isinstance(value, dict)}
+        if isinstance(inventory, list)
+        else {}
+    )
+    manifest_matches = set(inventory_by_side) == {"left", "right"}
+    if manifest_matches:
+        for side, frames in frames_by_side.items():
+            item = inventory_by_side[side]
+            readback = item.get("api_readback")
+            calibration = item.get("derived_calibration")
+            profile = item.get("profile")
+            capture = profile.get("capture") if isinstance(profile, dict) else None
+            expected_static = item.get("hand_base_from_camera_optical_row_major")
+            if not (
+                isinstance(readback, dict)
+                and isinstance(calibration, dict)
+                and isinstance(capture, dict)
+                and isinstance(expected_static, list)
+                and int(readback.get("width_px", -1)) == 640
+                and int(readback.get("height_px", -1)) == 480
+                and float(capture.get("rate_hz", -1.0)) == 30.0
+            ):
+                manifest_matches = False
+                break
+            for frame in frames:
+                static_flat = [
+                    value for row in frame.hand_base_from_camera_optical for value in row
+                ]
+                if not (
+                    frame.hand_base_frame_id == item.get("parent_frame_id")
+                    and frame.optical_frame_id == item.get("optical_frame_id")
+                    and np.allclose(
+                        frame.k_row_major,
+                        calibration.get("k_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-9,
+                    )
+                    and np.allclose(
+                        frame.d,
+                        calibration.get("d", ()),
+                        rtol=0.0,
+                        atol=1e-12,
+                    )
+                    and np.allclose(
+                        frame.r_row_major,
+                        calibration.get("r_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-12,
+                    )
+                    and np.allclose(
+                        frame.p_row_major,
+                        calibration.get("p_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-9,
+                    )
+                    and np.allclose(
+                        static_flat,
+                        expected_static,
+                        rtol=0.0,
+                        atol=1e-8,
+                    )
+                ):
+                    manifest_matches = False
+                    break
+            if not manifest_matches:
+                break
+
+    dynamic_camera_edges = sum(
+        not item.static
+        and item.parent_frame_id == "world"
+        and item.child_frame_id.endswith("_hand_base")
+        for item in dataset.transforms
+    )
+    static_camera_edges = sum(
+        item.static and item.child_frame_id.endswith("_wrist_camera_optical")
+        for item in dataset.transforms
+    )
+    extrinsic_inventory_matches = (
+        dynamic_camera_edges == len(dataset.camera_frames) and static_camera_edges == 2
+    )
+    dual_identity_aligned = bool(frames_by_side["left"]) and [
+        (frame.camera_frame_index, frame.stamp_ns) for frame in frames_by_side["left"]
+    ] == [(frame.camera_frame_index, frame.stamp_ns) for frame in frames_by_side["right"]]
+    rate_matches = all(
+        row["effective_hz"] is not None
+        and np.isclose(float(row["effective_hz"]), 30.0, rtol=0.0, atol=1e-6)
+        for row in rows
+    )
+    summary = {
+        "required": required,
+        "frame_count_by_side": {side: len(frames) for side, frames in frames_by_side.items()},
+        "expected_frames_per_side": expected_frames_per_side,
+        "topic_counts_by_side": per_side_topic_counts,
+        "topic_bundle_counts_match": topic_bundle_counts_match,
+        "receipt_counts_by_side": receipt_counts,
+        "receipt_counts_match": receipt_counts_match,
+        "receipt_closed": receipt_closed,
+        "manifest_calibration_and_static_extrinsic_match": manifest_matches,
+        "dynamic_camera_tf_edge_count": dynamic_camera_edges,
+        "static_camera_tf_edge_count": static_camera_edges,
+        "extrinsic_inventory_matches": extrinsic_inventory_matches,
+        "dual_completed_frame_identities_align": dual_identity_aligned,
+        "effective_rate_is_30_hz": rate_matches,
+        "reader_fail_closed_integrity_passed": (
+            bool(dataset.camera_frames) if required else not dataset.camera_frames
+        ),
+    }
+    return rows, transform_rows, derived, summary
+
+
 def _capabilities(artifact: RunArtifact) -> list[dict[str, Any]]:
     manifest_capabilities = artifact.manifest.get("capabilities", {})
     rows = (
@@ -1282,6 +1688,14 @@ def _capabilities(artifact: RunArtifact) -> list[dict[str, Any]]:
                 "capability": "offline_q27_composition",
                 "available": True,
                 "detail": "manifest partitions plus applied_target_q27",
+            },
+            {
+                "capability": "offline_synthetic_d405_integrity",
+                "available": isinstance(
+                    artifact.manifest.get("synthetic_d405_wrist_cameras"),
+                    dict,
+                ),
+                "detail": "RGB/depth/CameraInfo/frame_truth plus dynamic/static TF closure",
             },
             {
                 "capability": "offline_command_feedback_lag",
@@ -1326,10 +1740,34 @@ def compute_metrics(
 ) -> MetricBundle:
     if config is None:
         config = AnalysisConfig()
+    simulation_timing = artifact.manifest.get("simulation_timing", {})
+    gui = (
+        bool(simulation_timing.get("gui", False)) if isinstance(simulation_timing, dict) else False
+    )
+    effective_p95_tick_interval_limit_ms = (
+        config.gui_p95_tick_interval_limit_ms if gui else config.p95_tick_interval_limit_ms
+    )
+    physics_substeps_per_control = round(config.expected_physics_hz / config.expected_control_hz)
+    control_ticks_per_render = round(config.expected_control_hz / config.expected_render_hz)
+    timing_ratios_are_integral = bool(
+        np.isclose(
+            config.expected_physics_hz / config.expected_control_hz,
+            physics_substeps_per_control,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        and np.isclose(
+            config.expected_control_hz / config.expected_render_hz,
+            control_ticks_per_render,
+            rtol=0.0,
+            atol=1e-12,
+        )
+    )
     topic_rows, topic_summary = _topic_metrics(artifact, dataset)
     source_rows, sequence_rows, source_samples = _source_metrics(dataset, artifact)
     tick_integrity, representatives, by_tick = _tick_integrity(artifact, dataset)
     stage_samples, stage_summary = _stage_metrics(representatives)
+    execution_samples, execution_summary = _execution_metrics(representatives)
     route_rows, joint_rows, tick_rows, state_rows, route_summary = _route_metrics(
         artifact, dataset, by_tick
     )
@@ -1349,10 +1787,30 @@ def compute_metrics(
         observed_receipt_routes.add(route_key)
         join_row = join_lookup.get(route_key)
         selected = None if join_row is None else int(join_row["new_source_reference_count"])
-        expected_selected = int(receipt_row["accepted"]) - int(receipt_row["overwritten"])
+        explicit_accounting = bool(receipt_row["explicit_accounting"])
+        if explicit_accounting:
+            expected_selected = int(receipt_row["drained"]) - int(
+                receipt_row["rejected_future_time"]
+            )
+            inbox_conserved = int(receipt_row["accepted"]) == (
+                int(receipt_row["drained"])
+                + int(receipt_row["discarded"])
+                + int(receipt_row["overwritten"])
+                + int(receipt_row["pending"])
+            )
+        else:
+            expected_selected = (
+                int(receipt_row["accepted"])
+                - int(receipt_row["overwritten"])
+                - int(receipt_row["pending"])
+            )
+            inbox_conserved = True
         receipt_row["trace_selected_count"] = selected
-        receipt_row["expected_selected_after_overwrite"] = expected_selected
-        receipt_row["accepted_selection_accounted"] = selected == expected_selected
+        receipt_row["expected_trace_selected_count"] = expected_selected
+        receipt_row["inbox_conserved"] = inbox_conserved
+        receipt_row["accepted_selection_accounted"] = (
+            selected == expected_selected and inbox_conserved
+        )
     receipt_selection_accounted = observed_receipt_routes == expected_receipt_routes and all(
         bool(row["accepted_selection_accounted"]) for row in receipt_input_rows
     )
@@ -1366,6 +1824,10 @@ def compute_metrics(
         dataset,
         int(tick_integrity["unique_tick_count"]),
     )
+    camera_rows, camera_transform_rows, camera_samples, camera_summary = _camera_metrics(
+        artifact,
+        dataset,
+    )
     capability_rows = _capabilities(artifact)
 
     control_times = [tick.times.tick_time_ns for tick in representatives]
@@ -1378,10 +1840,13 @@ def compute_metrics(
         len(control_intervals),
     )
     p95_limit_exceedance_ratio = ratio(
-        sum(value > config.p95_tick_interval_limit_ms for value in control_intervals),
+        sum(value > effective_p95_tick_interval_limit_ms for value in control_intervals),
         len(control_intervals),
     )
-    exclusive_stage_names = ("spin_ms", "control_ms", "apply_ms", "world_step_ms")
+    if execution_summary["execution_facts_complete"] and representatives:
+        exclusive_stage_names = ("snapshot_ms", "control_ms", "apply_ms", "physics_ms")
+    else:
+        exclusive_stage_names = ("spin_ms", "control_ms", "apply_ms", "world_step_ms")
     exclusive_stage_p95 = {name: stage_summary[name]["p95"] for name in exclusive_stage_names}
     dominant_exclusive_stage_by_p95 = max(
         exclusive_stage_names,
@@ -1393,6 +1858,10 @@ def compute_metrics(
         for row in sequence_rows
     )
     composition_max = route_summary["maximum_applied_composition_error_rad"]
+    v2_trace = execution_summary["trace_schema_counts"] == {TICK_SCHEMA_V2: len(representatives)}
+    v2_has_explicit_inbox_accounting = observed_receipt_routes == expected_receipt_routes and all(
+        bool(row["explicit_accounting"]) for row in receipt_input_rows
+    )
     gates = [
         _gate("structural", "receipt_complete", "complete", artifact.receipt["state"], True),
         _gate(
@@ -1452,6 +1921,13 @@ def compute_metrics(
         ),
         _gate(
             "structural",
+            "tick_trace_schema_uniform",
+            "one supported trace schema per run",
+            execution_summary["trace_schema_counts"],
+            bool(execution_summary["uniform_trace_schema"]),
+        ),
+        _gate(
+            "structural",
             "four_route_traces_present",
             0,
             tick_integrity["missing_hand_route_records"],
@@ -1475,14 +1951,20 @@ def compute_metrics(
         _gate(
             "structural",
             "receipt_inbox_selection_accounted",
-            "accepted = trace-selected + overwritten for all four routes",
+            (
+                "accepted = drained + discarded + overwritten + pending; "
+                "drained = trace-selected + rejected-future for all four routes"
+            ),
             [
                 {
                     "side": row["side"],
                     "kind": row["kind"],
                     "accepted": row["accepted"],
+                    "drained": row["drained"],
+                    "discarded": row["discarded"],
                     "trace_selected": row["trace_selected_count"],
                     "overwritten": row["overwritten"],
+                    "pending": row["pending"],
                 }
                 for row in receipt_input_rows
             ],
@@ -1505,6 +1987,120 @@ def compute_metrics(
             and bool(scene_integrity["every_expected_prim_has_one_record_per_tick"]),
         ),
     ]
+    if v2_trace:
+        expected_physics_steps = len(representatives) * physics_substeps_per_control
+        receipt_physics_steps = int(artifact.receipt.get("completed_physics_steps", -1))
+        receipt_renders = int(artifact.receipt.get("completed_renders", -1))
+        configured_timing = artifact.receipt.get("configured_timing", {})
+        manifest_timing_matches = (
+            timing_ratios_are_integral
+            and isinstance(simulation_timing, dict)
+            and (
+                float(simulation_timing.get("physics_hz", -1.0)) == config.expected_physics_hz
+                and float(simulation_timing.get("control_hz", -1.0)) == config.expected_control_hz
+                and float(simulation_timing.get("rendering_hz", -1.0)) == config.expected_render_hz
+                and int(simulation_timing.get("physics_substeps_per_control", -1))
+                == physics_substeps_per_control
+                and int(simulation_timing.get("control_ticks_per_render", -1))
+                == control_ticks_per_render
+            )
+        )
+        receipt_timing_matches = (
+            timing_ratios_are_integral
+            and isinstance(configured_timing, dict)
+            and (
+                float(configured_timing.get("physics_hz", -1.0)) == config.expected_physics_hz
+                and float(configured_timing.get("control_hz", -1.0)) == config.expected_control_hz
+                and float(configured_timing.get("render_hz", -1.0)) == config.expected_render_hz
+                and int(configured_timing.get("physics_substeps_per_control", -1))
+                == physics_substeps_per_control
+                and int(configured_timing.get("control_ticks_per_render", -1))
+                == control_ticks_per_render
+            )
+        )
+        gates.extend(
+            (
+                _gate(
+                    "structural",
+                    "v2_execution_facts_complete",
+                    (
+                        "one execution record and "
+                        f"{physics_substeps_per_control} consecutive physics substeps per tick"
+                    ),
+                    execution_summary,
+                    bool(execution_summary["execution_facts_complete"])
+                    and execution_summary["physics_substep_count"] == expected_physics_steps
+                    and bool(execution_summary["consecutive_physics_substep_indices"])
+                    and bool(execution_summary["sequential_control_indices"])
+                    and bool(execution_summary["strictly_increasing_schedule_slots"])
+                    and bool(execution_summary["schedule_gap_matches_missed_periods"])
+                    and bool(execution_summary["simulation_time_continuous"]),
+                ),
+                _gate(
+                    "structural",
+                    "v2_explicit_mailbox_accounting",
+                    "drained and discarded counters on all four routes",
+                    v2_has_explicit_inbox_accounting,
+                    v2_has_explicit_inbox_accounting,
+                ),
+                _gate(
+                    "structural",
+                    "v2_timing_configuration_consistent",
+                    (
+                        "manifest and receipt match analyzer timing: "
+                        f"{physics_substeps_per_control} physics/control and "
+                        f"{control_ticks_per_render} control/render"
+                    ),
+                    {
+                        "manifest": simulation_timing,
+                        "receipt": configured_timing,
+                    },
+                    manifest_timing_matches and receipt_timing_matches,
+                ),
+                _gate(
+                    "structural",
+                    "receipt_physics_count_matches_trace",
+                    expected_physics_steps,
+                    receipt_physics_steps,
+                    receipt_physics_steps == expected_physics_steps,
+                ),
+                _gate(
+                    "structural",
+                    "receipt_render_count_matches_trace",
+                    execution_summary["rendered_tick_count"],
+                    receipt_renders,
+                    receipt_renders == execution_summary["rendered_tick_count"]
+                    and bool(execution_summary["sequential_render_indices"]),
+                ),
+                _gate(
+                    "structural",
+                    "headless_has_no_render_ticks",
+                    0 if not gui else "GUI enabled",
+                    execution_summary["rendered_tick_count"],
+                    gui or execution_summary["rendered_tick_count"] == 0,
+                ),
+            )
+        )
+    if camera_summary["required"]:
+        camera_structural_checks = (
+            "reader_fail_closed_integrity_passed",
+            "topic_bundle_counts_match",
+            "receipt_counts_match",
+            "receipt_closed",
+            "manifest_calibration_and_static_extrinsic_match",
+            "extrinsic_inventory_matches",
+            "dual_completed_frame_identities_align",
+        )
+        for name in camera_structural_checks:
+            gates.append(
+                _gate(
+                    "structural",
+                    f"d405_{name}",
+                    True,
+                    camera_summary[name],
+                    bool(camera_summary[name]),
+                )
+            )
     rate_low = config.expected_control_hz * (1.0 - config.control_rate_tolerance_fraction)
     rate_high = config.expected_control_hz * (1.0 + config.control_rate_tolerance_fraction)
     gates.append(
@@ -1521,9 +2117,10 @@ def compute_metrics(
         _gate(
             "planned_target",
             "p95_tick_interval",
-            f"<= {config.p95_tick_interval_limit_ms:g} ms",
+            f"<= {effective_p95_tick_interval_limit_ms:g} ms",
             interval_p95,
-            interval_p95 is not None and float(interval_p95) <= config.p95_tick_interval_limit_ms,
+            interval_p95 is not None
+            and float(interval_p95) <= effective_p95_tick_interval_limit_ms,
         )
     )
     for row in route_rows:
@@ -1538,10 +2135,108 @@ def compute_metrics(
             )
         )
 
+    if v2_trace:
+        real_time_factor = execution_summary["real_time_factor"]
+        gates.append(
+            _gate(
+                "planned_target",
+                "physics_real_time_factor",
+                f">= {config.minimum_real_time_factor:g}",
+                real_time_factor,
+                real_time_factor is not None
+                and float(real_time_factor) >= config.minimum_real_time_factor,
+            )
+        )
+        gates.append(
+            _gate(
+                "planned_target",
+                "missed_control_periods",
+                0,
+                execution_summary["missed_control_periods"],
+                execution_summary["missed_control_periods"] == 0,
+            )
+        )
+        substep_dt = execution_summary["physics_substep_simulation_dt_s"]
+        expected_dt_s = 1.0 / config.expected_physics_hz
+        minimum_dt = substep_dt["minimum"]
+        maximum_dt = substep_dt["maximum"]
+        dt_matches = (
+            minimum_dt is not None
+            and maximum_dt is not None
+            and np.isclose(float(minimum_dt), expected_dt_s, rtol=0.0, atol=1e-9)
+            and np.isclose(float(maximum_dt), expected_dt_s, rtol=0.0, atol=1e-9)
+        )
+        gates.append(
+            _gate(
+                "planned_target",
+                "physics_substep_dt",
+                f"{expected_dt_s:g} s",
+                {"minimum": minimum_dt, "maximum": maximum_dt},
+                bool(dt_matches),
+            )
+        )
+        if gui:
+            render_rate = execution_summary["render_effective_hz"]
+            render_low = config.expected_render_hz * (1.0 - config.render_rate_tolerance_fraction)
+            render_high = config.expected_render_hz * (1.0 + config.render_rate_tolerance_fraction)
+            gates.append(
+                _gate(
+                    "planned_target",
+                    "render_rate",
+                    (
+                        f"{config.expected_render_hz:g} Hz "
+                        f"±{config.render_rate_tolerance_fraction * 100:g}%"
+                    ),
+                    render_rate,
+                    render_rate is not None and render_low <= float(render_rate) <= render_high,
+                )
+            )
+            render_stride = config.expected_control_hz / config.expected_render_hz
+            expected_stride = round(render_stride)
+            rendered_indices = execution_summary["rendered_control_indices"]
+            expected_rendered_indices = [
+                execution.control_index
+                for execution in (tick.execution for tick in representatives)
+                if execution is not None
+                and expected_stride > 0
+                and (execution.control_index + 1) % expected_stride == 0
+            ]
+            gates.append(
+                _gate(
+                    "planned_target",
+                    "render_cadence",
+                    f"every {expected_stride} control ticks",
+                    rendered_indices,
+                    bool(
+                        np.isclose(
+                            render_stride,
+                            expected_stride,
+                            rtol=0.0,
+                            atol=1e-12,
+                        )
+                    )
+                    and rendered_indices == expected_rendered_indices,
+                )
+            )
+
+    if camera_summary["required"]:
+        gates.append(
+            _gate(
+                "planned_target",
+                "d405_camera_rate",
+                "30 Hz completed-frame identity cadence on both sides",
+                [{"side": row["side"], "effective_hz": row["effective_hz"]} for row in camera_rows],
+                bool(camera_summary["effective_rate_is_30_hz"]),
+            )
+        )
+
     summary = {
         "run_id": artifact.run_id,
         "analysis_window": "full recorded control tick span; no warm-up or task trimming",
-        "config": config.to_mapping(),
+        "config": {
+            **config.to_mapping(),
+            "effective_p95_tick_interval_limit_ms": (effective_p95_tick_interval_limit_ms),
+        },
         "artifact": {
             "state": artifact.receipt["state"],
             "input_checksum_count": len(artifact.input_checksums),
@@ -1558,6 +2253,7 @@ def compute_metrics(
             "p95_limit_exceedance_ratio": p95_limit_exceedance_ratio,
             "interval_ms": interval_summary,
             "stage_ms": stage_summary,
+            "execution": execution_summary,
             "exclusive_stage_p95_ms": exclusive_stage_p95,
             "dominant_exclusive_stage_by_p95": dominant_exclusive_stage_by_p95,
         },
@@ -1566,6 +2262,7 @@ def compute_metrics(
         "receipt_inbox_selection_accounted": receipt_selection_accounted,
         "scene_integrity": scene_integrity,
         "scene_object_count": len(scene_rows),
+        "synthetic_d405_wrist_cameras": camera_summary,
         "structural_gates_passed": all(
             row["passed"] for row in gates if row["category"] == "structural"
         ),
@@ -1595,6 +2292,8 @@ def compute_metrics(
         "hand_metrics": tuple(hand_rows),
         "source_skew_metrics": tuple(skew_rows),
         "scene_metrics": tuple(scene_rows),
+        "camera_integrity": tuple(camera_rows),
+        "camera_transforms": tuple(camera_transform_rows),
         "receipt_input_metrics": tuple(receipt_input_rows),
         "receipt_controller_health": tuple(controller_health_rows),
         "capabilities": tuple(capability_rows),
@@ -1603,10 +2302,12 @@ def compute_metrics(
     derived_tables = {
         "aligned_ticks": tuple(tick_rows),
         "stage_samples": tuple(stage_samples),
+        "execution_samples": tuple(execution_samples),
         "source_samples": tuple(source_samples),
         "source_join_samples": tuple(join_samples),
         "q27_samples": tuple(q27_samples),
         "scene_samples": tuple(scene_samples),
+        "camera_frames": tuple(camera_samples),
     }
     return MetricBundle(summary=summary, tables=tables, derived_tables=derived_tables)
 

@@ -1,0 +1,21 @@
+string<=128 schema
+string<=128 run_id
+string<=16 side
+uint64 camera_frame_index
+# Deterministic scheduled 30 Hz ROS stamp; the raw RTX identity is preserved below.
+uint64 stamp_ns
+string<=128 world_frame_id
+string<=128 hand_base_frame_id
+string<=128 optical_frame_id
+uint64 control_tick_id
+uint64 physics_substep_index
+float64 capture_sim_time_s
+uint64 host_capture_start_ns
+uint64 host_capture_end_ns
+float64[16] world_from_hand_base_row_major
+float64[16] world_from_camera_optical_row_major
+float64[16] hand_base_from_camera_optical_row_major
+string<=128 completed_frame_identity
+# Raw completed-frame reference can differ from stamp_ns by <= 1 us of float drift.
+uint64 reference_time_numerator
+uint64 reference_time_denominator

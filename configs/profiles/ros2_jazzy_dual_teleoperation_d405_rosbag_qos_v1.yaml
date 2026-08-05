@@ -1,0 +1,82 @@
+/wujihand/v1/teleop/input/tracker/left/sample: &tracker
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/input/tracker/right/sample: *tracker
+/wujihand/v1/teleop/input/tracker/lifecycle:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local
+/wujihand/v1/teleop/input/glove/left/observation: &glove
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/input/glove/right/observation: *glove
+/wujihand/v1/teleop/left/arm/command: &route
+  history: keep_last
+  depth: 1
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/left/arm/feedback: *route
+/wujihand/v1/teleop/left/arm/safety: &safety
+  history: keep_last
+  depth: 16
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/left/hand/command: *route
+/wujihand/v1/teleop/left/hand/feedback: *route
+/wujihand/v1/teleop/left/hand/safety: *safety
+/wujihand/v1/teleop/right/arm/command: *route
+/wujihand/v1/teleop/right/arm/feedback: *route
+/wujihand/v1/teleop/right/arm/safety: *safety
+/wujihand/v1/teleop/right/hand/command: *route
+/wujihand/v1/teleop/right/hand/feedback: *route
+/wujihand/v1/teleop/right/hand/safety: *safety
+/wujihand/v1/teleop/runtime/tick:
+  history: keep_last
+  depth: 8
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/scene/rigid_body_state:
+  history: keep_last
+  depth: 32
+  reliability: best_effort
+  durability: volatile
+/wujihand/v1/teleop/recording/status:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local
+/wujihand/v1/teleop/left/wrist_camera/color/image_raw: &camera_image
+  history: keep_last
+  depth: 4
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/left/wrist_camera/depth/image_raw: *camera_image
+/wujihand/v1/teleop/right/wrist_camera/color/image_raw: *camera_image
+/wujihand/v1/teleop/right/wrist_camera/depth/image_raw: *camera_image
+/wujihand/v1/teleop/left/wrist_camera/camera_info: &camera_info
+  history: keep_last
+  depth: 8
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/right/wrist_camera/camera_info: *camera_info
+/wujihand/v1/teleop/left/wrist_camera/frame_truth: &camera_truth
+  history: keep_last
+  depth: 32
+  reliability: reliable
+  durability: volatile
+/wujihand/v1/teleop/right/wrist_camera/frame_truth: *camera_truth
+/tf:
+  history: keep_last
+  depth: 100
+  reliability: reliable
+  durability: volatile
+/tf_static:
+  history: keep_last
+  depth: 1
+  reliability: reliable
+  durability: transient_local

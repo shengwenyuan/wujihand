@@ -15,7 +15,7 @@ import re
 from typing import Final, Iterable
 
 
-TELEOPERATION_TICK_TRACE_SCHEMA: Final = "wujihand.teleoperation_tick_trace.v1"
+TELEOPERATION_TICK_TRACE_SCHEMA: Final = "wujihand.teleoperation_tick_trace.v2"
 SCENE_RIGID_BODY_STATE_SCHEMA: Final = "wujihand.scene_rigid_body_state.v1"
 RUN_RECORDING_STATUS_SCHEMA: Final = "wujihand.run_recording_status.v1"
 RUN_MANIFEST_SCHEMA: Final = "wujihand.teleoperation_run_manifest.v1"
@@ -439,28 +439,28 @@ class HandControlTrace:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class TickStageTimes:
-    spin_start_ns: int
-    spin_end_ns: int
     tick_time_ns: int
+    snapshot_start_ns: int
+    snapshot_end_ns: int
     control_start_ns: int
     control_end_ns: int
     apply_start_ns: int
     apply_end_ns: int
-    world_step_start_ns: int
-    world_step_end_ns: int
+    physics_start_ns: int
+    physics_end_ns: int
     trace_time_ns: int
 
     def __post_init__(self) -> None:
         fields = (
-            "spin_start_ns",
-            "spin_end_ns",
             "tick_time_ns",
+            "snapshot_start_ns",
+            "snapshot_end_ns",
             "control_start_ns",
             "control_end_ns",
             "apply_start_ns",
             "apply_end_ns",
-            "world_step_start_ns",
-            "world_step_end_ns",
+            "physics_start_ns",
+            "physics_end_ns",
             "trace_time_ns",
         )
         values = []
@@ -473,11 +473,115 @@ class TickStageTimes:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class TickExecutionTrace:
+    control_index: int
+    schedule_slot: int
+    scheduled_control_time_ns: int
+    control_lateness_ns: int
+    missed_control_periods_before_tick: int
+    simulation_time_before_s: float
+    simulation_time_after_s: float
+    target_effective_start_sim_time_s: float
+    target_effective_end_sim_time_s: float
+    physics_substep_indices: tuple[int, ...]
+    physics_substep_sim_times_s: tuple[float, ...]
+    physics_substep_start_ns: tuple[int, ...]
+    physics_substep_end_ns: tuple[int, ...]
+    rendered: bool
+    render_index: int | None
+
+    def __post_init__(self) -> None:
+        for field in (
+            "control_index",
+            "schedule_slot",
+            "scheduled_control_time_ns",
+            "control_lateness_ns",
+            "missed_control_periods_before_tick",
+        ):
+            object.__setattr__(
+                self,
+                field,
+                _non_negative_int(getattr(self, field), field=field),
+            )
+        if self.schedule_slot < self.control_index:
+            raise ValueError("schedule_slot must not precede control_index")
+        if self.missed_control_periods_before_tick > self.schedule_slot:
+            raise ValueError("missed periods must not exceed schedule_slot")
+        for field in (
+            "simulation_time_before_s",
+            "simulation_time_after_s",
+            "target_effective_start_sim_time_s",
+            "target_effective_end_sim_time_s",
+        ):
+            value = _optional_non_negative_float(getattr(self, field), field=field)
+            assert value is not None
+            object.__setattr__(self, field, value)
+        indices = tuple(self.physics_substep_indices)
+        if (
+            len(indices) != 2
+            or any(type(value) is not int or value < 0 for value in indices)
+            or indices[1] != indices[0] + 1
+        ):
+            raise ValueError("physics_substep_indices must contain two consecutive indices")
+        object.__setattr__(self, "physics_substep_indices", indices)
+        simulation_times = _finite_vector(
+            self.physics_substep_sim_times_s,
+            size=2,
+            field="physics_substep_sim_times_s",
+        )
+        if any(value < 0.0 for value in simulation_times):
+            raise ValueError("physics_substep_sim_times_s must be non-negative")
+        object.__setattr__(self, "physics_substep_sim_times_s", simulation_times)
+        for field in ("physics_substep_start_ns", "physics_substep_end_ns"):
+            values = tuple(self.__getattribute__(field))
+            if len(values) != 2 or any(
+                type(value) is not int or value < 0 for value in values
+            ):
+                raise ValueError(f"{field} must contain two non-negative integers")
+            object.__setattr__(self, field, values)
+        if any(
+            start > end
+            for start, end in zip(
+                self.physics_substep_start_ns,
+                self.physics_substep_end_ns,
+                strict=True,
+            )
+        ) or self.physics_substep_end_ns[0] > self.physics_substep_start_ns[1]:
+            raise ValueError("physics substep host times must be monotonic")
+        if not (
+            self.simulation_time_before_s
+            <= simulation_times[0]
+            <= simulation_times[1]
+            <= self.simulation_time_after_s
+        ):
+            raise ValueError("physics substep simulation times must be monotonic")
+        if (
+            self.target_effective_start_sim_time_s != self.simulation_time_before_s
+            or self.target_effective_end_sim_time_s != self.simulation_time_after_s
+        ):
+            raise ValueError("target effective interval must span both physics substeps")
+        if type(self.rendered) is not bool:
+            raise ValueError("rendered must be a boolean")
+        object.__setattr__(
+            self,
+            "render_index",
+            (
+                None
+                if self.render_index is None
+                else _non_negative_int(self.render_index, field="render_index")
+            ),
+        )
+        if self.rendered != (self.render_index is not None):
+            raise ValueError("render_index must be present exactly when rendered")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class TeleoperationTickTrace:
     run_id: str
     tick_id: int
     side: str
     times: TickStageTimes
+    execution: TickExecutionTrace
     pre_feedback_q27_rad: tuple[float, ...]
     applied_target_q27_rad: tuple[float, ...]
     post_feedback_q27_rad: tuple[float, ...]
@@ -502,6 +606,39 @@ class TeleoperationTickTrace:
             raise ValueError("side must be left or right")
         if type(self.times) is not TickStageTimes:
             raise ValueError("times must be TickStageTimes")
+        if type(self.execution) is not TickExecutionTrace:
+            raise ValueError("execution must be TickExecutionTrace")
+        if type(self.arm) is not ArmControlTrace:
+            raise ValueError("arm must be ArmControlTrace")
+        if self.hand is not None and type(self.hand) is not HandControlTrace:
+            raise ValueError("hand must be HandControlTrace or None")
+        if self.execution.control_index != self.tick_id:
+            raise ValueError("execution control_index must equal tick_id")
+        if self.execution.scheduled_control_time_ns > self.times.tick_time_ns:
+            raise ValueError("scheduled control time must not exceed tick time")
+        if (
+            self.execution.control_lateness_ns
+            != self.times.tick_time_ns - self.execution.scheduled_control_time_ns
+        ):
+            raise ValueError("control lateness must equal actual minus scheduled time")
+        if not (
+            self.times.physics_start_ns
+            <= self.execution.physics_substep_start_ns[0]
+            <= self.execution.physics_substep_end_ns[1]
+            <= self.times.physics_end_ns
+        ):
+            raise ValueError("physics substeps must lie within the physics stage")
+        selected_sources = (
+            self.arm.source,
+            self.arm.active_source,
+            None if self.hand is None else self.hand.source,
+            None if self.hand is None else self.hand.active_source,
+        )
+        if any(
+            source is not None and source.callback_time_ns > self.times.tick_time_ns
+            for source in selected_sources
+        ):
+            raise ValueError("selected source callback must not follow the atomic tick snapshot")
         for field in (
             "pre_feedback_q27_rad",
             "applied_target_q27_rad",
@@ -516,10 +653,6 @@ class TeleoperationTickTrace:
                     field=field,
                 ),
             )
-        if type(self.arm) is not ArmControlTrace:
-            raise ValueError("arm must be ArmControlTrace")
-        if self.hand is not None and type(self.hand) is not HandControlTrace:
-            raise ValueError("hand must be HandControlTrace or None")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -639,6 +772,7 @@ __all__ = [
     "SceneRigidBodyState",
     "SourceSelectionTrace",
     "TeleoperationTickTrace",
+    "TickExecutionTrace",
     "TickStageTimes",
     "validate_recording_token",
     "validate_run_id",

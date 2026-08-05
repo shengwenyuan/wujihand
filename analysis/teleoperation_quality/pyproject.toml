@@ -1,6 +1,6 @@
 [project]
 name = "wujihand-teleoperation-quality"
-version = "0.1.2"
+version = "0.3.0"
 description = "Read-only offline quality analysis for WujiHand ROS 2 teleoperation runs"
 requires-python = ">=3.11,<3.13"
 dependencies = [

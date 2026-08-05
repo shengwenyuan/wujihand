@@ -8,6 +8,11 @@ from typing import Any, cast
 
 import numpy as np
 
+from .camera_integrity import (
+    CameraIntegrityAccumulator,
+    expected_camera_message_type,
+    is_camera_topic,
+)
 from .model import (
     ArmTick,
     BagDataset,
@@ -18,6 +23,7 @@ from .model import (
     Side,
     SourceRef,
     StageTimes,
+    TickExecution,
     TickRecord,
     TopicObservation,
     TrackerSample,
@@ -47,7 +53,11 @@ TRACKER_SCHEMA = "wujihand.tracked_rigid_body_sample.v2"
 TRACKING_LIFECYCLE_SCHEMA = "wujihand.tracking_lifecycle_event.v1"
 GLOVE_ENVELOPE_SCHEMA = "wujihand.ros_hand_observation_envelope.v1"
 GLOVE_OBSERVATION_SCHEMA = "wujihand.canonical_hand_observation.v1"
-TICK_SCHEMA = "wujihand.teleoperation_tick_trace.v1"
+TICK_SCHEMA_V1 = "wujihand.teleoperation_tick_trace.v1"
+TICK_SCHEMA_V2 = "wujihand.teleoperation_tick_trace.v2"
+TICK_SCHEMAS = frozenset({TICK_SCHEMA_V1, TICK_SCHEMA_V2})
+TICK_MESSAGE_V1 = "wujihand_interfaces/msg/TeleoperationTickTrace"
+TICK_MESSAGE_V2 = "wujihand_interfaces/msg/TeleoperationTickTraceV2"
 SCENE_SCHEMA = "wujihand.scene_rigid_body_state.v1"
 STATUS_SCHEMA = "wujihand.run_recording_status.v1"
 ROUTE_COMMAND_SCHEMA = "wujihand.ros_route_command.v1"
@@ -105,6 +115,20 @@ def _vector(value: object, size: int, *, field: str) -> tuple[float, ...]:
     result = tuple(float(item) for item in cast(Any, value))
     if len(result) != size or not np.isfinite(np.asarray(result, dtype=np.float64)).all():
         raise ValueError(f"{field} must contain {size} finite values")
+    return result
+
+
+def _non_negative_int(value: object, *, field: str) -> int:
+    result: int = int(cast(Any, value))
+    if result < 0:
+        raise ValueError(f"{field} must be non-negative")
+    return result
+
+
+def _non_negative_float(value: object, *, field: str) -> float:
+    result: float = float(cast(Any, value))
+    if not np.isfinite(result) or result < 0.0:
+        raise ValueError(f"{field} must be finite and non-negative")
     return result
 
 
@@ -206,33 +230,163 @@ def _glove(message: Any, *, bag_time_ns: int) -> GloveSample:
 
 
 def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord:
-    _require_schema(message, TICK_SCHEMA)
+    schema = str(message.schema)
+    if schema not in TICK_SCHEMAS:
+        raise ValueError(f"message schema must be one of {sorted(TICK_SCHEMAS)}, got {schema!r}")
     _require_run(message, expected_run_id)
     _require_host_clock(message)
-    times = StageTimes(
-        spin_start_ns=int(message.spin_start_ns),
-        spin_end_ns=int(message.spin_end_ns),
-        tick_time_ns=int(message.tick_time_ns),
-        control_start_ns=int(message.control_start_ns),
-        control_end_ns=int(message.control_end_ns),
-        apply_start_ns=int(message.apply_start_ns),
-        apply_end_ns=int(message.apply_end_ns),
-        world_step_start_ns=int(message.world_step_start_ns),
-        world_step_end_ns=int(message.world_step_end_ns),
-        trace_time_ns=int(message.trace_time_ns),
-    )
-    stage_values = (
-        times.spin_start_ns,
-        times.spin_end_ns,
-        times.tick_time_ns,
-        times.control_start_ns,
-        times.control_end_ns,
-        times.apply_start_ns,
-        times.apply_end_ns,
-        times.world_step_start_ns,
-        times.world_step_end_ns,
-        times.trace_time_ns,
-    )
+    if schema == TICK_SCHEMA_V1:
+        times = StageTimes(
+            spin_start_ns=int(message.spin_start_ns),
+            spin_end_ns=int(message.spin_end_ns),
+            tick_time_ns=int(message.tick_time_ns),
+            control_start_ns=int(message.control_start_ns),
+            control_end_ns=int(message.control_end_ns),
+            apply_start_ns=int(message.apply_start_ns),
+            apply_end_ns=int(message.apply_end_ns),
+            world_step_start_ns=int(message.world_step_start_ns),
+            world_step_end_ns=int(message.world_step_end_ns),
+            trace_time_ns=int(message.trace_time_ns),
+        )
+        stage_values = (
+            times.spin_start_ns,
+            times.spin_end_ns,
+            times.tick_time_ns,
+            times.control_start_ns,
+            times.control_end_ns,
+            times.apply_start_ns,
+            times.apply_end_ns,
+            times.world_step_start_ns,
+            times.world_step_end_ns,
+            times.trace_time_ns,
+        )
+        execution = None
+    else:
+        times = StageTimes(
+            spin_start_ns=int(message.snapshot_start_ns),
+            spin_end_ns=int(message.snapshot_end_ns),
+            tick_time_ns=int(message.tick_time_ns),
+            control_start_ns=int(message.control_start_ns),
+            control_end_ns=int(message.control_end_ns),
+            apply_start_ns=int(message.apply_start_ns),
+            apply_end_ns=int(message.apply_end_ns),
+            world_step_start_ns=int(message.physics_start_ns),
+            world_step_end_ns=int(message.physics_end_ns),
+            trace_time_ns=int(message.trace_time_ns),
+        )
+        stage_values = (
+            times.tick_time_ns,
+            times.spin_start_ns,
+            times.spin_end_ns,
+            times.control_start_ns,
+            times.control_end_ns,
+            times.apply_start_ns,
+            times.apply_end_ns,
+            times.world_step_start_ns,
+            times.world_step_end_ns,
+            times.trace_time_ns,
+        )
+        indices = tuple(
+            _non_negative_int(value, field="physics substep index")
+            for value in message.physics_substep_indices
+        )
+        simulation_times = _vector(
+            message.physics_substep_sim_times_s,
+            2,
+            field="physics substep simulation times",
+        )
+        substep_starts = tuple(
+            _non_negative_int(value, field="physics substep start")
+            for value in message.physics_substep_start_ns
+        )
+        substep_ends = tuple(
+            _non_negative_int(value, field="physics substep end")
+            for value in message.physics_substep_end_ns
+        )
+        if (
+            len(indices) != 2
+            or indices[1] != indices[0] + 1
+            or len(substep_starts) != 2
+            or len(substep_ends) != 2
+            or any(start > end for start, end in zip(substep_starts, substep_ends, strict=True))
+            or substep_ends[0] > substep_starts[1]
+        ):
+            raise ValueError("tick must contain two consecutive monotonic physics substeps")
+        control_index = _non_negative_int(message.control_index, field="control index")
+        schedule_slot = _non_negative_int(message.schedule_slot, field="schedule slot")
+        scheduled_time_ns = _non_negative_int(
+            message.scheduled_control_time_ns,
+            field="scheduled control time",
+        )
+        lateness_ns = _non_negative_int(message.control_lateness_ns, field="control lateness")
+        missed_periods = _non_negative_int(
+            message.missed_control_periods_before_tick,
+            field="missed control periods",
+        )
+        simulation_before = _non_negative_float(
+            message.simulation_time_before_s,
+            field="simulation time before",
+        )
+        simulation_after = _non_negative_float(
+            message.simulation_time_after_s,
+            field="simulation time after",
+        )
+        target_start = _non_negative_float(
+            message.target_effective_start_sim_time_s,
+            field="target-effective start",
+        )
+        target_end = _non_negative_float(
+            message.target_effective_end_sim_time_s,
+            field="target-effective end",
+        )
+        if (
+            control_index != int(message.tick_id)
+            or schedule_slot < control_index
+            or missed_periods > schedule_slot
+            or scheduled_time_ns > times.tick_time_ns
+            or lateness_ns != times.tick_time_ns - scheduled_time_ns
+        ):
+            raise ValueError("control schedule fields are inconsistent")
+        if not (
+            times.world_step_start_ns
+            <= substep_starts[0]
+            <= substep_ends[1]
+            <= times.world_step_end_ns
+        ):
+            raise ValueError("physics substeps fall outside the physics stage")
+        if (
+            not (
+                0.0
+                <= simulation_before
+                <= simulation_times[0]
+                <= simulation_times[1]
+                <= simulation_after
+            )
+            or target_start != simulation_before
+            or target_end != simulation_after
+        ):
+            raise ValueError("simulation times or target-effective interval are inconsistent")
+        rendered = bool(message.rendered)
+        has_render_index = bool(message.has_render_index)
+        if rendered != has_render_index:
+            raise ValueError("render index must be present exactly when rendered")
+        execution = TickExecution(
+            control_index=control_index,
+            schedule_slot=schedule_slot,
+            scheduled_control_time_ns=scheduled_time_ns,
+            control_lateness_ns=lateness_ns,
+            missed_control_periods_before_tick=missed_periods,
+            simulation_time_before_s=simulation_before,
+            simulation_time_after_s=simulation_after,
+            target_effective_start_sim_time_s=target_start,
+            target_effective_end_sim_time_s=target_end,
+            physics_substep_indices=indices,
+            physics_substep_sim_times_s=cast(tuple[float, float], simulation_times),
+            physics_substep_start_ns=substep_starts,
+            physics_substep_end_ns=substep_ends,
+            rendered=rendered,
+            render_index=(int(message.render_index) if has_render_index else None),
+        )
     if stage_values != tuple(sorted(stage_values)):
         raise ValueError("tick stage timestamps must be monotonic")
     has_target_pose = bool(message.has_arm_target_pose)
@@ -327,6 +481,17 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
             position_clamped=bool(message.hand_position_clamped),
             rate_limited=bool(message.hand_rate_limited),
         )
+    selected_sources = (
+        arm.source,
+        arm.active_source,
+        None if hand is None else hand.source,
+        None if hand is None else hand.active_source,
+    )
+    if any(
+        source is not None and source.callback_time_ns > times.tick_time_ns
+        for source in selected_sources
+    ):
+        raise ValueError("selected source callback exceeds the atomic tick snapshot")
     return TickRecord(
         side=_side(message.side),
         tick_id=int(message.tick_id),
@@ -337,6 +502,8 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
         pre_feedback_q27_rad=_vector(message.pre_feedback_q27_rad, 27, field="pre feedback"),
         applied_target_q27_rad=_vector(message.applied_target_q27_rad, 27, field="applied target"),
         post_feedback_q27_rad=_vector(message.post_feedback_q27_rad, 27, field="post feedback"),
+        schema=schema,
+        execution=execution,
     )
 
 
@@ -395,6 +562,9 @@ def _status(
 
 
 def _expected_message_type(topic: str) -> str:
+    camera_type = expected_camera_message_type(topic)
+    if camera_type is not None:
+        return camera_type
     if topic.endswith(("/input/tracker/left/sample", "/input/tracker/right/sample")):
         return "wujihand_interfaces/msg/TrackedRigidBodySample"
     if topic.endswith("/input/tracker/lifecycle"):
@@ -408,7 +578,7 @@ def _expected_message_type(topic: str) -> str:
     if topic.endswith("/safety"):
         return "wujihand_interfaces/msg/SafetyEvent"
     if topic.endswith("/runtime/tick"):
-        return "wujihand_interfaces/msg/TeleoperationTickTrace"
+        return TICK_MESSAGE_V1
     if topic.endswith("/scene/rigid_body_state"):
         return "wujihand_interfaces/msg/SceneRigidBodyState"
     if topic.endswith("/recording/status"):
@@ -470,9 +640,15 @@ class Ros2BagReader:
         topic_types = {item.name: item.type for item in reader.get_all_topics_and_types()}
         for topic, message_type in topic_types.items():
             expected_type = _expected_message_type(topic)
-            if message_type != expected_type:
+            accepted_types = (
+                frozenset({TICK_MESSAGE_V1, TICK_MESSAGE_V2})
+                if topic.endswith("/runtime/tick")
+                else frozenset({expected_type})
+            )
+            if message_type not in accepted_types:
                 raise ValueError(
-                    f"topic {topic} type is {message_type!r}, expected {expected_type!r}"
+                    f"topic {topic} type is {message_type!r}, "
+                    f"expected one of {sorted(accepted_types)!r}"
                 )
         counters = {
             topic: _TopicCounter(message_type=message_type)
@@ -484,6 +660,7 @@ class Ros2BagReader:
         ticks: list[TickRecord] = []
         scenes: list[SceneRecord] = []
         statuses: list[RecordingStatusRecord] = []
+        camera_integrity = CameraIntegrityAccumulator(expected_run_id=expected_run_id)
 
         def decode(topic: str, payload: bytes) -> Any:
             if topic not in decoded_types:
@@ -504,6 +681,14 @@ class Ros2BagReader:
             elif topic.endswith("/runtime/tick"):
                 if expected_run_id is None:
                     raise ValueError("expected_run_id is required to validate tick messages")
+                expected_schema = (
+                    TICK_SCHEMA_V2 if topic_types[topic] == TICK_MESSAGE_V2 else TICK_SCHEMA_V1
+                )
+                _require_equal(
+                    str(message.schema),
+                    expected_schema,
+                    field="tick wire type/schema pair",
+                )
                 ticks.append(
                     _tick(
                         message,
@@ -531,10 +716,23 @@ class Ros2BagReader:
                         expected_run_id=expected_run_id,
                     )
                 )
+            elif is_camera_topic(topic):
+                camera_integrity.observe_camera(
+                    topic,
+                    message,
+                    bag_time_ns=bag_time,
+                )
+            elif topic in {"/tf", "/tf_static"}:
+                camera_integrity.observe_tf(
+                    topic,
+                    message,
+                    bag_time_ns=bag_time,
+                )
             else:
                 _validate_auxiliary(topic, message)
             counters[topic].validated()
 
+        camera_frames, transforms = camera_integrity.finalize(declared_topics=set(topic_types))
         topics = tuple(
             TopicObservation(
                 topic=topic,
@@ -553,6 +751,8 @@ class Ros2BagReader:
             ticks=tuple(ticks),
             scenes=tuple(scenes),
             statuses=tuple(statuses),
+            camera_frames=camera_frames,
+            transforms=transforms,
         )
 
 

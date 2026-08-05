@@ -175,16 +175,10 @@ def author_nero_hand2_attachment(
 ) -> NeroHand2AttachmentHandles:
     """Merge one referenced Hand 2 into one referenced NERO articulation.
 
-    The function must run before physics initialization.  It rejects unexpected
-    upstream topology and intentionally refuses ``enable_self_collisions=True``
-    until an explicit NERO collision-filter qualification is implemented.
+    The function must run before physics initialization. It rejects unexpected
+    upstream topology. Self-collision is an explicit per-scene qualification
+    choice; production callers retain the fail-closed ``False`` default.
     """
-
-    if config.enable_self_collisions:
-        raise RuntimeError(
-            "Hand 2 internal self-collision requires explicit NERO collision "
-            "filtering and is not qualified by the NV-2 default"
-        )
 
     from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics
 
@@ -269,7 +263,7 @@ def author_nero_hand2_attachment(
         raise RuntimeError("failed to remove ArticulationRootAPI from the Hand 2 world root")
     physx_root = PhysxSchema.PhysxArticulationAPI.Apply(articulation_root)
     _merge_hand_articulation_attributes(hand_root_prim, articulation_root)
-    physx_root.CreateEnabledSelfCollisionsAttr(False)
+    physx_root.CreateEnabledSelfCollisionsAttr(config.enable_self_collisions)
     # A disabled referenced joint can still be parsed by PhysX and emit a
     # misleading disjoint-body "snap" warning.  Deactivation is a stage-local
     # overlay opinion: it leaves the pinned source USD untouched and ensures
@@ -289,8 +283,11 @@ def author_nero_hand2_attachment(
         raise RuntimeError(f"expected one merged articulation root, found {roots_after}")
     if hand_root_prim.IsActive() or hand_root.GetJointEnabledAttr().Get() is not False:
         raise RuntimeError("failed to disable the Hand 2 world root joint")
-    if physx_root.GetEnabledSelfCollisionsAttr().Get() is not False:
-        raise RuntimeError("merged articulation self-collision must be disabled")
+    if (
+        physx_root.GetEnabledSelfCollisionsAttr().Get()
+        is not config.enable_self_collisions
+    ):
+        raise RuntimeError("merged articulation self-collision readback differs")
 
     return NeroHand2AttachmentHandles(
         config=config,

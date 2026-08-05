@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -23,6 +24,10 @@ from wujihand.adapters.simulation.nero_hand2_twin import (
     author_nero_hand2_attachment,
     discover_nero_hand2_dofs,
 )
+from wujihand.adapters.simulation.nero_hand2_self_collision import (
+    NeroHand2SelfCollisionFilterProfile,
+    author_isaac_self_collision_filters,
+)
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
     NeroLinkGeometryAlignment,
     NeroLinkGeometryAlignmentHandles,
@@ -41,6 +46,11 @@ from wujihand.adapters.simulation.q27_execution import (
 )
 from wujihand.specs import AttachmentSpec, PoseSpec
 
+from .isaac_d405_wrist_rig import (
+    WristRigCollisionMode,
+    materialize_isaac_d405_wrist_rigs,
+    resolve_d405_wrist_rig_runtimes,
+)
 from .session_resolver import ResolvedSession
 from .isaac_workcell import (
     IsaacWorkcellMaterialization,
@@ -85,6 +95,17 @@ class SceneFixedBodySnapshot:
     prim_path: str
     position_m: tuple[float, float, float]
     quat_wxyz: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class SceneReplaySnapshot:
+    """Post-physics visual state sufficient for paused camera replay."""
+
+    q27_by_side: tuple[
+        tuple[str, tuple[float, ...]],
+        tuple[str, tuple[float, ...]],
+    ]
+    rigid_bodies: tuple[SceneRigidBodySnapshot, ...]
 
 
 def _quat_multiply(
@@ -209,6 +230,10 @@ def resolve_dual_side_runtimes(
 
     result: list[DualSideRuntime] = []
     for attachment in resolved.assembly.attachments:
+        parent_spec = resolved.assembly.instance(attachment.parent.instance)
+        child_spec = resolved.assembly.instance(attachment.child.instance)
+        if (parent_spec.role, child_spec.role) != ("arm", "end_effector"):
+            continue
         arm = resolved.instance(attachment.parent.instance)
         hand = resolved.instance(attachment.child.instance)
         side = hand.asset.side
@@ -273,10 +298,14 @@ class DualNeroHand2IsaacScene:
         alignment_profile: NeroLinkGeometryAlignment,
         qualification_profile: NeroDualTabletopQualificationProfile,
         physics_hz: int,
+        self_collision_sides: frozenset[str] = frozenset(),
+        self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
+        wrist_rig_collision_mode: WristRigCollisionMode = "none",
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
             Articulation,
+            SingleRigidPrim,
         )
         from isaacsim.core.utils.stage import (  # type: ignore[import-not-found]
             add_reference_to_stage,
@@ -286,6 +315,8 @@ class DualNeroHand2IsaacScene:
             UsdGeom,
         )
 
+        if not self_collision_sides <= {"left", "right"}:
+            raise ValueError("self_collision_sides must contain only left/right")
         self.resolved = resolved
         self.sides = sides
         self.alignment_profile = alignment_profile
@@ -306,6 +337,15 @@ class DualNeroHand2IsaacScene:
         self.workcell_materialization: IsaacWorkcellMaterialization = materialize_isaac_workcell(
             self.world, workcell_plan
         )
+        self.dynamic_workcell_prims = {
+            path: self.world.scene.add(
+                SingleRigidPrim(
+                    prim_path=path,
+                    name=f"camera_replay_dynamic_{index}",
+                )
+            )
+            for index, path in enumerate(self.workcell_materialization.rigid_body_paths)
+        }
         UsdGeom.Xform.Define(self.stage, "/World/Robots")
         UsdGeom.Xform.Define(self.stage, "/World/Attachments")
 
@@ -390,7 +430,7 @@ class DualNeroHand2IsaacScene:
                     ),
                     position_m=runtime.attachment.transform.position_m,
                     quat_wxyz=runtime.attachment.transform.quat_wxyz,
-                    enable_self_collisions=False,
+                    enable_self_collisions=runtime.side in self_collision_sides,
                 ),
             )
             self.articulations[runtime.side] = self.world.scene.add(
@@ -411,6 +451,25 @@ class DualNeroHand2IsaacScene:
                 )
             ).copy()
 
+        self.wrist_rig_runtimes = resolve_d405_wrist_rig_runtimes(project_root, resolved)
+        self.wrist_rigs = materialize_isaac_d405_wrist_rigs(
+            self.stage,
+            runtimes=self.wrist_rig_runtimes,
+            hand_base_paths={
+                side: handles.config.child_base_link_path for side, handles in self.authored.items()
+            },
+            collision_mode=wrist_rig_collision_mode,
+        )
+        self.self_collision_filtered_pairs = (
+            author_isaac_self_collision_filters(
+                self.stage,
+                arm_prim_paths={runtime.side: runtime.arm_prim_path for runtime in sides},
+                enabled_sides=self_collision_sides,
+                profile=self_collision_filter_profile,
+            )
+            if self_collision_filter_profile is not None
+            else ()
+        )
         self.expected_root_paths = tuple(
             sorted(handle.articulation_root_path for handle in self.authored.values())
         )
@@ -542,6 +601,55 @@ class DualNeroHand2IsaacScene:
                 )
             )
         return tuple(result)
+
+    def camera_replay_snapshot(
+        self,
+        *,
+        q27_by_side: Mapping[str, npt.NDArray[np.float64]],
+    ) -> SceneReplaySnapshot:
+        """Capture the exact paused-render state after a physics substep."""
+
+        if set(q27_by_side) != {"left", "right"}:
+            raise ValueError("camera replay q27 input must cover left and right")
+        q27_values: dict[str, tuple[float, ...]] = {}
+        for side in ("left", "right"):
+            values = np.asarray(q27_by_side[side], dtype=np.float64)
+            if values.shape != (27,) or not np.isfinite(values).all():
+                raise ValueError(f"invalid {side} camera replay q27 input")
+            q27_values[side] = tuple(float(value) for value in values)
+
+        return SceneReplaySnapshot(
+            q27_by_side=(
+                ("left", q27_values["left"]),
+                ("right", q27_values["right"]),
+            ),
+            rigid_bodies=self.rigid_body_snapshots(),
+        )
+
+    def restore_camera_replay_snapshot(self, snapshot: SceneReplaySnapshot) -> None:
+        """Teleport one recorded visual state without advancing physics."""
+
+        q27_by_side = dict(snapshot.q27_by_side)
+        if set(q27_by_side) != {"left", "right"}:
+            raise ValueError("camera replay q27 snapshot must cover left and right")
+        for side in ("left", "right"):
+            positions = np.asarray(q27_by_side[side], dtype=np.float64)
+            if positions.shape != (27,) or not np.isfinite(positions).all():
+                raise ValueError(f"invalid {side} camera replay q27")
+            self.articulations[side].set_joint_positions(positions[np.newaxis, :])
+            self.articulations[side].set_joint_velocities(np.zeros((1, 27), dtype=np.float64))
+
+        rigid_by_path = {item.prim_path: item for item in snapshot.rigid_bodies}
+        if set(rigid_by_path) != set(self.dynamic_workcell_prims):
+            raise ValueError("camera replay rigid-body inventory drifted")
+        for path, rigid_prim in self.dynamic_workcell_prims.items():
+            item = rigid_by_path[path]
+            rigid_prim.set_world_pose(
+                position=np.asarray(item.position_m, dtype=np.float64),
+                orientation=np.asarray(item.quat_wxyz, dtype=np.float64),
+            )
+            rigid_prim.set_linear_velocity(np.zeros(3, dtype=np.float64))
+            rigid_prim.set_angular_velocity(np.zeros(3, dtype=np.float64))
 
     def validate_articulations(
         self,
@@ -713,6 +821,7 @@ __all__ = [
     "DualNeroHand2IsaacScene",
     "DualSideRuntime",
     "ScenePose",
+    "SceneReplaySnapshot",
     "SceneRigidBodySnapshot",
     "resolve_dual_side_runtimes",
     "workcell_frame_position",
