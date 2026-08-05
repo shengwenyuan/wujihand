@@ -45,6 +45,11 @@ from wujihand.adapters.simulation.q27_execution import (
 )
 from wujihand.specs import AttachmentSpec, PoseSpec
 
+from .isaac_d405_wrist_rig import (
+    WristRigCollisionMode,
+    materialize_isaac_d405_wrist_rigs,
+    resolve_d405_wrist_rig_runtimes,
+)
 from .session_resolver import ResolvedSession
 from .isaac_workcell import (
     IsaacWorkcellMaterialization,
@@ -213,6 +218,10 @@ def resolve_dual_side_runtimes(
 
     result: list[DualSideRuntime] = []
     for attachment in resolved.assembly.attachments:
+        parent_spec = resolved.assembly.instance(attachment.parent.instance)
+        child_spec = resolved.assembly.instance(attachment.child.instance)
+        if (parent_spec.role, child_spec.role) != ("arm", "end_effector"):
+            continue
         arm = resolved.instance(attachment.parent.instance)
         hand = resolved.instance(attachment.child.instance)
         side = hand.asset.side
@@ -279,6 +288,7 @@ class DualNeroHand2IsaacScene:
         physics_hz: int,
         self_collision_sides: frozenset[str] = frozenset(),
         self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
+        wrist_rig_collision_mode: WristRigCollisionMode = "none",
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
@@ -419,6 +429,18 @@ class DualNeroHand2IsaacScene:
                 )
             ).copy()
 
+        self.wrist_rig_runtimes = resolve_d405_wrist_rig_runtimes(
+            project_root, resolved
+        )
+        self.wrist_rigs = materialize_isaac_d405_wrist_rigs(
+            self.stage,
+            runtimes=self.wrist_rig_runtimes,
+            hand_base_paths={
+                side: handles.config.child_base_link_path
+                for side, handles in self.authored.items()
+            },
+            collision_mode=wrist_rig_collision_mode,
+        )
         self.self_collision_filtered_pairs = (
             author_isaac_self_collision_filters(
                 self.stage,

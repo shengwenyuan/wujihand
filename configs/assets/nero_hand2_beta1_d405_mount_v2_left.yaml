@@ -1,0 +1,12 @@
+schema: wujihand.asset_manifest.v2
+asset_id: nero_hand2_beta1_d405_mount_v2_left
+revision: v2
+kind: passive_component
+product: nero_hand2_beta1_d405_wrist_mount
+side: left
+canonical_profile: configs/profiles/isaac_d405_wrist_rig_asset_generation_v1.yaml
+frames:
+  hand_interface: nero_hand2_beta1_d405_mount_v2_left_hand_interface
+  camera_interface: nero_hand2_beta1_d405_mount_v2_left_camera_interface
+control_groups: []
+provenance_source: third_party/sources.lock.yaml#isaac-d405-wrist-rig-v2

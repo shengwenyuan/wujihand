@@ -1,0 +1,25 @@
+schema: wujihand.backend_binding.v2
+binding_id: realsense_d405_housing_sim_left_isaac_v1
+asset_id: realsense_d405_housing_sim_left
+asset_revision: synthetic_v1
+asset_side: left
+backend: isaac
+loader: mesh
+artifact:
+  source: isaac-d405-wrist-rig-v2
+  source_revision: sha256:044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
+  path: visual/d405_left.stl
+collision_artifact:
+  source: isaac-d405-wrist-rig-v2
+  source_revision: sha256:044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
+  path: collision/d405_left.yaml
+resource_trees: []
+root: D405Left
+namespace_policy: prefix
+frame_map:
+  realsense_d405_housing_sim_left_rear_mount: RearMount
+  realsense_d405_housing_sim_left_optical: Optical
+group_bindings: []
+builder: null
+compatibility_profile: configs/profiles/isaac_d405_wrist_rig_asset_generation_v1.yaml
+sensor_profile: configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml

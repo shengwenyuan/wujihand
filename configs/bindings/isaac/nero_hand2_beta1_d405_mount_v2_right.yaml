@@ -1,0 +1,25 @@
+schema: wujihand.backend_binding.v2
+binding_id: nero_hand2_beta1_d405_mount_v2_right_isaac_v1
+asset_id: nero_hand2_beta1_d405_mount_v2_right
+asset_revision: v2
+asset_side: right
+backend: isaac
+loader: mesh
+artifact:
+  source: isaac-d405-wrist-rig-v2
+  source_revision: sha256:044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
+  path: visual/mount_v2_right.stl
+collision_artifact:
+  source: isaac-d405-wrist-rig-v2
+  source_revision: sha256:044bfb05931e26638336cb3b058ac3652f585d9fc2dbfaaf160aff5e697ae24c
+  path: collision/mount_v2_right.yaml
+resource_trees: []
+root: MountV2Right
+namespace_policy: prefix
+frame_map:
+  nero_hand2_beta1_d405_mount_v2_right_hand_interface: HandInterface
+  nero_hand2_beta1_d405_mount_v2_right_camera_interface: CameraInterface
+group_bindings: []
+builder: null
+compatibility_profile: configs/profiles/isaac_d405_wrist_rig_asset_generation_v1.yaml
+sensor_profile: null

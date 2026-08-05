@@ -11,6 +11,7 @@ import json
 import math
 from pathlib import Path
 import sys
+import traceback
 from typing import Any, cast
 
 import numpy as np
@@ -68,6 +69,16 @@ def _parse_args() -> argparse.Namespace:
         required=True,
     )
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--wrist-rig-collision-mode",
+        choices=("none", "mount", "all"),
+        default="none",
+    )
+    parser.add_argument(
+        "--mass-baseline-report",
+        type=Path,
+        help="Passing C1 report required by C2/C3 runtime inertial comparison.",
+    )
     parser.add_argument("--export-stage", action="store_true")
     return parser.parse_args()
 
@@ -80,7 +91,8 @@ from isaacsim import SimulationApp
 simulation_app = SimulationApp({"headless": True})
 
 import omni.physx
-from pxr import PhysicsSchemaTools, PhysxSchema, Usd, UsdGeom, UsdPhysics
+from isaacsim.core.prims import RigidPrim
+from pxr import Gf, PhysicsSchemaTools, PhysxSchema, Usd, UsdGeom, UsdPhysics
 
 
 class ContactTracker:
@@ -111,6 +123,7 @@ class ContactTracker:
                     "minimum_separation_m": math.inf,
                     "event_phases": defaultdict(set),
                     "contact_phases": defaultdict(set),
+                    "minimum_separation_by_phase_m": {},
                 },
             )
             record["event_count"] = int(record["event_count"]) + 1
@@ -130,6 +143,13 @@ class ContactTracker:
                 cast(defaultdict[str, set[int]], record["contact_phases"])[
                     self.phase
                 ].add(self.frame_index)
+            if not math.isinf(event_minimum):
+                phase_minimum = cast(
+                    dict[str, float], record["minimum_separation_by_phase_m"]
+                )
+                phase_minimum[self.phase] = min(
+                    phase_minimum.get(self.phase, math.inf), event_minimum
+                )
 
     @staticmethod
     def _path(encoded: object) -> str:
@@ -154,6 +174,14 @@ class ContactTracker:
                 "phase_contact_frames": {
                     phase: len(frames) for phase, frames in sorted(contact_phases.items())
                 },
+                "phase_minimum_separation_m": dict(
+                    sorted(
+                        cast(
+                            dict[str, float],
+                            raw["minimum_separation_by_phase_m"],
+                        ).items()
+                    )
+                ),
             }
         return result
 
@@ -228,6 +256,77 @@ def _author_contact_reports(stage: object, threshold_n: float) -> tuple[str, ...
     return tuple(sorted(authored))
 
 
+def _author_external_probes(
+    scene: DualNeroHand2IsaacScene,
+) -> dict[str, RigidPrim]:
+    stage = scene.stage
+    result: dict[str, RigidPrim] = {}
+    for side in ("left", "right"):
+        path = f"/World/Qualification/WristRigContactProbe{side.capitalize()}"
+        sphere = UsdGeom.Sphere.Define(stage, path)
+        sphere.CreateRadiusAttr(0.006)
+        sphere.CreateDisplayColorAttr([Gf.Vec3f(0.95, 0.18, 0.08)])
+        xformable = UsdGeom.Xformable(sphere.GetPrim())
+        xformable.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Vec3d(0.0, 0.0, -10.0)
+        )
+        UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
+        rigid = UsdPhysics.RigidBodyAPI.Apply(sphere.GetPrim())
+        rigid.CreateKinematicEnabledAttr(True)
+        result[side] = scene.world.scene.add(
+            RigidPrim(path, name=f"wrist_rig_contact_probe_{side}")
+        )
+    return result
+
+
+def _wrist_rig_physics_inventory(
+    scene: DualNeroHand2IsaacScene,
+) -> dict[str, object]:
+    collision_paths: list[str] = []
+    forbidden_paths: list[str] = []
+    roots = tuple(handles.root_path for handles in scene.wrist_rigs)
+    for prim in scene.stage.Traverse():
+        path = str(prim.GetPath())
+        if not any(path == root or path.startswith(root + "/") for root in roots):
+            continue
+        if prim.HasAPI(UsdPhysics.CollisionAPI):
+            collision_paths.append(path)
+        if (
+            prim.HasAPI(UsdPhysics.RigidBodyAPI)
+            or prim.HasAPI(UsdPhysics.MassAPI)
+            or prim.HasAPI(UsdPhysics.ArticulationRootAPI)
+            or prim.IsA(UsdPhysics.Joint)
+        ):
+            forbidden_paths.append(path)
+    return {
+        "collision_paths": sorted(collision_paths),
+        "forbidden_rigid_mass_joint_root_paths": sorted(forbidden_paths),
+    }
+
+
+def _run_external_probe_smoke(
+    scene: DualNeroHand2IsaacScene,
+    *,
+    tracker: ContactTracker,
+    probes: Mapping[str, RigidPrim],
+    start_frame: int,
+) -> int:
+    for handles in scene.wrist_rigs:
+        target_path = handles.mount_collision_paths[0]
+        target = _world_transform(scene.stage, target_path)["translation_m"]
+        probes[handles.side].set_world_poses(
+            positions=np.asarray([target], dtype=np.float64),
+            orientations=np.asarray([[1.0, 0.0, 0.0, 0.0]], dtype=np.float64),
+        )
+    scene.world.play()
+    frames = 12
+    for offset in range(frames):
+        tracker.set_frame("external_probe_smoke", start_frame + offset)
+        scene.world.step(render=False)
+    scene.world.pause()
+    return frames
+
+
 def _self_collision_readback(scene: DualNeroHand2IsaacScene) -> dict[str, bool]:
     return {
         side: bool(
@@ -239,6 +338,90 @@ def _self_collision_readback(scene: DualNeroHand2IsaacScene) -> dict[str, bool]:
         )
         for side in ("left", "right")
     }
+
+
+def _runtime_body_properties(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for side in ("left", "right"):
+        articulation = scene.articulations[side]
+        center_positions, center_orientations = articulation.get_body_coms()
+        values = {
+            "body_names": list(articulation.body_names),
+            "masses_kg": np.asarray(
+                articulation.get_body_masses(), dtype=np.float64
+            ).tolist(),
+            "centers_of_mass_m": np.asarray(
+                center_positions, dtype=np.float64
+            ).tolist(),
+            "principal_axes_wxyz": np.asarray(
+                center_orientations, dtype=np.float64
+            ).tolist(),
+            "inertias": np.asarray(
+                articulation.get_body_inertias(), dtype=np.float64
+            ).tolist(),
+        }
+        if not all(
+            np.isfinite(np.asarray(value, dtype=np.float64)).all()
+            for key, value in values.items()
+            if key != "body_names"
+        ):
+            raise RuntimeError(f"{side} runtime body properties are non-finite")
+        result[side] = values
+    return result
+
+
+def _mass_baseline_check(
+    *,
+    requested_sides: frozenset[str],
+    session_hash: str,
+    current: Mapping[str, object],
+) -> tuple[bool, dict[str, object] | None]:
+    if ARGS.wrist_rig_collision_mode == "none":
+        if ARGS.mass_baseline_report is not None:
+            raise ValueError("mass baseline is only valid when accessory collision is enabled")
+        return True, None
+    if ARGS.mass_baseline_report is None:
+        raise ValueError("C2/C3 requires --mass-baseline-report from the matching C1 run")
+    path = ARGS.mass_baseline_report.resolve()
+    baseline = cast(
+        Mapping[str, object], json.loads(path.read_text(encoding="utf-8"))
+    )
+    if (
+        baseline.get("passed") is not True
+        or baseline.get("gate") != "C1"
+        or baseline.get("wrist_rig_collision_mode") != "none"
+        or baseline.get("enabled_self_collision_sides") != sorted(requested_sides)
+        or cast(Mapping[str, object], baseline.get("session"))["session_hash"]
+        != session_hash
+    ):
+        raise RuntimeError("mass baseline report does not match this C2/C3 run")
+    baseline_values = cast(Mapping[str, object], baseline["runtime_body_properties"])
+    matches = all(
+        cast(Mapping[str, object], baseline_values[side])["body_names"]
+        == cast(Mapping[str, object], current[side])["body_names"]
+        and all(
+            np.allclose(
+                np.asarray(
+                    cast(Mapping[str, object], baseline_values[side])[field],
+                    dtype=np.float64,
+                ),
+                np.asarray(
+                    cast(Mapping[str, object], current[side])[field],
+                    dtype=np.float64,
+                ),
+                rtol=0.0,
+                atol=1e-12,
+            )
+            for field in (
+                "masses_kg",
+                "centers_of_mass_m",
+                "principal_axes_wxyz",
+                "inertias",
+            )
+        )
+        for side in ("left", "right")
+    )
+    return matches, {"path": str(path), "sha256": sha256_file(path)}
 
 
 def _transform_delta(
@@ -274,6 +457,8 @@ def main() -> int:
     tabletop_path = project_root / resolved.session.runtime.compatibility_profile
     tabletop = load_nero_dual_tabletop_qualification_profile(tabletop_path)
     requested_sides = _enabled_sides(ARGS.enabled_sides)
+    if not requested_sides and ARGS.wrist_rig_collision_mode != "none":
+        raise ValueError("C0 cannot enable wrist-rig collision")
     filter_profile = (
         load_nero_hand2_self_collision_filter_profile(ARGS.filter_profile)
         if requested_sides and not ARGS.unfiltered
@@ -288,6 +473,12 @@ def main() -> int:
         physics_hz=profile.physics_hz,
         self_collision_sides=requested_sides,
         self_collision_filter_profile=filter_profile,
+        wrist_rig_collision_mode=ARGS.wrist_rig_collision_mode,
+    )
+    probes = (
+        _author_external_probes(scene)
+        if ARGS.wrist_rig_collision_mode != "none"
+        else None
     )
     contact_api_paths = _author_contact_reports(
         scene.stage, profile.thresholds.contact_report_threshold_n
@@ -297,6 +488,12 @@ def main() -> int:
     scene.partitions, root_paths_after_reset = scene.validate_articulations()
     scene.apply_arm_drive_gains(scene.partitions)
     readback = _self_collision_readback(scene)
+    runtime_body_properties = _runtime_body_properties(scene)
+    mass_baseline_matches, mass_baseline = _mass_baseline_check(
+        requested_sides=requested_sides,
+        session_hash=resolved.session_hash,
+        current=runtime_body_properties,
+    )
     expected_readback = {
         side: side in requested_sides for side in ("left", "right")
     }
@@ -403,7 +600,6 @@ def main() -> int:
     step_phase("open_trajectory", profile.phases.open_trajectory, opening)
     step_phase("final_rest", profile.phases.final_rest, constant_rest)
     scene.world.pause()
-    del subscription
 
     topology_after = _topology(scene.stage)
     _, root_paths_final = scene.validate_articulations()
@@ -411,6 +607,14 @@ def main() -> int:
         side: _world_transform(scene.stage, scene.authored[side].config.child_base_link_path)
         for side in ("left", "right")
     }
+    if probes is not None:
+        global_frame += _run_external_probe_smoke(
+            scene,
+            tracker=tracker,
+            probes=probes,
+            start_frame=global_frame,
+        )
+    del subscription
     hold_drift = {
         phase: max(
             float(
@@ -436,6 +640,15 @@ def main() -> int:
         for side in ("left", "right")
     }
     contacts = tracker.to_mapping()
+    external_probe_contact_pairs = [
+        pair_name
+        for pair_name, raw_record in contacts.items()
+        if "WristRigContactProbe" in pair_name
+        and "D405WristRig" in pair_name
+        and cast(Mapping[str, int], cast(Mapping[str, object], raw_record)["phase_contact_frames"])
+        .get("external_probe_smoke", 0)
+        > 0
+    ]
     steady_phases = {"observe_rest", "hold_grasp", "final_rest"}
     maximum_steady_target_error = max(
         phase_maximum_target_error[phase] for phase in steady_phases
@@ -455,6 +668,9 @@ def main() -> int:
         paths = cast(list[str], record["paths"])
         sides_for_pair = tuple(_pair_side(path) for path in paths)
         phase_frames = cast(Mapping[str, int], record["phase_contact_frames"])
+        phase_minimum = cast(
+            Mapping[str, float], record["phase_minimum_separation_m"]
+        )
         if set(sides_for_pair) == {"left", "right"}:
             cross_side_frames += sum(phase_frames.values())
         same_robot_side = (
@@ -463,17 +679,41 @@ def main() -> int:
         if not same_robot_side:
             continue
         rest_frames = sum(phase_frames.get(phase, 0) for phase in rest_phases)
-        minimum = record["minimum_separation_m"]
-        penetration = 0.0 if minimum is None else max(0.0, -float(cast(float, minimum)))
+        rest_minimum = min(
+            (phase_minimum[phase] for phase in rest_phases if phase in phase_minimum),
+            default=math.inf,
+        )
+        primary_minimum = min(
+            (
+                value
+                for phase, value in phase_minimum.items()
+                if phase != "external_probe_smoke"
+            ),
+            default=math.inf,
+        )
+        rest_penetration = (
+            0.0 if math.isinf(rest_minimum) else max(0.0, -rest_minimum)
+        )
+        primary_penetration = (
+            0.0 if math.isinf(primary_minimum) else max(0.0, -primary_minimum)
+        )
         if (
             rest_frames > profile.thresholds.maximum_unexplained_rest_contact_frames
-            or penetration > profile.thresholds.maximum_unexplained_rest_penetration_m
+            or rest_penetration
+            > profile.thresholds.maximum_unexplained_rest_penetration_m
             and rest_frames > 0
         ):
             unexplained_rest_pairs.append(pair_name)
-        if penetration > profile.thresholds.maximum_any_self_penetration_m:
+        if primary_penetration > profile.thresholds.maximum_any_self_penetration_m:
             deep_self_pairs.append(pair_name)
 
+    expected_mount_collision_count = (
+        14 if ARGS.wrist_rig_collision_mode in {"mount", "all"} else 0
+    )
+    expected_camera_collision_count = (
+        1 if ARGS.wrist_rig_collision_mode == "all" else 0
+    )
+    wrist_rig_physics_inventory = _wrist_rig_physics_inventory(scene)
     checks = {
         "self_collision_readback_matches_requested_sides": readback == expected_readback,
         "two_q27_roots_preserved": (
@@ -508,7 +748,29 @@ def main() -> int:
             cross_side_frames <= profile.thresholds.maximum_cross_side_contact_frames
         ),
         "contact_reporting_enabled": bool(contact_api_paths),
-        "no_accessory_collision_authored": True,
+        "wrist_rig_inventory_matches_gate": (
+            all(
+                len(handles.mount_collision_paths) == expected_mount_collision_count
+                and len(handles.camera_collision_paths)
+                == expected_camera_collision_count
+                for handles in scene.wrist_rigs
+            )
+            and (len(scene.wrist_rigs) == 2 or not scene.wrist_rig_runtimes)
+        ),
+        "hand_base_authored_mass_properties_unchanged": all(
+            handles.hand_base_mass_before == handles.hand_base_mass_after
+            for handles in scene.wrist_rigs
+        ),
+        "runtime_body_mass_properties_match_c1_baseline": mass_baseline_matches,
+        "wrist_rig_adds_no_rigid_mass_joint_or_root": not cast(
+            list[str],
+            wrist_rig_physics_inventory["forbidden_rigid_mass_joint_root_paths"],
+        ),
+        "external_mount_contact_smoke_passes": (
+            len(external_probe_contact_pairs) == len(scene.wrist_rigs)
+            if ARGS.wrist_rig_collision_mode != "none"
+            else True
+        ),
         "filtered_pairs_match_profile": (
             len(scene.self_collision_filtered_pairs)
             == (
@@ -523,12 +785,19 @@ def main() -> int:
         ),
     }
     passed = all(checks.values())
+    gate = (
+        "C0"
+        if not requested_sides
+        else {"none": "C1", "mount": "C2", "all": "C3"}[
+            ARGS.wrist_rig_collision_mode
+        ]
+    )
     report = {
         "schema": "wujihand.isaac_nero_hand2_self_collision_qualification.v1",
-        "gate": "C0" if not requested_sides else "C1",
+        "gate": gate,
         "phase": ARGS.enabled_sides,
         "passed": passed,
-        "scope": "simulation_only; no accessory collision",
+        "scope": "simulation_only collision qualification",
         "session": {
             "path": ARGS.session.resolve().relative_to(project_root).as_posix(),
             "session_hash": resolved.session_hash,
@@ -558,6 +827,32 @@ def main() -> int:
             for pair_id, first_path, second_path in scene.self_collision_filtered_pairs
         ],
         "enabled_self_collision_sides": sorted(requested_sides),
+        "wrist_rig_collision_mode": ARGS.wrist_rig_collision_mode,
+        "wrist_rig": [
+            {
+                "side": handles.side,
+                "root_path": handles.root_path,
+                "mount_visual_path": handles.mount_visual_path,
+                "camera_visual_path": handles.camera_visual_path,
+                "mount_collision_paths": list(handles.mount_collision_paths),
+                "camera_collision_paths": list(handles.camera_collision_paths),
+                "authored_mass_properties_before": {
+                    "mass_kg": handles.hand_base_mass_before.mass_kg,
+                    "center_of_mass_m": handles.hand_base_mass_before.center_of_mass_m,
+                    "diagonal_inertia_kg_m2": (
+                        handles.hand_base_mass_before.diagonal_inertia_kg_m2
+                    ),
+                    "principal_axes_wxyz": (
+                        handles.hand_base_mass_before.principal_axes_wxyz
+                    ),
+                },
+            }
+            for handles in scene.wrist_rigs
+        ],
+        "runtime_body_properties": runtime_body_properties,
+        "mass_baseline": mass_baseline,
+        "wrist_rig_physics_inventory": wrist_rig_physics_inventory,
+        "external_probe_contact_pairs": external_probe_contact_pairs,
         "self_collision_readback": readback,
         "physics": {
             "physics_hz": profile.physics_hz,
@@ -603,7 +898,13 @@ def main() -> int:
     return 0 if passed else 2
 
 
+exit_code = 1
 try:
-    raise SystemExit(main())
+    exit_code = main()
+except BaseException:  # Isaac fast shutdown can otherwise swallow the traceback.
+    traceback.print_exc()
+    sys.stdout.flush()
+    sys.stderr.flush()
 finally:
     simulation_app.close()
+raise SystemExit(exit_code)
