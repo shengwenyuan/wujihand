@@ -188,6 +188,60 @@ class RecordingStatusRecord:
     host_time_ns: int
 
 
+Matrix4 = tuple[
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+    tuple[float, float, float, float],
+]
+
+
+@dataclass(frozen=True, slots=True)
+class CameraFrameRecord:
+    side: Side
+    camera_frame_index: int
+    stamp_ns: int
+    world_frame_id: str
+    hand_base_frame_id: str
+    optical_frame_id: str
+    control_tick_id: int
+    physics_substep_index: int
+    capture_sim_time_s: float
+    host_capture_start_ns: int
+    host_capture_end_ns: int
+    reference_time_numerator: int
+    reference_time_denominator: int
+    color_bag_time_ns: int
+    depth_bag_time_ns: int
+    camera_info_bag_time_ns: int
+    truth_bag_time_ns: int
+    width_px: int
+    height_px: int
+    color_encoding: str
+    depth_encoding: str
+    color_payload_bytes: int
+    depth_payload_bytes: int
+    finite_depth_pixels: int
+    distortion_model: str
+    k_row_major: tuple[float, ...]
+    d: tuple[float, ...]
+    r_row_major: tuple[float, ...]
+    p_row_major: tuple[float, ...]
+    world_from_hand_base: Matrix4
+    world_from_camera_optical: Matrix4
+    hand_base_from_camera_optical: Matrix4
+
+
+@dataclass(frozen=True, slots=True)
+class TransformRecord:
+    static: bool
+    bag_time_ns: int
+    stamp_ns: int
+    parent_frame_id: str
+    child_frame_id: str
+    parent_from_child: Matrix4
+
+
 @dataclass(frozen=True, slots=True)
 class BagDataset:
     topics: tuple[TopicObservation, ...]
@@ -196,3 +250,5 @@ class BagDataset:
     ticks: tuple[TickRecord, ...]
     scenes: tuple[SceneRecord, ...]
     statuses: tuple[RecordingStatusRecord, ...]
+    camera_frames: tuple[CameraFrameRecord, ...] = ()
+    transforms: tuple[TransformRecord, ...] = ()

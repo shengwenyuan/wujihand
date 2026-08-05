@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import gc
 import json
@@ -63,14 +63,17 @@ from wujihand.runtime import (
 )
 from wujihand.runtime.isaac_dual_scene import (
     DualNeroHand2IsaacScene,
+    SceneReplaySnapshot,
     resolve_dual_side_runtimes,
     workcell_frame_position,
 )
 from wujihand.runtime.isaac_d405_camera_capture import (
     DualD405CameraCapture,
     POSE_HISTORY_JOIN_TOLERANCE_NS,
+    SIMULATION_CAMERA_CAPTURE_ADAPTER,
     SimulationCameraFrame,
     SimulationCameraStaticInventory,
+    simulation_seconds_to_stamp_ns,
 )
 from wujihand.runtime.isaac_dual_teleoperation import (
     build_dual_teleoperation_application,
@@ -105,6 +108,15 @@ ISAAC_RECORDING_RENDERER = "RayTracedLighting"
 ISAAC_MINIMAL_SHADING_MODE = 2
 ISAAC_CPU_THREAD_LIMIT = 32
 PYTHON_GC_POLICY = "collect_and_freeze_during_control_v1"
+CAMERA_CAPTURE_EXECUTION = "paused_post_control_replay_v1"
+
+
+@dataclass(frozen=True, slots=True)
+class _CameraReplayState:
+    control_tick_id: int
+    physics_substep_index: int
+    simulation_time_s: float
+    scene: SceneReplaySnapshot
 
 
 def parse_args() -> argparse.Namespace:
@@ -223,6 +235,7 @@ simulation_app = SimulationApp(
         "minimal_shading_mode": ISAAC_MINIMAL_SHADING_MODE,
         "multi_gpu": False,
         "limit_cpu_threads": ISAAC_CPU_THREAD_LIMIT,
+        "disable_viewport_updates": not ARGS.gui,
     }
 )
 
@@ -376,6 +389,173 @@ def _publish_camera_frames(
         counters[f"camera.{frame.side}.published_frames"] += 1
 
 
+def _render_without_simulation_advance(
+    scene: DualNeroHand2IsaacScene,
+    *,
+    camera_capture: DualD405CameraCapture | None,
+    camera_render_due: bool,
+    counters: Counter[str],
+) -> tuple[SimulationCameraFrame, ...]:
+    """Service rendering without charging it to a 60 Hz control tick."""
+
+    simulation_time_s = _simulation_time_s(scene)
+    started_ns = time.monotonic_ns()
+    scene.world.render()
+    duration_ns = time.monotonic_ns() - started_ns
+    counters["camera.render_update_total_ns"] += duration_ns
+    counters["camera.render_update_max_ns"] = max(
+        counters["camera.render_update_max_ns"],
+        duration_ns,
+    )
+    if not math.isclose(
+        _simulation_time_s(scene),
+        simulation_time_s,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        raise RuntimeError("rendering changed simulation time")
+    if camera_capture is None:
+        return ()
+    if camera_render_due:
+        counters["camera.render_updates"] += 1
+    return camera_capture.drain_completed()
+
+
+def _publish_camera_frames_measured(
+    frames: tuple[SimulationCameraFrame, ...],
+    *,
+    inventories: dict[str, SimulationCameraStaticInventory],
+    publishers: dict[str, dict[str, Any]],
+    transform_broadcaster: TransformBroadcaster,
+    counters: Counter[str],
+) -> None:
+    if not frames:
+        return
+    started_ns = time.monotonic_ns()
+    _publish_camera_frames(
+        frames,
+        inventories=inventories,
+        publishers=publishers,
+        transform_broadcaster=transform_broadcaster,
+        counters=counters,
+    )
+    duration_ns = time.monotonic_ns() - started_ns
+    counters["camera.publish_total_ns"] += duration_ns
+    counters["camera.publish_max_ns"] = max(
+        counters["camera.publish_max_ns"],
+        duration_ns,
+    )
+
+
+def _replay_camera_frames(
+    states: tuple[_CameraReplayState, ...],
+    *,
+    scene: DualNeroHand2IsaacScene,
+    camera_capture: DualD405CameraCapture,
+    inventories: dict[str, SimulationCameraStaticInventory],
+    publishers: dict[str, dict[str, Any]],
+    transform_broadcaster: TransformBroadcaster,
+    counters: Counter[str],
+) -> tuple[SimulationCameraFrame, ...]:
+    """Render recorded 30 Hz states only after the real-time control segment."""
+
+    if not states:
+        return ()
+    scene.world.reset()
+    pending: list[SimulationCameraFrame] = []
+    camera_rate_hz = inventories["left"].profile.capture.rate_hz
+    if inventories["right"].profile.capture.rate_hz != camera_rate_hz:
+        raise RuntimeError("dual D405 replay rates differ")
+    first_target_step_count = round(
+        states[0].simulation_time_s * RESOLVED.control_profile.physics_hz
+    )
+    capture_period_steps = PHYSICS_SUBSTEPS_PER_CONTROL * CONTROL_TICKS_PER_CAPTURE
+    prime_step_count = first_target_step_count - capture_period_steps
+    if prime_step_count < 0:
+        raise RuntimeError("first D405 replay state has no preceding priming deadline")
+    for _ in range(prime_step_count):
+        scene.world.step(render=False)
+        counters["camera.replay_physics_steps"] += 1
+    scene.restore_camera_replay_snapshot(states[0].scene)
+    priming = camera_capture.prime_after_timeline_reset(
+        render_update=scene.world.render,
+        simulation_time_s=_simulation_time_s(scene),
+    )
+    counters["camera.replay_priming_updates"] += int(priming["render_updates"])
+    discarded_frames = priming["discarded_frames"]
+    if not isinstance(discarded_frames, dict):
+        raise RuntimeError("D405 replay priming receipt is invalid")
+    counters["camera.replay_priming_discarded_frames"] += sum(
+        int(value) for value in discarded_frames.values()
+    )
+    for state in states:
+        target_stamp_ns = simulation_seconds_to_stamp_ns(state.simulation_time_s)
+        current_stamp_ns = simulation_seconds_to_stamp_ns(_simulation_time_s(scene))
+        while current_stamp_ns < target_stamp_ns:
+            scene.world.step(render=False)
+            counters["camera.replay_physics_steps"] += 1
+            current_stamp_ns = simulation_seconds_to_stamp_ns(_simulation_time_s(scene))
+        if current_stamp_ns != target_stamp_ns:
+            raise RuntimeError(
+                "camera replay could not reproduce capture simulation time: "
+                f"target={target_stamp_ns}, current={current_stamp_ns}"
+            )
+        scene.restore_camera_replay_snapshot(state.scene)
+        pending.extend(
+            camera_capture.observe_completed_substep(
+                control_tick_id=state.control_tick_id,
+                physics_substep_index=state.physics_substep_index,
+                physics_substep_ordinal=1,
+                simulation_time_s=state.simulation_time_s,
+            )
+        )
+        pending.extend(
+            _render_without_simulation_advance(
+                scene,
+                camera_capture=camera_capture,
+                camera_render_due=True,
+                counters=counters,
+            )
+        )
+        if pending:
+            _publish_camera_frames_measured(
+                tuple(pending),
+                inventories=inventories,
+                publishers=publishers,
+                transform_broadcaster=transform_broadcaster,
+                counters=counters,
+            )
+            pending.clear()
+    # RTX completion can trail replay submission after World.reset(). Service
+    # bounded renders at the fixed final simulation time, and detach as soon as
+    # the exact requested count closes.
+    expected_count = len(states)
+    replay_simulation_time_s = _simulation_time_s(scene)
+    pending.extend(
+        camera_capture.stop_and_drain(
+            update_app=scene.world.render,
+            expected_frames_per_side=expected_count,
+        )
+    )
+    if not math.isclose(
+        _simulation_time_s(scene),
+        replay_simulation_time_s,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        raise RuntimeError("paused Kit updates changed D405 replay simulation time")
+    if pending:
+        _publish_camera_frames_measured(
+            tuple(pending),
+            inventories=inventories,
+            publishers=publishers,
+            transform_broadcaster=transform_broadcaster,
+            counters=counters,
+        )
+        pending.clear()
+    return tuple(pending)
+
+
 def main() -> int:
     scene = DualNeroHand2IsaacScene(
         project_root=ROOT,
@@ -408,8 +588,7 @@ def main() -> int:
         inventories = camera_capture.inventories
         camera_rate_hz = inventories[0].profile.capture.rate_hz
         if any(
-            inventory.profile.capture.rate_hz != camera_rate_hz
-            for inventory in inventories[1:]
+            inventory.profile.capture.rate_hz != camera_rate_hz for inventory in inventories[1:]
         ):
             raise RuntimeError("dual D405 capture rates differ")
         alignment_steps = 0
@@ -562,6 +741,7 @@ def main() -> int:
     camera_inventories: dict[str, SimulationCameraStaticInventory] = {}
     camera_transform_broadcaster: TransformBroadcaster | None = None
     camera_static_transform_broadcaster: StaticTransformBroadcaster | None = None
+    counters: Counter[str] = Counter()
     current_run_root: Path | None = None
     current_run_id: str | None = None
     if ARGS.recording_enabled:
@@ -616,7 +796,6 @@ def main() -> int:
         camera_static_transform_broadcaster.sendTransform(
             [camera_static_transform(camera_inventories[side]) for side in ("left", "right")]
         )
-
     set_camera_view(
         eye=np.asarray(
             workcell_frame_position(
@@ -659,11 +838,12 @@ def main() -> int:
     started_ns = time.monotonic_ns()
     application.start(now_ns=started_ns)
     scene.apply_targets()
-    counters: Counter[str] = Counter()
     safety_state: dict[tuple[str, str], tuple[object, ...]] = {}
     completed_frames = 0
     completed_physics_steps = 0
     completed_renders = 0
+    pending_camera_frames: list[SimulationCameraFrame] = []
+    camera_replay_states: list[_CameraReplayState] = []
     active_tracker_sources: dict[
         str,
         SourceSelectionTrace | None,
@@ -819,11 +999,19 @@ def main() -> int:
             for substep in range(PHYSICS_SUBSTEPS_PER_CONTROL):
                 physics_substep_indices.append(completed_physics_steps)
                 physics_substep_start_ns.append(time.monotonic_ns())
+                world_step_start_ns = time.monotonic_ns()
                 scene.world.step(render=False)
+                world_step_duration_ns = time.monotonic_ns() - world_step_start_ns
+                counters["physics.world_step_total_ns"] += world_step_duration_ns
+                counters["physics.world_step_max_ns"] = max(
+                    counters["physics.world_step_max_ns"],
+                    world_step_duration_ns,
+                )
                 physics_substep_end_ns.append(time.monotonic_ns())
                 physics_substep_sim_time_s = _simulation_time_s(scene)
                 physics_substep_sim_times_s.append(physics_substep_sim_time_s)
-                if camera_capture is not None:
+                if camera_capture is not None and ARGS.gui:
+                    camera_observe_start_ns = time.monotonic_ns()
                     completed_camera_frames.extend(
                         camera_capture.observe_completed_substep(
                             control_tick_id=scheduled_tick.control_index,
@@ -832,39 +1020,49 @@ def main() -> int:
                             simulation_time_s=physics_substep_sim_time_s,
                         )
                     )
+                    camera_observe_duration_ns = time.monotonic_ns() - camera_observe_start_ns
+                    counters["camera.observe_total_ns"] += camera_observe_duration_ns
+                    counters["camera.observe_max_ns"] = max(
+                        counters["camera.observe_max_ns"],
+                        camera_observe_duration_ns,
+                    )
                 completed_physics_steps += 1
             physics_end_ns = time.monotonic_ns()
             simulation_time_after_s = _simulation_time_s(scene)
-            if render_due or camera_render_due:
+            if render_due or (ARGS.gui and camera_render_due):
                 # World.step(render=True) advances by rendering_dt and therefore
                 # cannot represent one 120 Hz physics substep. Render separately
                 # so the UI never changes simulation time.
-                render_simulation_time_s = _simulation_time_s(scene)
-                scene.world.render()
-                if not math.isclose(
-                    _simulation_time_s(scene),
-                    render_simulation_time_s,
-                    rel_tol=0.0,
-                    abs_tol=1e-9,
-                ):
-                    raise RuntimeError("D405 render changed simulation time")
+                completed_camera_frames.extend(
+                    _render_without_simulation_advance(
+                        scene,
+                        camera_capture=camera_capture,
+                        camera_render_due=camera_render_due,
+                        counters=counters,
+                    )
+                )
                 if render_due:
                     completed_renders += 1
-                if camera_capture is not None:
-                    if camera_render_due:
-                        counters["camera.render_updates"] += 1
-                    completed_camera_frames.extend(camera_capture.drain_completed())
-            if completed_camera_frames:
-                if camera_transform_broadcaster is None:
-                    raise RuntimeError("camera TF broadcaster is missing")
-                _publish_camera_frames(
-                    tuple(completed_camera_frames),
-                    inventories=camera_inventories,
-                    publishers=camera_publishers,
-                    transform_broadcaster=camera_transform_broadcaster,
-                    counters=counters,
-                )
             post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
+            if camera_render_due and not ARGS.gui:
+                replay_snapshot_start_ns = time.monotonic_ns()
+                replay_snapshot = scene.camera_replay_snapshot(
+                    q27_by_side=post_feedback,
+                )
+                replay_snapshot_duration_ns = time.monotonic_ns() - replay_snapshot_start_ns
+                counters["camera.replay_snapshot_total_ns"] += replay_snapshot_duration_ns
+                counters["camera.replay_snapshot_max_ns"] = max(
+                    counters["camera.replay_snapshot_max_ns"],
+                    replay_snapshot_duration_ns,
+                )
+                camera_replay_states.append(
+                    _CameraReplayState(
+                        control_tick_id=scheduled_tick.control_index,
+                        physics_substep_index=physics_substep_indices[-1],
+                        simulation_time_s=simulation_time_after_s,
+                        scene=replay_snapshot,
+                    )
+                )
             for arm_labelled in result.arm_steps:
                 side = arm_labelled.side
                 route = RESOLVED.route_plan.route(
@@ -960,6 +1158,30 @@ def main() -> int:
                     )
             completed_frames += 1
             scheduler.complete(completed_ns=time.monotonic_ns())
+            if completed_camera_frames:
+                if camera_transform_broadcaster is None:
+                    raise RuntimeError("camera TF broadcaster is missing")
+                _publish_camera_frames_measured(
+                    tuple(completed_camera_frames),
+                    inventories=camera_inventories,
+                    publishers=camera_publishers,
+                    transform_broadcaster=camera_transform_broadcaster,
+                    counters=counters,
+                )
+        if camera_capture is not None and not ARGS.gui:
+            if camera_transform_broadcaster is None:
+                raise RuntimeError("camera TF broadcaster is missing during replay")
+            pending_camera_frames.extend(
+                _replay_camera_frames(
+                    tuple(camera_replay_states),
+                    scene=scene,
+                    camera_capture=camera_capture,
+                    inventories=camera_inventories,
+                    publishers=camera_publishers,
+                    transform_broadcaster=camera_transform_broadcaster,
+                    counters=counters,
+                )
+            )
     except BaseException as exc:
         loop_failed = True
         failure_reason = _bounded_reason(exc)
@@ -969,10 +1191,25 @@ def main() -> int:
             if camera_capture is not None:
                 drain_simulation_time_s = _simulation_time_s(scene)
                 expected_camera_frames = completed_frames // CONTROL_TICKS_PER_CAPTURE
-                final_camera_frames = camera_capture.stop_and_drain(
-                    update_app=scene.world.render,
-                    expected_frames_per_side=expected_camera_frames,
-                )
+                if ARGS.gui:
+                    final_camera_frames = (
+                        *pending_camera_frames,
+                        *camera_capture.stop_and_drain(
+                            update_app=scene.world.render,
+                            expected_frames_per_side=expected_camera_frames,
+                        ),
+                    )
+                else:
+                    capture_counts = camera_capture.capture_counts
+                    if any(
+                        capture_counts[side] != expected_camera_frames for side in ("left", "right")
+                    ):
+                        raise RuntimeError(
+                            "paused D405 replay did not close the 30 Hz schedule: "
+                            f"expected={expected_camera_frames}, actual={capture_counts!r}"
+                        )
+                    final_camera_frames = tuple(pending_camera_frames)
+                pending_camera_frames.clear()
                 if not math.isclose(
                     _simulation_time_s(scene),
                     drain_simulation_time_s,
@@ -983,7 +1220,7 @@ def main() -> int:
                 if final_camera_frames:
                     if camera_transform_broadcaster is None:
                         raise RuntimeError("camera TF broadcaster is missing during drain")
-                    _publish_camera_frames(
+                    _publish_camera_frames_measured(
                         final_camera_frames,
                         inventories=camera_inventories,
                         publishers=camera_publishers,
@@ -997,6 +1234,10 @@ def main() -> int:
                         for side in ("left", "right")
                     }
                 )
+                camera_capture_receipt["capture_execution"] = (
+                    "inline_gui_render_v1" if ARGS.gui else CAMERA_CAPTURE_EXECUTION
+                )
+                camera_capture_receipt["replay_state_count"] = len(camera_replay_states)
                 sides_receipt = camera_capture_receipt["sides"]
                 if not isinstance(sides_receipt, dict):
                     raise RuntimeError("camera receipt sides mapping is invalid")
@@ -1573,6 +1814,9 @@ def _run_manifest_payload(
                 else "monotonic_fixed_rate_skip_missed_v1"
             ),
             "maximum_consecutive_catch_up_ticks": (GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui else 0),
+            "synthetic_camera_service_phase": (
+                "inline_gui_render_v1" if ARGS.gui else CAMERA_CAPTURE_EXECUTION
+            ),
             "executor": "background_single_threaded_spin_v1",
             "gui": ARGS.gui,
             "viewport_width": VIEWPORT_WIDTH,
@@ -1584,6 +1828,7 @@ def _run_manifest_payload(
             "cpu_thread_limit": ISAAC_CPU_THREAD_LIMIT,
             "process_cpu_affinity": PROCESS_CPU_AFFINITY,
             "block_on_render": bool(scene.world.get_block_on_render()),
+            "viewport_updates_enabled": ARGS.gui,
             "python_gc_policy": PYTHON_GC_POLICY,
         },
         "resolved_control_artifacts": {
@@ -1630,10 +1875,13 @@ def _run_manifest_payload(
                 "SIMULATION ONLY: synthetic 140-degree HFOV; not a physical "
                 "RealSense D405 specification or calibration."
             ),
-            "adapter": "isaac_d405_writer_pose_history_v1",
-            "writer_callback_threading": (
-                "payload_copy_in_writer_callback_publish_on_control_thread_v1"
+            "adapter": SIMULATION_CAMERA_CAPTURE_ADAPTER,
+            "capture_execution": ("inline_gui_render_v1" if ARGS.gui else CAMERA_CAPTURE_EXECUTION),
+            "capture_execution_warning": (
+                "Headless recording replays exact post-physics simulation states only after "
+                "the real-time control segment; it is not a live physical-camera model."
             ),
+            "writer_callback_threading": "gpu_clone_host_copy_worker_v3",
             "completed_frame_join": {
                 "method": "nearest_reference_time_to_post_substep_pose_history_v1",
                 "rounding_tolerance_ns": POSE_HISTORY_JOIN_TOLERANCE_NS,
@@ -1742,6 +1990,9 @@ def _run_receipt_payload(
             "physics_substeps_per_control": PHYSICS_SUBSTEPS_PER_CONTROL,
             "control_ticks_per_render": CONTROL_TICKS_PER_RENDER,
             "maximum_consecutive_catch_up_ticks": (GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui else 0),
+            "synthetic_camera_service_phase": (
+                "inline_gui_render_v1" if ARGS.gui else CAMERA_CAPTURE_EXECUTION
+            ),
             "process_cpu_affinity": PROCESS_CPU_AFFINITY,
             "block_on_render": GUI_BLOCK_ON_RENDER,
             "python_gc_policy": PYTHON_GC_POLICY,

@@ -1,6 +1,7 @@
 # 007：双 NERO—Hand 2—v2 Mount—D405 140°纯仿真集成计划
 
-- 状态：实施中（S0—S3 已通过）
+- 状态：已完成（S0—S7 已通过；见
+  [D405 录制、Analyzer 与性能验证](validation/2026-08-05-d405-recording-analyzer-performance.md)）
 - 日期：2026-08-04
 - 范围：Isaac Sim 6.0.1 双侧腕部组件、碰撞、纯仿真相机与 ROS2 录制
 - 前置基线：`edd0e74`（v2 mount）、`1ff6ad1`（ROS2—Isaac 60 Hz）

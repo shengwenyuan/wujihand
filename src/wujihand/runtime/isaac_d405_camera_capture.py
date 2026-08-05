@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from threading import Lock
+from threading import Condition, Thread
 import time
 from typing import Any, cast
 
@@ -38,9 +38,9 @@ from .isaac_d405_wrist_rig import (
 )
 
 
-SIMULATION_CAMERA_FRAME_SCHEMA = "wujihand.simulation_camera_frame_truth.v1"
-SIMULATION_CAMERA_CAPTURE_ADAPTER = "isaac_d405_writer_pose_history_v1"
-SIMULATION_TIME_STAMP_RULE = "positive_rational_seconds_round_half_up_to_nanoseconds_v1"
+SIMULATION_CAMERA_FRAME_SCHEMA = "wujihand.simulation_camera_frame_truth.v2"
+SIMULATION_CAMERA_CAPTURE_ADAPTER = "isaac_d405_capture_phase_pose_history_v5"
+SIMULATION_TIME_STAMP_RULE = "capture_phase_rational_grid_round_half_up_to_nanoseconds_v2"
 POSE_HISTORY_JOIN_TOLERANCE_NS = 1_000
 WORLD_FRAME_ID = "world"
 _SIDES = ("left", "right")
@@ -55,6 +55,17 @@ Matrix4 = tuple[
     tuple[float, float, float, float],
     tuple[float, float, float, float],
 ]
+
+
+def _is_capture_phase(
+    profile: IsaacCameraProfile,
+    *,
+    control_tick_id: int,
+    physics_substep_ordinal: int,
+) -> bool:
+    return (
+        control_tick_id + 1
+    ) % profile.schedule.control_ticks_per_capture == 0 and physics_substep_ordinal == 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,39 +190,115 @@ class _RawCompletedFrame:
     depth: NDArray[np.generic]
 
 
-class _CompletedFrameSink:
-    """Small synchronized queue owned by one Replicator Writer callback."""
+@dataclass(frozen=True, slots=True)
+class _PendingCompletedFrame:
+    reference_time: tuple[int, int]
+    callback_start_ns: int
+    rgba: object
+    depth: object
 
-    def __init__(self, profile: IsaacCameraProfile) -> None:
+
+class _CompletedFrameSink:
+    """Own GPU payloads quickly, then perform blocking host copies off-thread."""
+
+    def __init__(
+        self,
+        profile: IsaacCameraProfile,
+        *,
+        clone_payload: Callable[[object], object],
+        payload_to_numpy: Callable[[object], NDArray[np.generic]] = lambda value: _as_numpy(value),
+    ) -> None:
         self._profile = profile
-        self._lock = Lock()
+        self._clone_payload = clone_payload
+        self._payload_to_numpy = payload_to_numpy
+        self._condition = Condition()
+        self._pending: deque[_PendingCompletedFrame] = deque()
         self._records: deque[_RawCompletedFrame] = deque()
         self._overflow_count = 0
+        self._processing_count = 0
+        self._failure: BaseException | None = None
+        self._closing = False
+        self._worker = Thread(
+            target=self._run,
+            name="synthetic-d405-host-copy",
+            daemon=True,
+        )
+        self._worker.start()
 
     def write(self, data: Mapping[str, object]) -> None:
         started_ns = time.monotonic_ns()
         reference = _reference_time(data.get("reference_time"))
-        rgba = _as_numpy(data.get("rgb"))
-        depth = _as_numpy(data.get(self._profile.depth.annotator))
-        if rgba.ndim == 1:
-            rgba = rgba.reshape(self._profile.rgb.source_shape)
-        if depth.ndim == 1:
-            depth = depth.reshape(self._profile.depth.source_shape)
-        record = _RawCompletedFrame(
+        rgba = self._clone_payload(data.get("rgb"))
+        depth = self._clone_payload(data.get(self._profile.depth.annotator))
+        pending = _PendingCompletedFrame(
             reference_time=reference,
             callback_start_ns=started_ns,
-            callback_end_ns=time.monotonic_ns(),
             rgba=rgba,
             depth=depth,
         )
-        with self._lock:
-            if len(self._records) >= _WRITER_QUEUE_CAPACITY:
+        with self._condition:
+            self._raise_if_failed_locked()
+            if self._closing:
+                raise RuntimeError("synthetic D405 writer callback arrived after close")
+            queue_size = len(self._pending) + len(self._records) + self._processing_count
+            if queue_size >= _WRITER_QUEUE_CAPACITY:
                 self._overflow_count += 1
                 return
-            self._records.append(record)
+            self._pending.append(pending)
+            self._condition.notify_all()
 
-    def pop_all(self) -> tuple[_RawCompletedFrame, ...]:
-        with self._lock:
+    def _run(self) -> None:
+        while True:
+            with self._condition:
+                self._condition.wait_for(lambda: bool(self._pending) or self._closing)
+                if not self._pending:
+                    return
+                pending = self._pending.popleft()
+                self._processing_count += 1
+            try:
+                rgba = self._payload_to_numpy(pending.rgba)
+                depth = self._payload_to_numpy(pending.depth)
+                if rgba.ndim == 1:
+                    rgba = rgba.reshape(self._profile.rgb.source_shape)
+                if depth.ndim == 1:
+                    depth = depth.reshape(self._profile.depth.source_shape)
+                record = _RawCompletedFrame(
+                    reference_time=pending.reference_time,
+                    callback_start_ns=pending.callback_start_ns,
+                    callback_end_ns=time.monotonic_ns(),
+                    rgba=rgba,
+                    depth=depth,
+                )
+            except BaseException as exc:
+                with self._condition:
+                    self._failure = exc
+                    self._pending.clear()
+                    self._processing_count -= 1
+                    self._condition.notify_all()
+                return
+            with self._condition:
+                self._records.append(record)
+                self._processing_count -= 1
+                self._condition.notify_all()
+
+    def pop_all(
+        self,
+        *,
+        wait_for_pending: bool = False,
+        timeout_s: float = 5.0,
+    ) -> tuple[_RawCompletedFrame, ...]:
+        with self._condition:
+            if wait_for_pending:
+                idle = self._condition.wait_for(
+                    lambda: (
+                        (not self._pending and self._processing_count == 0)
+                        or self._failure is not None
+                    ),
+                    timeout=timeout_s,
+                )
+                if not idle:
+                    raise TimeoutError("synthetic D405 host-copy worker did not become idle")
+            self._raise_if_failed_locked()
             if self._overflow_count:
                 raise RuntimeError("synthetic D405 writer queue overflowed; refusing a gapped run")
             result = tuple(self._records)
@@ -219,9 +306,26 @@ class _CompletedFrameSink:
             return result
 
     def clear(self) -> None:
-        with self._lock:
+        self.pop_all(wait_for_pending=True)
+        with self._condition:
             self._records.clear()
             self._overflow_count = 0
+
+    def close(self, *, timeout_s: float = 10.0) -> None:
+        with self._condition:
+            self._closing = True
+            self._condition.notify_all()
+        self._worker.join(timeout=timeout_s)
+        if self._worker.is_alive():
+            raise TimeoutError("synthetic D405 host-copy worker did not stop")
+        with self._condition:
+            self._raise_if_failed_locked()
+            if self._overflow_count:
+                raise RuntimeError("synthetic D405 writer queue overflowed; refusing a gapped run")
+
+    def _raise_if_failed_locked(self) -> None:
+        if self._failure is not None:
+            raise RuntimeError("synthetic D405 host-copy worker failed") from self._failure
 
 
 @dataclass(slots=True)
@@ -253,6 +357,7 @@ class DualD405CameraCapture:
 
         import carb  # type: ignore[import-not-found]
         import omni.replicator.core as rep  # type: ignore[import-not-found]
+        import warp as wp  # type: ignore[import-not-found]
         from isaacsim.sensors.experimental.rtx import (  # type: ignore[import-not-found]
             CameraSensor,
             RtxCamera,
@@ -276,6 +381,8 @@ class DualD405CameraCapture:
         self._warmup_updates = 0
         self._shutdown_drain_app_updates = 0
         self._in_flight_drain_count = 0
+        self._replay_priming_updates = 0
+        self._replay_priming_discarded_frames = {side: 0 for side in _SIDES}
         self._closed = False
 
         runtimes = {runtime.side: runtime for runtime in scene.wrist_rig_runtimes}
@@ -295,9 +402,7 @@ class DualD405CameraCapture:
                     raise RuntimeError("failed to apply OmniSensorAPI to D405 Camera prim")
                 from pxr import UsdGeom  # type: ignore[import-not-found]
 
-                authored_local_transform = UsdGeom.Xformable(
-                    camera_prim
-                ).GetLocalTransformation()
+                authored_local_transform = UsdGeom.Xformable(camera_prim).GetLocalTransformation()
                 rtx_camera = RtxCamera(
                     handle.camera_prim_path,
                     tick_rate=runtime.camera_profile.capture.rate_hz,
@@ -320,7 +425,32 @@ class DualD405CameraCapture:
                     authored_local_transform=authored_local_transform,
                     profile=profile,
                 )
-                sink = _CompletedFrameSink(runtime.camera_profile)
+
+                def clone_payload(value: object) -> object:
+                    payload = _annotator_payload(value)
+                    if isinstance(payload, np.ndarray):
+                        return payload.copy()
+                    try:
+                        return wp.clone(payload)
+                    except (AttributeError, TypeError) as exc:
+                        raise RuntimeError(
+                            "synthetic D405 annotator did not return an owned-copyable payload"
+                        ) from exc
+
+                sink = _CompletedFrameSink(
+                    runtime.camera_profile,
+                    clone_payload=clone_payload,
+                )
+                rgb_annotator = rep.AnnotatorRegistry.get_annotator(
+                    "rgb",
+                    device="cuda",
+                    do_array_copy=False,
+                )
+                depth_annotator = rep.AnnotatorRegistry.get_annotator(
+                    profile.depth.annotator,
+                    device="cuda",
+                    do_array_copy=False,
+                )
 
                 class SynchronizedCameraWriter(rep.Writer):  # type: ignore[misc]
                     """Bundle RGB, depth and rational reference time once."""
@@ -328,8 +458,8 @@ class DualD405CameraCapture:
                     def __init__(self, target: _CompletedFrameSink) -> None:
                         self.version = "1.0.0"
                         self.annotators = [
-                            "rgb",
-                            target._profile.depth.annotator,
+                            rgb_annotator,
+                            depth_annotator,
                         ]
                         self._target = target
 
@@ -373,6 +503,10 @@ class DualD405CameraCapture:
     def active(self) -> bool:
         return self._activation_stamp_ns is not None and not self._closed
 
+    @property
+    def capture_counts(self) -> dict[str, int]:
+        return dict(self._frame_indices)
+
     def warm_up(
         self,
         *,
@@ -395,7 +529,7 @@ class DualD405CameraCapture:
         for update_index in range(1, maximum_updates + 1):
             update_app()
             for side, pipeline in self._pipelines.items():
-                records = pipeline.sink.pop_all()
+                records = pipeline.sink.pop_all(wait_for_pending=True)
                 self._warmup_frames[side] += len(records)
                 if records:
                     latest[side] = records[-1].reference_time
@@ -441,6 +575,44 @@ class DualD405CameraCapture:
         for pipeline in self._pipelines.values():
             pipeline.sink.clear()
 
+    def prime_after_timeline_reset(
+        self,
+        *,
+        render_update: Callable[[], None],
+        simulation_time_s: float,
+    ) -> dict[str, object]:
+        """Discard one render after replay reset, before scheduled capture starts."""
+
+        if not self.active:
+            raise RuntimeError("camera capture must be active before replay priming")
+        if self._replay_priming_updates != 0:
+            raise RuntimeError("camera replay priming may run only once")
+        if any(self._frame_indices.values()):
+            raise RuntimeError("camera replay priming must precede public frames")
+        expected_stamp_ns = simulation_seconds_to_stamp_ns(simulation_time_s)
+        for pipeline in self._pipelines.values():
+            pipeline.sink.clear()
+        render_update()
+        references: dict[str, tuple[tuple[int, int], ...]] = {}
+        for side, pipeline in self._pipelines.items():
+            records = pipeline.sink.pop_all(wait_for_pending=True)
+            references[side] = tuple(record.reference_time for record in records)
+            self._replay_priming_discarded_frames[side] = len(records)
+            for record in records:
+                if reference_time_to_stamp_ns(record.reference_time) != expected_stamp_ns:
+                    raise RuntimeError(
+                        "D405 replay priming returned an unexpected simulation stamp: "
+                        f"side={side!r}, reference={record.reference_time!r}, "
+                        f"expected_stamp_ns={expected_stamp_ns}"
+                    )
+        self._replay_priming_updates = 1
+        return {
+            "render_updates": self._replay_priming_updates,
+            "discarded_frames": dict(self._replay_priming_discarded_frames),
+            "references": references,
+            "simulation_stamp_ns": expected_stamp_ns,
+        }
+
     def observe_completed_substep(
         self,
         *,
@@ -449,14 +621,26 @@ class DualD405CameraCapture:
         physics_substep_ordinal: int,
         simulation_time_s: float,
     ) -> tuple[SimulationCameraFrame, ...]:
-        """Save current poses, then join any callbacks completed by this step."""
+        """Save exact capture-phase poses, then join callbacks completed by this step."""
 
         if not self.active:
             raise RuntimeError("camera capture is not active")
         if physics_substep_ordinal not in (0, 1):
             raise ValueError("physics_substep_ordinal must be zero or one")
-        stamp_ns = simulation_seconds_to_stamp_ns(simulation_time_s)
         for side, pipeline in self._pipelines.items():
+            profile = pipeline.runtime.camera_profile
+            if not _is_capture_phase(
+                profile,
+                control_tick_id=control_tick_id,
+                physics_substep_ordinal=physics_substep_ordinal,
+            ):
+                continue
+            assert self._activation_stamp_ns is not None
+            stamp_ns = scheduled_capture_stamp_ns(
+                activation_stamp_ns=self._activation_stamp_ns,
+                capture_rate_hz=profile.capture.rate_hz,
+                control_tick_id=control_tick_id,
+            )
             sample = _pose_sample(
                 self._scene.stage,
                 pipeline=pipeline,
@@ -472,12 +656,16 @@ class DualD405CameraCapture:
                 history.popitem(last=False)
         return self._drain_available()
 
-    def _drain_available(self) -> tuple[SimulationCameraFrame, ...]:
+    def _drain_available(
+        self,
+        *,
+        wait_for_pending: bool = False,
+    ) -> tuple[SimulationCameraFrame, ...]:
         frames: list[SimulationCameraFrame] = []
         assert self._activation_stamp_ns is not None
         for side, pipeline in self._pipelines.items():
             profile = pipeline.runtime.camera_profile
-            for raw in pipeline.sink.pop_all():
+            for raw in pipeline.sink.pop_all(wait_for_pending=wait_for_pending):
                 reference_stamp_ns = reference_time_to_stamp_ns(raw.reference_time)
                 if reference_stamp_ns <= self._activation_stamp_ns:
                     self._post_activation_stale_frames[side] += 1
@@ -493,9 +681,10 @@ class DualD405CameraCapture:
                         f"stamp_ns={reference_stamp_ns}, "
                         f"history={tuple(self._history[side])!r}"
                     )
-                if (
-                    (sample.control_tick_id + 1) % profile.schedule.control_ticks_per_capture != 0
-                    or sample.physics_substep_ordinal != 1
+                if not _is_capture_phase(
+                    profile,
+                    control_tick_id=sample.control_tick_id,
+                    physics_substep_ordinal=sample.physics_substep_ordinal,
                 ):
                     raise RuntimeError(
                         "D405 capture drifted from the completed fourth physics substep"
@@ -512,7 +701,7 @@ class DualD405CameraCapture:
                     run_id=self._run_id,
                     side=side,
                     camera_frame_index=frame_index,
-                    stamp_ns=reference_stamp_ns,
+                    stamp_ns=sample.stamp_ns,
                     optical_frame_id=pipeline.inventory.optical_frame_id,
                     hand_base_frame_id=pipeline.inventory.hand_base_frame_id,
                     control_tick_id=sample.control_tick_id,
@@ -535,8 +724,8 @@ class DualD405CameraCapture:
                 self._frame_indices[side] += 1
                 self._last_reference[side] = raw.reference_time
                 if self._first_stamp_ns[side] is None:
-                    self._first_stamp_ns[side] = reference_stamp_ns
-                self._last_stamp_ns[side] = reference_stamp_ns
+                    self._first_stamp_ns[side] = sample.stamp_ns
+                self._last_stamp_ns[side] = sample.stamp_ns
         return tuple(sorted(frames, key=lambda item: (item.stamp_ns, item.side)))
 
     def drain_completed(self) -> tuple[SimulationCameraFrame, ...]:
@@ -561,7 +750,7 @@ class DualD405CameraCapture:
             raise ValueError("expected camera frame count must be non-negative")
         if maximum_updates <= 0:
             raise ValueError("maximum shutdown drain updates must be positive")
-        frames = list(self._drain_available())
+        frames = list(self._drain_available(wait_for_pending=True))
         for update_index in range(maximum_updates + 1):
             counts = tuple(self._frame_indices[side] for side in _SIDES)
             if any(count > expected_frames_per_side for count in counts):
@@ -573,7 +762,7 @@ class DualD405CameraCapture:
             if update_index == maximum_updates:
                 break
             update_app()
-            frames.extend(self._drain_available())
+            frames.extend(self._drain_available(wait_for_pending=True))
         raise RuntimeError(
             "D405 in-flight drain did not reach the 30 Hz schedule: "
             f"expected={expected_frames_per_side}, actual={self._frame_indices!r}"
@@ -594,10 +783,12 @@ class DualD405CameraCapture:
             "adapter": SIMULATION_CAMERA_CAPTURE_ADAPTER,
             "stamp_rule": SIMULATION_TIME_STAMP_RULE,
             "warmup_frames_discarded": dict(self._warmup_frames),
-            "post_activation_stale_frames_discarded": dict(
-                self._post_activation_stale_frames
-            ),
+            "post_activation_stale_frames_discarded": dict(self._post_activation_stale_frames),
             "warmup_app_updates": self._warmup_updates,
+            "replay_priming": {
+                "render_updates": self._replay_priming_updates,
+                "discarded_frames": dict(self._replay_priming_discarded_frames),
+            },
             "sides": {
                 side: {
                     "capture_count": self._frame_indices[side],
@@ -624,10 +815,15 @@ class DualD405CameraCapture:
                 pipeline.writer.detach()
             except BaseException as exc:  # preserve all detach attempts
                 errors.append(exc)
+        for pipeline in self._pipelines.values():
+            try:
+                pipeline.sink.close()
+            except BaseException as exc:  # preserve all worker-stop attempts
+                errors.append(exc)
         self._closed = True
         if errors:
             raise RuntimeError(
-                f"failed to detach {len(errors)} synthetic D405 writer(s)"
+                f"failed to close {len(errors)} synthetic D405 capture component(s)"
             ) from errors[0]
 
 
@@ -644,6 +840,30 @@ def reference_time_to_stamp_ns(reference: tuple[int, int]) -> int:
     scaled = numerator * 1_000_000_000
     quotient, remainder = divmod(scaled, denominator)
     return quotient + int(remainder * 2 >= denominator)
+
+
+def scheduled_capture_stamp_ns(
+    *,
+    activation_stamp_ns: int,
+    capture_rate_hz: float,
+    control_tick_id: int,
+) -> int:
+    """Map a completed 30 Hz control phase onto an exact rational time grid."""
+
+    if activation_stamp_ns < 0:
+        raise ValueError("activation stamp must be non-negative")
+    if not math.isfinite(capture_rate_hz) or not capture_rate_hz.is_integer():
+        raise ValueError("capture rate must be a positive integer-valued frequency")
+    rate_hz = int(capture_rate_hz)
+    if rate_hz <= 0:
+        raise ValueError("capture rate must be a positive integer-valued frequency")
+    if control_tick_id < 0 or control_tick_id % 2 != 1:
+        raise ValueError("D405 capture control tick must be a non-negative odd index")
+    activation_grid_index = (activation_stamp_ns * rate_hz + 500_000_000) // 1_000_000_000
+    capture_ordinal = (control_tick_id + 1) // 2
+    scaled = (activation_grid_index + capture_ordinal) * 1_000_000_000
+    quotient, remainder = divmod(scaled, rate_hz)
+    return quotient + int(remainder * 2 >= rate_hz)
 
 
 def nearest_pose_stamp_ns(
@@ -704,14 +924,18 @@ def _reference_time(value: object) -> tuple[int, int]:
 
 
 def _as_numpy(value: object) -> NDArray[np.generic]:
-    if value is None:
-        raise RuntimeError("writer record is missing an annotator payload")
-    payload = value
-    if isinstance(payload, Mapping) and "data" in payload:
-        payload = payload["data"]
+    payload = _annotator_payload(value)
     if hasattr(payload, "numpy"):
         payload = payload.numpy()
     return np.asarray(payload).copy()
+
+
+def _annotator_payload(value: object) -> object:
+    if value is None:
+        raise RuntimeError("writer record is missing an annotator payload")
+    if isinstance(value, Mapping) and "data" in value:
+        return value["data"]
+    return value
 
 
 def _restore_camera_prim_contract(
@@ -726,9 +950,7 @@ def _restore_camera_prim_contract(
 
     xformable = UsdGeom.Xformable(camera_prim)
     xformable.ClearXformOpOrder()
-    xformable.AddTransformOp(UsdGeom.XformOp.PrecisionDouble).Set(
-        authored_local_transform
-    )
+    xformable.AddTransformOp(UsdGeom.XformOp.PrecisionDouble).Set(authored_local_transform)
     camera = UsdGeom.Camera(camera_prim)
     optics = profile.optics
     camera.CreateProjectionAttr(optics.projection)
@@ -761,9 +983,7 @@ def _static_inventory(
         focal_length_mm=float(camera.GetFocalLengthAttr().Get()),
         horizontal_aperture_mm=float(camera.GetHorizontalApertureAttr().Get()),
         vertical_aperture_mm=float(camera.GetVerticalApertureAttr().Get()),
-        horizontal_aperture_offset_mm=float(
-            camera.GetHorizontalApertureOffsetAttr().Get()
-        ),
+        horizontal_aperture_offset_mm=float(camera.GetHorizontalApertureOffsetAttr().Get()),
         vertical_aperture_offset_mm=float(camera.GetVerticalApertureOffsetAttr().Get()),
         clipping_range_m=(float(clipping_range[0]), float(clipping_range[1])),
     )
@@ -932,5 +1152,6 @@ __all__ = [
     "SimulationCameraFrame",
     "SimulationCameraStaticInventory",
     "reference_time_to_stamp_ns",
+    "scheduled_capture_stamp_ns",
     "simulation_seconds_to_stamp_ns",
 ]

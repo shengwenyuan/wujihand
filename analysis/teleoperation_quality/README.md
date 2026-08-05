@@ -3,9 +3,10 @@
 This package is the read-only, offline consumer of immutable ROS 2 teleoperation run
 artifacts. It is intentionally separate from `src/wujihand` and the ROS control graph.
 
-Version `0.2.1` reads both `wujihand.teleoperation_tick_trace.v1` and `.v2`. Version 2 adds
-explicit 120/60/20 scheduler, physics-substep, simulation-time and render facts while keeping
-the existing 20-topic recording profile:
+Version `0.3.0` reads both `wujihand.teleoperation_tick_trace.v1` and `.v2`. It retains the
+explicit 120/60/20 scheduler facts from `0.2.x` and adds fail-closed validation for the dual
+synthetic D405 bundles, deterministic 30 Hz stamps, raw RTX frame identities, CameraInfo,
+dynamic/static TF closure and manifest/receipt calibration provenance:
 
 The ROS wire contracts are separately versioned as `TeleoperationTickTrace` (v1) and
 `TeleoperationTickTraceV2` (v2), so old MCAP payloads remain genuinely deserializable.
@@ -20,6 +21,9 @@ The ROS wire contracts are separately versioned as `TeleoperationTickTrace` (v1)
 - q7/q20 command to applied-q27 composition invariants;
 - post-step simulated joint tracking error;
 - dynamic scene-object trajectory.
+- per-side RGB/depth/CameraInfo/truth bundle counts and completed-frame cadence;
+- dual-camera identity alignment, 640x480 `rgb8`/`32FC1` payloads and finite-depth ratios;
+- hand-base-to-optical static extrinsics plus world-to-hand dynamic TF closure.
 
 It deliberately does not estimate task success, contact quality, fingertip pose, real-hardware
 tracking, normalized cross-chain error or command-feedback lag when the required truth,

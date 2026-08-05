@@ -8,6 +8,11 @@ from typing import Any, cast
 
 import numpy as np
 
+from .camera_integrity import (
+    CameraIntegrityAccumulator,
+    expected_camera_message_type,
+    is_camera_topic,
+)
 from .model import (
     ArmTick,
     BagDataset,
@@ -557,6 +562,9 @@ def _status(
 
 
 def _expected_message_type(topic: str) -> str:
+    camera_type = expected_camera_message_type(topic)
+    if camera_type is not None:
+        return camera_type
     if topic.endswith(("/input/tracker/left/sample", "/input/tracker/right/sample")):
         return "wujihand_interfaces/msg/TrackedRigidBodySample"
     if topic.endswith("/input/tracker/lifecycle"):
@@ -652,6 +660,7 @@ class Ros2BagReader:
         ticks: list[TickRecord] = []
         scenes: list[SceneRecord] = []
         statuses: list[RecordingStatusRecord] = []
+        camera_integrity = CameraIntegrityAccumulator(expected_run_id=expected_run_id)
 
         def decode(topic: str, payload: bytes) -> Any:
             if topic not in decoded_types:
@@ -707,10 +716,23 @@ class Ros2BagReader:
                         expected_run_id=expected_run_id,
                     )
                 )
+            elif is_camera_topic(topic):
+                camera_integrity.observe_camera(
+                    topic,
+                    message,
+                    bag_time_ns=bag_time,
+                )
+            elif topic in {"/tf", "/tf_static"}:
+                camera_integrity.observe_tf(
+                    topic,
+                    message,
+                    bag_time_ns=bag_time,
+                )
             else:
                 _validate_auxiliary(topic, message)
             counters[topic].validated()
 
+        camera_frames, transforms = camera_integrity.finalize(declared_topics=set(topic_types))
         topics = tuple(
             TopicObservation(
                 topic=topic,
@@ -729,6 +751,8 @@ class Ros2BagReader:
             ticks=tuple(ticks),
             scenes=tuple(scenes),
             statuses=tuple(statuses),
+            camera_frames=camera_frames,
+            transforms=transforms,
         )
 
 

@@ -267,8 +267,12 @@ def _state_timeline_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
         matrix = np.zeros((4, 1), dtype=np.float64)
     else:
         minimum = min(len(item) for item in series)
-        matrix = np.vstack([item[:minimum] for item in series])
-        times = times[:minimum]
+        if minimum == 0:
+            times = np.asarray([0.0])
+            matrix = np.zeros((len(routes), 1), dtype=np.float64)
+        else:
+            matrix = np.vstack([item[:minimum] for item in series])
+            times = times[:minimum]
     matrix, times = _downsample_columns(
         matrix,
         times,
@@ -281,12 +285,16 @@ def _state_timeline_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
         constrained_layout=True,
     )
     cmap = ListedColormap(("#BDBDBD", COLORS[1], COLORS[2]))
+    extent_start_s = float(times[0])
+    extent_end_s = float(times[-1])
+    if extent_end_s <= extent_start_s:
+        extent_end_s = extent_start_s + 1.0
     axis.imshow(
         matrix,
         aspect="auto",
         interpolation="nearest",
         origin="upper",
-        extent=(float(times[0]), float(times[-1]), len(routes) - 0.5, -0.5),
+        extent=(extent_start_s, extent_end_s, len(routes) - 0.5, -0.5),
         cmap=cmap,
         vmin=-0.5,
         vmax=2.5,
@@ -544,11 +552,22 @@ def _scene_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
     axes[0].set_ylabel("World y (m)")
     axes[0].set_title("XY trajectory")
     axes[0].axis("equal")
-    axes[0].legend(loc="best")
     axes[1].set_xlabel("Time from first scene sample (s)")
     axes[1].set_ylabel("World position (m)")
     axes[1].set_title("Position components")
-    axes[1].legend(loc="best", fontsize=8)
+    if paths:
+        axes[0].legend(loc="best")
+        axes[1].legend(loc="best", fontsize=8)
+    else:
+        for axis in axes:
+            axis.text(
+                0.5,
+                0.5,
+                "No dynamic rigid-body samples",
+                ha="center",
+                va="center",
+                transform=axis.transAxes,
+            )
     figure.suptitle("Recorded dynamic scene trajectory")
     path = output / "10_scene_trajectory.png"
     _save(figure, path)

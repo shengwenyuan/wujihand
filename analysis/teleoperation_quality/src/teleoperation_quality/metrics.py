@@ -1425,6 +1425,243 @@ def _scene_integrity(
     }
 
 
+def _camera_metrics(
+    artifact: RunArtifact,
+    dataset: BagDataset,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
+    required = any("/wrist_camera/" in topic for topic in artifact.expected_topics) or isinstance(
+        artifact.manifest.get("synthetic_d405_wrist_cameras"),
+        dict,
+    )
+    frames_by_side = {
+        side: sorted(
+            (frame for frame in dataset.camera_frames if frame.side == side),
+            key=lambda frame: frame.camera_frame_index,
+        )
+        for side in ("left", "right")
+    }
+    rows: list[dict[str, Any]] = []
+    derived: list[dict[str, Any]] = []
+    for side, frames in frames_by_side.items():
+        rate = effective_rate_hz([frame.stamp_ns for frame in frames])
+        rows.append(
+            {
+                "side": side,
+                "frame_count": len(frames),
+                "effective_hz": rate,
+                "first_frame_index": (None if not frames else frames[0].camera_frame_index),
+                "last_frame_index": (None if not frames else frames[-1].camera_frame_index),
+                "first_stamp_ns": None if not frames else frames[0].stamp_ns,
+                "last_stamp_ns": None if not frames else frames[-1].stamp_ns,
+                "finite_depth_pixel_ratio": ratio(
+                    sum(frame.finite_depth_pixels for frame in frames),
+                    sum(frame.width_px * frame.height_px for frame in frames),
+                ),
+                "color_payload_bytes": sum(frame.color_payload_bytes for frame in frames),
+                "depth_payload_bytes": sum(frame.depth_payload_bytes for frame in frames),
+            }
+        )
+        for frame in frames:
+            derived.append(
+                {
+                    "side": side,
+                    "camera_frame_index": frame.camera_frame_index,
+                    "stamp_ns": frame.stamp_ns,
+                    "capture_sim_time_s": frame.capture_sim_time_s,
+                    "control_tick_id": frame.control_tick_id,
+                    "physics_substep_index": frame.physics_substep_index,
+                    "color_bag_time_ns": frame.color_bag_time_ns,
+                    "depth_bag_time_ns": frame.depth_bag_time_ns,
+                    "camera_info_bag_time_ns": frame.camera_info_bag_time_ns,
+                    "truth_bag_time_ns": frame.truth_bag_time_ns,
+                    "host_capture_duration_ms": (
+                        frame.host_capture_end_ns - frame.host_capture_start_ns
+                    )
+                    / 1e6,
+                    "finite_depth_pixels": frame.finite_depth_pixels,
+                }
+            )
+
+    transform_rows = [
+        {
+            "kind": "static" if item.static else "dynamic",
+            "stamp_ns": item.stamp_ns,
+            "bag_time_ns": item.bag_time_ns,
+            "parent_frame_id": item.parent_frame_id,
+            "child_frame_id": item.child_frame_id,
+            "parent_from_child_row_major": [
+                value for row in item.parent_from_child for value in row
+            ],
+        }
+        for item in dataset.transforms
+        if item.child_frame_id.endswith(("_hand_base", "_wrist_camera_optical"))
+    ]
+
+    topic_counts = {item.topic: item.count for item in dataset.topics}
+    metadata_counts = {
+        str(entry["topic_metadata"]["name"]): int(entry["message_count"])
+        for entry in artifact.rosbag_metadata["topics_with_message_count"]
+    }
+    per_side_topic_counts: dict[str, dict[str, int]] = {}
+    for side in ("left", "right"):
+        counts: dict[str, int] = {}
+        for kind, suffix in (
+            ("color", "/color/image_raw"),
+            ("depth", "/depth/image_raw"),
+            ("camera_info", "/camera_info"),
+            ("truth", "/frame_truth"),
+        ):
+            matches = [
+                topic
+                for topic in artifact.expected_topics
+                if f"/{side}/wrist_camera" in topic and topic.endswith(suffix)
+            ]
+            counts[kind] = topic_counts.get(matches[0], 0) if len(matches) == 1 else -1
+            if len(matches) == 1 and metadata_counts.get(matches[0]) != counts[kind]:
+                counts[kind] = -1
+        per_side_topic_counts[side] = counts
+    topic_bundle_counts_match = all(
+        all(count == len(frames_by_side[side]) for count in counts.values())
+        for side, counts in per_side_topic_counts.items()
+    )
+
+    receipt_camera = artifact.receipt.get("synthetic_d405_wrist_cameras")
+    receipt_sides = receipt_camera.get("sides") if isinstance(receipt_camera, dict) else None
+    receipt_counts: dict[str, dict[str, int]] = {}
+    for side in ("left", "right"):
+        value = receipt_sides.get(side) if isinstance(receipt_sides, dict) else None
+        receipt_counts[side] = {
+            "capture_count": int(value.get("capture_count", -1)) if isinstance(value, dict) else -1,
+            "publish_count": int(value.get("publish_count", -1)) if isinstance(value, dict) else -1,
+        }
+    expected_frames_per_side = int(artifact.receipt.get("completed_ticks", 0)) // 2
+    receipt_counts_match = all(
+        receipt_counts[side]["capture_count"]
+        == receipt_counts[side]["publish_count"]
+        == len(frames_by_side[side])
+        == expected_frames_per_side
+        for side in ("left", "right")
+    )
+    receipt_closed = isinstance(receipt_camera, dict) and receipt_camera.get("closed") is True
+
+    manifest_camera = artifact.manifest.get("synthetic_d405_wrist_cameras")
+    inventory = manifest_camera.get("cameras") if isinstance(manifest_camera, dict) else None
+    inventory_by_side = (
+        {str(value.get("side")): value for value in inventory if isinstance(value, dict)}
+        if isinstance(inventory, list)
+        else {}
+    )
+    manifest_matches = set(inventory_by_side) == {"left", "right"}
+    if manifest_matches:
+        for side, frames in frames_by_side.items():
+            item = inventory_by_side[side]
+            readback = item.get("api_readback")
+            calibration = item.get("derived_calibration")
+            profile = item.get("profile")
+            capture = profile.get("capture") if isinstance(profile, dict) else None
+            expected_static = item.get("hand_base_from_camera_optical_row_major")
+            if not (
+                isinstance(readback, dict)
+                and isinstance(calibration, dict)
+                and isinstance(capture, dict)
+                and isinstance(expected_static, list)
+                and int(readback.get("width_px", -1)) == 640
+                and int(readback.get("height_px", -1)) == 480
+                and float(capture.get("rate_hz", -1.0)) == 30.0
+            ):
+                manifest_matches = False
+                break
+            for frame in frames:
+                static_flat = [
+                    value for row in frame.hand_base_from_camera_optical for value in row
+                ]
+                if not (
+                    frame.hand_base_frame_id == item.get("parent_frame_id")
+                    and frame.optical_frame_id == item.get("optical_frame_id")
+                    and np.allclose(
+                        frame.k_row_major,
+                        calibration.get("k_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-9,
+                    )
+                    and np.allclose(
+                        frame.d,
+                        calibration.get("d", ()),
+                        rtol=0.0,
+                        atol=1e-12,
+                    )
+                    and np.allclose(
+                        frame.r_row_major,
+                        calibration.get("r_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-12,
+                    )
+                    and np.allclose(
+                        frame.p_row_major,
+                        calibration.get("p_row_major", ()),
+                        rtol=0.0,
+                        atol=1e-9,
+                    )
+                    and np.allclose(
+                        static_flat,
+                        expected_static,
+                        rtol=0.0,
+                        atol=1e-8,
+                    )
+                ):
+                    manifest_matches = False
+                    break
+            if not manifest_matches:
+                break
+
+    dynamic_camera_edges = sum(
+        not item.static
+        and item.parent_frame_id == "world"
+        and item.child_frame_id.endswith("_hand_base")
+        for item in dataset.transforms
+    )
+    static_camera_edges = sum(
+        item.static and item.child_frame_id.endswith("_wrist_camera_optical")
+        for item in dataset.transforms
+    )
+    extrinsic_inventory_matches = (
+        dynamic_camera_edges == len(dataset.camera_frames) and static_camera_edges == 2
+    )
+    dual_identity_aligned = bool(frames_by_side["left"]) and [
+        (frame.camera_frame_index, frame.stamp_ns) for frame in frames_by_side["left"]
+    ] == [(frame.camera_frame_index, frame.stamp_ns) for frame in frames_by_side["right"]]
+    rate_matches = all(
+        row["effective_hz"] is not None
+        and np.isclose(float(row["effective_hz"]), 30.0, rtol=0.0, atol=1e-6)
+        for row in rows
+    )
+    summary = {
+        "required": required,
+        "frame_count_by_side": {side: len(frames) for side, frames in frames_by_side.items()},
+        "expected_frames_per_side": expected_frames_per_side,
+        "topic_counts_by_side": per_side_topic_counts,
+        "topic_bundle_counts_match": topic_bundle_counts_match,
+        "receipt_counts_by_side": receipt_counts,
+        "receipt_counts_match": receipt_counts_match,
+        "receipt_closed": receipt_closed,
+        "manifest_calibration_and_static_extrinsic_match": manifest_matches,
+        "dynamic_camera_tf_edge_count": dynamic_camera_edges,
+        "static_camera_tf_edge_count": static_camera_edges,
+        "extrinsic_inventory_matches": extrinsic_inventory_matches,
+        "dual_completed_frame_identities_align": dual_identity_aligned,
+        "effective_rate_is_30_hz": rate_matches,
+        "reader_fail_closed_integrity_passed": (
+            bool(dataset.camera_frames) if required else not dataset.camera_frames
+        ),
+    }
+    return rows, transform_rows, derived, summary
+
+
 def _capabilities(artifact: RunArtifact) -> list[dict[str, Any]]:
     manifest_capabilities = artifact.manifest.get("capabilities", {})
     rows = (
@@ -1451,6 +1688,14 @@ def _capabilities(artifact: RunArtifact) -> list[dict[str, Any]]:
                 "capability": "offline_q27_composition",
                 "available": True,
                 "detail": "manifest partitions plus applied_target_q27",
+            },
+            {
+                "capability": "offline_synthetic_d405_integrity",
+                "available": isinstance(
+                    artifact.manifest.get("synthetic_d405_wrist_cameras"),
+                    dict,
+                ),
+                "detail": "RGB/depth/CameraInfo/frame_truth plus dynamic/static TF closure",
             },
             {
                 "capability": "offline_command_feedback_lag",
@@ -1578,6 +1823,10 @@ def compute_metrics(
         artifact,
         dataset,
         int(tick_integrity["unique_tick_count"]),
+    )
+    camera_rows, camera_transform_rows, camera_samples, camera_summary = _camera_metrics(
+        artifact,
+        dataset,
     )
     capability_rows = _capabilities(artifact)
 
@@ -1832,6 +2081,26 @@ def compute_metrics(
                 ),
             )
         )
+    if camera_summary["required"]:
+        camera_structural_checks = (
+            "reader_fail_closed_integrity_passed",
+            "topic_bundle_counts_match",
+            "receipt_counts_match",
+            "receipt_closed",
+            "manifest_calibration_and_static_extrinsic_match",
+            "extrinsic_inventory_matches",
+            "dual_completed_frame_identities_align",
+        )
+        for name in camera_structural_checks:
+            gates.append(
+                _gate(
+                    "structural",
+                    f"d405_{name}",
+                    True,
+                    camera_summary[name],
+                    bool(camera_summary[name]),
+                )
+            )
     rate_low = config.expected_control_hz * (1.0 - config.control_rate_tolerance_fraction)
     rate_high = config.expected_control_hz * (1.0 + config.control_rate_tolerance_fraction)
     gates.append(
@@ -1950,6 +2219,17 @@ def compute_metrics(
                 )
             )
 
+    if camera_summary["required"]:
+        gates.append(
+            _gate(
+                "planned_target",
+                "d405_camera_rate",
+                "30 Hz completed-frame identity cadence on both sides",
+                [{"side": row["side"], "effective_hz": row["effective_hz"]} for row in camera_rows],
+                bool(camera_summary["effective_rate_is_30_hz"]),
+            )
+        )
+
     summary = {
         "run_id": artifact.run_id,
         "analysis_window": "full recorded control tick span; no warm-up or task trimming",
@@ -1982,6 +2262,7 @@ def compute_metrics(
         "receipt_inbox_selection_accounted": receipt_selection_accounted,
         "scene_integrity": scene_integrity,
         "scene_object_count": len(scene_rows),
+        "synthetic_d405_wrist_cameras": camera_summary,
         "structural_gates_passed": all(
             row["passed"] for row in gates if row["category"] == "structural"
         ),
@@ -2011,6 +2292,8 @@ def compute_metrics(
         "hand_metrics": tuple(hand_rows),
         "source_skew_metrics": tuple(skew_rows),
         "scene_metrics": tuple(scene_rows),
+        "camera_integrity": tuple(camera_rows),
+        "camera_transforms": tuple(camera_transform_rows),
         "receipt_input_metrics": tuple(receipt_input_rows),
         "receipt_controller_health": tuple(controller_health_rows),
         "capabilities": tuple(capability_rows),
@@ -2024,6 +2307,7 @@ def compute_metrics(
         "source_join_samples": tuple(join_samples),
         "q27_samples": tuple(q27_samples),
         "scene_samples": tuple(scene_samples),
+        "camera_frames": tuple(camera_samples),
     }
     return MetricBundle(summary=summary, tables=tables, derived_tables=derived_tables)
 

@@ -16,6 +16,19 @@ from wujihand.runtime.isaac_d405_camera_capture import (
 )
 
 
+CAMERA_RECTIFICATION_ROW_MAJOR = (
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+)
+
+
 @dataclass(frozen=True, slots=True)
 class SimulationCameraRosMessages:
     color: Any
@@ -71,7 +84,7 @@ def simulation_camera_frame_to_messages(
     camera_info.distortion_model = profile.optics.distortion_model
     camera_info.d = list(profile.optics.distortion_coefficients)
     camera_info.k = list(inventory.calibration.k_row_major)
-    camera_info.r = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]
+    camera_info.r = list(CAMERA_RECTIFICATION_ROW_MAJOR)
     camera_info.p = list(inventory.calibration.p_row_major)
 
     truth = SimulationCameraFrameTruth()
