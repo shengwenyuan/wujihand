@@ -13,10 +13,10 @@ ROOT = Path(__file__).parents[2]
 
 def test_rosbag_input_qos_is_a_projection_of_committed_profile() -> None:
     profile = ConfigRepository(ROOT).load_ros_qos_profile(
-        "configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml"
+        "configs/profiles/ros2_jazzy_dual_teleoperation_d405_qos_v1.yaml"
     )
     projection = yaml.safe_load(
-        (ROOT / "configs/profiles/ros2_jazzy_dual_teleoperation_rosbag_qos_v1.yaml").read_text(
+        (ROOT / "configs/profiles/ros2_jazzy_dual_teleoperation_d405_rosbag_qos_v1.yaml").read_text(
             encoding="utf-8"
         )
     )
@@ -29,6 +29,7 @@ def test_rosbag_input_qos_is_a_projection_of_committed_profile() -> None:
         recording_topics(
             f"/{resolved.deployment.root_namespace}",
             resolved.route_plan,
+            include_synthetic_d405=True,
         )
     )
     for topic, values in projection.items():
@@ -61,4 +62,14 @@ def _channel(topic: str) -> str:
         return "scene_state"
     if topic.endswith("/recording/status"):
         return "run_status"
+    if topic.endswith("/color/image_raw") or topic.endswith("/depth/image_raw"):
+        return "camera_image"
+    if topic.endswith("/camera_info"):
+        return "camera_info"
+    if topic.endswith("/frame_truth"):
+        return "camera_truth"
+    if topic == "/tf":
+        return "tf_dynamic"
+    if topic == "/tf_static":
+        return "tf_static"
     raise AssertionError(f"unmapped recording topic: {topic}")

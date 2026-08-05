@@ -16,35 +16,13 @@ from wujihand.specs import RosDeploymentSpec
 
 
 ROOT = Path(__file__).parents[2]
-ROS_FULL = (
-    ROOT
-    / "configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"
-)
-ROS_ARMS = (
-    ROOT
-    / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_arm_only_live_v2.yaml"
-)
-NATIVE_FULL = (
-    ROOT
-    / "configs/deployments/isaac_nero_hand2_native_dual_live_v1.yaml"
-)
-NATIVE_SESSION = (
-    ROOT
-    / "configs/sessions/isaac_nero_dual_hand2_teleop_v1.yaml"
-)
-DUAL_SESSION = (
-    ROOT / "configs/sessions/isaac_nero_dual_hand2_teleop_v1.yaml"
-)
-QOS = (
-    ROOT
-    / "configs/profiles/ros2_jazzy_dual_teleoperation_qos_v1.yaml"
-)
-LOCAL_EXAMPLE = (
-    ROOT
-    / "configs/examples/"
-    "workstation2_nv5_ros_local_runtime_binding.example.yaml"
-)
+ROS_FULL = ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"
+ROS_ARMS = ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_arm_only_live_v2.yaml"
+NATIVE_FULL = ROOT / "configs/deployments/isaac_nero_hand2_native_dual_live_v1.yaml"
+NATIVE_SESSION = ROOT / "configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_teleop_v1.yaml"
+DUAL_SESSION = ROOT / "configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_teleop_v1.yaml"
+QOS = ROOT / "configs/profiles/ros2_jazzy_dual_teleoperation_d405_qos_v1.yaml"
+LOCAL_EXAMPLE = ROOT / "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
 
 
 def ros_mapping() -> dict[str, Any]:
@@ -76,10 +54,9 @@ def test_committed_ros_v2_contracts_are_strict_and_closed() -> None:
     assert qos.policy("tracker_sample").depth == 1
     assert qos.policy("tracker_sample").deadline_ms is None
     assert qos.policy("tracking_lifecycle").durability == "transient_local"
+    assert qos.policy("camera_truth").depth == 32
     assert local.ros_domain_id == 57
-    assert local.process("isaac_consumer").setup_scripts[-1].endswith(
-        "setup.bash"
-    )
+    assert local.process("isaac_consumer").setup_scripts[-1].endswith("setup.bash")
 
 
 def test_ros_and_native_common_control_projection_match() -> None:
@@ -109,9 +86,7 @@ def test_ros_and_native_common_control_projection_match() -> None:
     ("mutation", "message"),
     (
         (
-            lambda value: value.update(
-                {"execution_owner_process_id": "missing"}
-            ),
+            lambda value: value.update({"execution_owner_process_id": "missing"}),
             "unknown process",
         ),
         (
@@ -119,9 +94,7 @@ def test_ros_and_native_common_control_projection_match() -> None:
             "cover every non-recorder",
         ),
         (
-            lambda value: value["node_bindings"][1].update(
-                {"node_name": "vive_source"}
-            ),
+            lambda value: value["node_bindings"][1].update({"node_name": "vive_source"}),
             "node_name values must be unique",
         ),
         (

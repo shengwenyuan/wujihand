@@ -33,9 +33,7 @@ def _processes(context: object) -> list[object]:
     frames = int(LaunchConfiguration("frames").perform(context))
     record = LaunchConfiguration("record").perform(context).lower() == "true"
     isaac_cpu_affinity = (
-        LaunchConfiguration("isaac_cpu_affinity", default="")
-        .perform(context)
-        .strip()
+        LaunchConfiguration("isaac_cpu_affinity", default="").perform(context).strip()
     )
     if isaac_cpu_affinity:
         parse_cpu_affinity(isaac_cpu_affinity)
@@ -148,6 +146,7 @@ def _processes(context: object) -> list[object]:
         recorder_topics = recording_topics(
             namespace,
             resolved.route_plan,
+            include_synthetic_d405=True,
         )
         recorder_command = [
             "/usr/bin/python3",
@@ -157,7 +156,10 @@ def _processes(context: object) -> list[object]:
             "--run-id",
             current_run_id,
             "--qos-profile",
-            str(project_root / "configs/profiles/ros2_jazzy_dual_teleoperation_rosbag_qos_v1.yaml"),
+            str(
+                project_root / "configs/profiles/"
+                "ros2_jazzy_dual_teleoperation_d405_rosbag_qos_v1.yaml"
+            ),
         ]
         for topic in recorder_topics:
             recorder_command.extend(["--topic", topic])

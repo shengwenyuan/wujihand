@@ -10,6 +10,8 @@ from wujihand.runtime import DualTeleoperationRoutePlan
 def recording_topics(
     namespace: str,
     route_plan: DualTeleoperationRoutePlan,
+    *,
+    include_synthetic_d405: bool = False,
 ) -> tuple[str, ...]:
     """Return the frozen allowlist for one resolved ROS control graph."""
 
@@ -39,6 +41,18 @@ def recording_topics(
             f"{root}/recording/status",
         )
     )
+    if include_synthetic_d405:
+        for side in ("left", "right"):
+            base = f"{root}/{side}/wrist_camera"
+            topics.extend(
+                (
+                    f"{base}/color/image_raw",
+                    f"{base}/depth/image_raw",
+                    f"{base}/camera_info",
+                    f"{base}/frame_truth",
+                )
+            )
+        topics.extend(("/tf", "/tf_static"))
     return _unique(topics)
 
 

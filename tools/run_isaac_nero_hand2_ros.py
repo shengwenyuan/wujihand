@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import gc
 import json
+import math
 from pathlib import Path
 import platform
 import signal
@@ -65,6 +66,12 @@ from wujihand.runtime.isaac_dual_scene import (
     resolve_dual_side_runtimes,
     workcell_frame_position,
 )
+from wujihand.runtime.isaac_d405_camera_capture import (
+    DualD405CameraCapture,
+    POSE_HISTORY_JOIN_TOLERANCE_NS,
+    SimulationCameraFrame,
+    SimulationCameraStaticInventory,
+)
 from wujihand.runtime.isaac_dual_teleoperation import (
     build_dual_teleoperation_application,
 )
@@ -72,21 +79,29 @@ from wujihand.adapters.simulation import (
     load_nero_dual_tabletop_qualification_profile,
     load_nero_link_geometry_alignment,
 )
+from wujihand.adapters.simulation.nero_hand2_self_collision import (
+    load_nero_hand2_self_collision_filter_profile,
+)
 
 
 DEFAULT_DEPLOYMENT = ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv5_ros_v2.yaml"
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
+SELF_COLLISION_FILTER_PATH = (
+    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
+)
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 CONTROL_HZ = 60
 RENDER_HZ = 20
+CONTROL_TICKS_PER_CAPTURE = 2
 GUI_MAXIMUM_CATCH_UP_TICKS = 2
 GUI_BLOCK_ON_RENDER = False
 VIEWPORT_WIDTH = 800
 VIEWPORT_HEIGHT = 500
 ISAAC_RENDERER = "MinimalRendering"
+ISAAC_RECORDING_RENDERER = "RayTracedLighting"
 ISAAC_MINIMAL_SHADING_MODE = 2
 ISAAC_CPU_THREAD_LIMIT = 32
 PYTHON_GC_POLICY = "collect_and_freeze_during_control_v1"
@@ -147,6 +162,7 @@ def parse_args() -> argparse.Namespace:
 
 
 ARGS = parse_args()
+ACTIVE_ISAAC_RENDERER = ISAAC_RECORDING_RENDERER if ARGS.recording_enabled else ISAAC_RENDERER
 try:
     PROCESS_CPU_AFFINITY = configure_current_process_cpu_affinity(ARGS.cpu_affinity)
 except (RuntimeError, ValueError) as exc:
@@ -188,6 +204,7 @@ ALIGNMENT = load_nero_link_geometry_alignment(ALIGNMENT_PATH)
 NERO_LULA_URDF = (ROOT / ALIGNMENT.source_urdf_path).resolve()
 QUALIFICATION_PATH = ROOT / RESOLVED.control_profile.base_qualification.path
 QUALIFICATION = load_nero_dual_tabletop_qualification_profile(QUALIFICATION_PATH)
+SELF_COLLISION_FILTER = load_nero_hand2_self_collision_filter_profile(SELF_COLLISION_FILTER_PATH)
 if not NERO_LULA_DESCRIPTION.is_file():
     raise SystemExit(f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}")
 if sha256_file(NERO_LULA_URDF) != ALIGNMENT.source_urdf_sha256:
@@ -202,7 +219,7 @@ simulation_app = SimulationApp(
         "width": VIEWPORT_WIDTH,
         "height": VIEWPORT_HEIGHT,
         "anti_aliasing": 0,
-        "renderer": ISAAC_RENDERER,
+        "renderer": ACTIVE_ISAAC_RENDERER,
         "minimal_shading_mode": ISAAC_MINIMAL_SHADING_MODE,
         "multi_gpu": False,
         "limit_cpu_threads": ISAAC_CPU_THREAD_LIMIT,
@@ -210,19 +227,25 @@ simulation_app = SimulationApp(
 )
 
 import rclpy  # type: ignore[import-not-found]
+import isaacsim.core.experimental.utils.app as app_utils  # type: ignore[import-not-found]
 from rclpy.duration import Duration  # type: ignore[import-not-found]
 from rclpy.executors import (  # type: ignore[import-not-found]
     SingleThreadedExecutor,
 )
 from rclpy.node import Node  # type: ignore[import-not-found]
 from rclpy.signals import SignalHandlerOptions  # type: ignore[import-not-found]
-from sensor_msgs.msg import JointState  # type: ignore[import-not-found]
+from sensor_msgs.msg import CameraInfo, Image, JointState  # type: ignore[import-not-found]
+from tf2_ros import (  # type: ignore[import-not-found]
+    StaticTransformBroadcaster,
+    TransformBroadcaster,
+)
 from wujihand_interfaces.msg import (  # type: ignore[import-not-found]
     HandObservationEnvelope,
     RunRecordingStatus as RunRecordingStatusMessage,
     RouteCommand,
     SafetyEvent,
     SceneRigidBodyState as SceneRigidBodyStateMessage,
+    SimulationCameraFrameTruth,
     TeleoperationTickTraceV2 as TeleoperationTickTraceMessage,
     TrackedRigidBodySample,
     TrackingLifecycleEvent,
@@ -233,10 +256,13 @@ from isaacsim.core.utils.viewports import (  # type: ignore[import-not-found]
 )
 from wujihand_ros2.conversion import (
     SafetyEventObservation,
+    camera_dynamic_transform,
+    camera_static_transform,
     route_command_from_decision,
     route_command_to_message,
     run_recording_status_to_message,
     safety_event_to_message,
+    simulation_camera_frame_to_messages,
     scene_rigid_body_state_to_message,
     teleoperation_tick_trace_to_message,
 )
@@ -328,6 +354,28 @@ def _wait_for_recording_graph(
         time.sleep(0.05)
 
 
+def _publish_camera_frames(
+    frames: tuple[SimulationCameraFrame, ...],
+    *,
+    inventories: dict[str, SimulationCameraStaticInventory],
+    publishers: dict[str, dict[str, Any]],
+    transform_broadcaster: TransformBroadcaster,
+    counters: Counter[str],
+) -> None:
+    """Publish only identity-joined completed frames on the control thread."""
+
+    for frame in frames:
+        inventory = inventories[frame.side]
+        messages = simulation_camera_frame_to_messages(frame, inventory)
+        transform_broadcaster.sendTransform(camera_dynamic_transform(frame, inventory))
+        side_publishers = publishers[frame.side]
+        side_publishers["color"].publish(messages.color)
+        side_publishers["depth"].publish(messages.depth)
+        side_publishers["camera_info"].publish(messages.camera_info)
+        side_publishers["truth"].publish(messages.truth)
+        counters[f"camera.{frame.side}.published_frames"] += 1
+
+
 def main() -> int:
     scene = DualNeroHand2IsaacScene(
         project_root=ROOT,
@@ -336,11 +384,58 @@ def main() -> int:
         alignment_profile=ALIGNMENT,
         qualification_profile=QUALIFICATION,
         physics_hz=RESOLVED.control_profile.physics_hz,
+        self_collision_sides=frozenset({"left", "right"}),
+        self_collision_filter_profile=SELF_COLLISION_FILTER,
+        wrist_rig_collision_mode="all",
     )
     scene.world.set_block_on_render(GUI_BLOCK_ON_RENDER)
     if bool(scene.world.get_block_on_render()) is not GUI_BLOCK_ON_RENDER:
         raise RuntimeError("Isaac render blocking policy was not applied")
     readiness = _settle(scene)
+    camera_capture: DualD405CameraCapture | None = None
+    camera_warmup: dict[str, object] | None = None
+    if ARGS.recording_enabled:
+        assert ARGS.run_id is not None
+        camera_capture = DualD405CameraCapture(
+            project_root=ROOT,
+            scene=scene,
+            run_id=ARGS.run_id,
+        )
+        camera_warmup = camera_capture.warm_up(
+            update_app=app_utils.update_app,
+            simulation_time_s=lambda: _simulation_time_s(scene),
+        )
+        inventories = camera_capture.inventories
+        camera_rate_hz = inventories[0].profile.capture.rate_hz
+        if any(
+            inventory.profile.capture.rate_hz != camera_rate_hz
+            for inventory in inventories[1:]
+        ):
+            raise RuntimeError("dual D405 capture rates differ")
+        alignment_steps = 0
+        maximum_alignment_steps = inventories[0].profile.schedule.physics_substeps_per_capture
+        for alignment_steps in range(maximum_alignment_steps + 1):
+            phase = _simulation_time_s(scene) * camera_rate_hz
+            if math.isclose(phase, round(phase), rel_tol=0.0, abs_tol=5e-6):
+                break
+            if alignment_steps == maximum_alignment_steps:
+                raise RuntimeError("unable to align D405 activation to a 30 Hz boundary")
+            scene.world.step(render=False)
+        aligned_simulation_time_s = _simulation_time_s(scene)
+        scene.world.render()
+        if not math.isclose(
+            _simulation_time_s(scene),
+            aligned_simulation_time_s,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            raise RuntimeError("D405 activation alignment render changed simulation time")
+        camera_warmup["activation_alignment"] = {
+            "physics_steps": alignment_steps,
+            "simulation_time_s": aligned_simulation_time_s,
+            "camera_phase": aligned_simulation_time_s * camera_rate_hz,
+            "rendered_boundary_before_activation": True,
+        }
     # SimulationApp and rclpy both install process-level handlers by default.
     # The consumer must own SIGINT/SIGTERM so launch cannot bypass the terminal
     # recording status and atomic receipt hand-off.
@@ -463,6 +558,10 @@ def main() -> int:
     trace_publisher = None
     scene_state_publisher = None
     recording_status_publisher = None
+    camera_publishers: dict[str, dict[str, Any]] = {}
+    camera_inventories: dict[str, SimulationCameraStaticInventory] = {}
+    camera_transform_broadcaster: TransformBroadcaster | None = None
+    camera_static_transform_broadcaster: StaticTransformBroadcaster | None = None
     current_run_root: Path | None = None
     current_run_id: str | None = None
     if ARGS.recording_enabled:
@@ -484,6 +583,38 @@ def main() -> int:
             RunRecordingStatusMessage,
             "recording/status",
             qos_profile(RESOLVED.qos_profile.policy("run_status")),
+        )
+        if camera_capture is None:
+            raise RuntimeError("recording mode did not create dual D405 capture")
+        camera_inventories = {inventory.side: inventory for inventory in camera_capture.inventories}
+        for side in ("left", "right"):
+            base = f"{side}/wrist_camera"
+            camera_publishers[side] = {
+                "color": node.create_publisher(
+                    Image,
+                    f"{base}/color/image_raw",
+                    qos_profile(RESOLVED.qos_profile.policy("camera_image")),
+                ),
+                "depth": node.create_publisher(
+                    Image,
+                    f"{base}/depth/image_raw",
+                    qos_profile(RESOLVED.qos_profile.policy("camera_image")),
+                ),
+                "camera_info": node.create_publisher(
+                    CameraInfo,
+                    f"{base}/camera_info",
+                    qos_profile(RESOLVED.qos_profile.policy("camera_info")),
+                ),
+                "truth": node.create_publisher(
+                    SimulationCameraFrameTruth,
+                    f"{base}/frame_truth",
+                    qos_profile(RESOLVED.qos_profile.policy("camera_truth")),
+                ),
+            }
+        camera_transform_broadcaster = TransformBroadcaster(node)
+        camera_static_transform_broadcaster = StaticTransformBroadcaster(node)
+        camera_static_transform_broadcaster.sendTransform(
+            [camera_static_transform(camera_inventories[side]) for side in ("left", "right")]
         )
 
     set_camera_view(
@@ -511,6 +642,8 @@ def main() -> int:
             payload=_run_manifest_payload(
                 scene=scene,
                 recording_opened_ns=recording_opened_ns,
+                camera_capture=camera_capture,
+                camera_warmup=camera_warmup,
             ),
         )
         _wait_for_recording_graph(
@@ -518,8 +651,11 @@ def main() -> int:
             recording_topics(
                 f"/{RESOLVED.deployment.root_namespace}",
                 RESOLVED.route_plan,
+                include_synthetic_d405=True,
             ),
         )
+        assert camera_capture is not None
+        camera_capture.activate(simulation_time_s=_simulation_time_s(scene))
     started_ns = time.monotonic_ns()
     application.start(now_ns=started_ns)
     scene.apply_targets()
@@ -563,6 +699,7 @@ def main() -> int:
     loop_failed = False
     cleanup_error: Exception | None = None
     receipt_error: Exception | None = None
+    camera_capture_receipt: dict[str, object] | None = None
     python_gc_frozen = False
     python_gc_frozen_object_count = 0
     python_gc_unfrozen_on_close = False
@@ -671,8 +808,12 @@ def main() -> int:
             physics_substep_sim_times_s: list[float] = []
             physics_substep_start_ns: list[int] = []
             physics_substep_end_ns: list[int] = []
+            completed_camera_frames: list[SimulationCameraFrame] = []
             render_due = (
                 ARGS.gui and (scheduled_tick.control_index + 1) % CONTROL_TICKS_PER_RENDER == 0
+            )
+            camera_render_due = camera_capture is not None and (
+                (scheduled_tick.control_index + 1) % CONTROL_TICKS_PER_CAPTURE == 0
             )
             render_index = completed_renders if render_due else None
             for substep in range(PHYSICS_SUBSTEPS_PER_CONTROL):
@@ -680,16 +821,49 @@ def main() -> int:
                 physics_substep_start_ns.append(time.monotonic_ns())
                 scene.world.step(render=False)
                 physics_substep_end_ns.append(time.monotonic_ns())
-                physics_substep_sim_times_s.append(_simulation_time_s(scene))
+                physics_substep_sim_time_s = _simulation_time_s(scene)
+                physics_substep_sim_times_s.append(physics_substep_sim_time_s)
+                if camera_capture is not None:
+                    completed_camera_frames.extend(
+                        camera_capture.observe_completed_substep(
+                            control_tick_id=scheduled_tick.control_index,
+                            physics_substep_index=completed_physics_steps,
+                            physics_substep_ordinal=substep,
+                            simulation_time_s=physics_substep_sim_time_s,
+                        )
+                    )
                 completed_physics_steps += 1
             physics_end_ns = time.monotonic_ns()
             simulation_time_after_s = _simulation_time_s(scene)
-            if render_due:
+            if render_due or camera_render_due:
                 # World.step(render=True) advances by rendering_dt and therefore
                 # cannot represent one 120 Hz physics substep. Render separately
                 # so the UI never changes simulation time.
+                render_simulation_time_s = _simulation_time_s(scene)
                 scene.world.render()
-                completed_renders += 1
+                if not math.isclose(
+                    _simulation_time_s(scene),
+                    render_simulation_time_s,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                ):
+                    raise RuntimeError("D405 render changed simulation time")
+                if render_due:
+                    completed_renders += 1
+                if camera_capture is not None:
+                    if camera_render_due:
+                        counters["camera.render_updates"] += 1
+                    completed_camera_frames.extend(camera_capture.drain_completed())
+            if completed_camera_frames:
+                if camera_transform_broadcaster is None:
+                    raise RuntimeError("camera TF broadcaster is missing")
+                _publish_camera_frames(
+                    tuple(completed_camera_frames),
+                    inventories=camera_inventories,
+                    publishers=camera_publishers,
+                    transform_broadcaster=camera_transform_broadcaster,
+                    counters=counters,
+                )
             post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
             for arm_labelled in result.arm_steps:
                 side = arm_labelled.side
@@ -792,6 +966,55 @@ def main() -> int:
         raise
     finally:
         try:
+            if camera_capture is not None:
+                drain_simulation_time_s = _simulation_time_s(scene)
+                expected_camera_frames = completed_frames // CONTROL_TICKS_PER_CAPTURE
+                final_camera_frames = camera_capture.stop_and_drain(
+                    update_app=scene.world.render,
+                    expected_frames_per_side=expected_camera_frames,
+                )
+                if not math.isclose(
+                    _simulation_time_s(scene),
+                    drain_simulation_time_s,
+                    rel_tol=0.0,
+                    abs_tol=1e-9,
+                ):
+                    raise RuntimeError("draining D405 captures changed simulation time")
+                if final_camera_frames:
+                    if camera_transform_broadcaster is None:
+                        raise RuntimeError("camera TF broadcaster is missing during drain")
+                    _publish_camera_frames(
+                        final_camera_frames,
+                        inventories=camera_inventories,
+                        publishers=camera_publishers,
+                        transform_broadcaster=camera_transform_broadcaster,
+                        counters=counters,
+                    )
+                camera_capture.close()
+                camera_capture_receipt = camera_capture.receipt(
+                    publish_counts={
+                        side: counters[f"camera.{side}.published_frames"]
+                        for side in ("left", "right")
+                    }
+                )
+                sides_receipt = camera_capture_receipt["sides"]
+                if not isinstance(sides_receipt, dict):
+                    raise RuntimeError("camera receipt sides mapping is invalid")
+                for side in ("left", "right"):
+                    side_receipt = sides_receipt.get(side)
+                    if (
+                        not isinstance(side_receipt, dict)
+                        or side_receipt.get("capture_count") != expected_camera_frames
+                        or side_receipt.get("publish_count") != expected_camera_frames
+                    ):
+                        raise RuntimeError(
+                            f"{side} D405 capture/publish count differs from 30 Hz schedule"
+                        )
+        except Exception as exc:
+            cleanup_error = exc
+            if failure_reason is None:
+                failure_reason = _bounded_reason(exc)
+        try:
             executor_worker.stop()
         except Exception as exc:
             cleanup_error = exc
@@ -868,6 +1091,7 @@ def main() -> int:
                         stop_signal=stop_request.requested_signal,
                         failure_reason=failure_reason,
                         recording_failure_reason=(recording_failure_reason),
+                        camera_capture_receipt=camera_capture_receipt,
                     ),
                 )
             except Exception as exc:
@@ -908,6 +1132,14 @@ def main() -> int:
         "completed_renders": completed_renders,
         "readiness": readiness,
         "counters": dict(counters),
+        "synthetic_d405_wrist_rigs": {
+            "materialized_sides": [item.side for item in scene.wrist_rigs],
+            "camera_prims": [item.camera_prim_path for item in scene.wrist_rigs],
+            "capture_enabled": False,
+            "data_render_products_created": 0,
+            "camera_publishers_created": 0,
+            "simulation_only_140_degree": True,
+        },
         "input_metrics": {
             **{
                 f"tracker_{side}": {
@@ -1290,7 +1522,11 @@ def _run_manifest_payload(
     *,
     scene: DualNeroHand2IsaacScene,
     recording_opened_ns: int,
+    camera_capture: DualD405CameraCapture | None,
+    camera_warmup: dict[str, object] | None,
 ) -> dict[str, object]:
+    if camera_capture is None or camera_warmup is None:
+        raise RuntimeError("recording manifest requires active D405 camera inventory")
     namespace = f"/{RESOLVED.deployment.root_namespace}"
     return {
         "state": "started",
@@ -1342,7 +1578,7 @@ def _run_manifest_payload(
             "viewport_width": VIEWPORT_WIDTH,
             "viewport_height": VIEWPORT_HEIGHT,
             "anti_aliasing": 0,
-            "renderer": ISAAC_RENDERER,
+            "renderer": ACTIVE_ISAAC_RENDERER,
             "minimal_shading_mode": ISAAC_MINIMAL_SHADING_MODE,
             "multi_gpu": False,
             "cpu_thread_limit": ISAAC_CPU_THREAD_LIMIT,
@@ -1359,9 +1595,17 @@ def _run_manifest_payload(
             "lula_description_sha256": sha256_file(NERO_LULA_DESCRIPTION),
             "lula_urdf_path": str(NERO_LULA_URDF.relative_to(ROOT)),
             "lula_urdf_sha256": sha256_file(NERO_LULA_URDF),
+            "self_collision_filter_path": str(SELF_COLLISION_FILTER_PATH.relative_to(ROOT)),
+            "self_collision_filter_sha256": sha256_file(SELF_COLLISION_FILTER_PATH),
         },
         "recording_inventory": {
-            "topics": list(recording_topics(namespace, RESOLVED.route_plan)),
+            "topics": list(
+                recording_topics(
+                    namespace,
+                    RESOLVED.route_plan,
+                    include_synthetic_d405=True,
+                )
+            ),
             "raw_inputs": (
                 "Tracker SE3 and Glove canonical 21x3 landmarks remain in typed input topics"
             ),
@@ -1377,7 +1621,44 @@ def _run_manifest_payload(
                 "two physics substep indices, host times and simulation times",
                 "target-effective simulation interval and render index",
                 "Workcell dynamic rigid-body state",
+                "dual completed-frame synthetic wrist-camera transactions",
             ],
+        },
+        "synthetic_d405_wrist_cameras": {
+            "simulation_only": True,
+            "warning": (
+                "SIMULATION ONLY: synthetic 140-degree HFOV; not a physical "
+                "RealSense D405 specification or calibration."
+            ),
+            "adapter": "isaac_d405_writer_pose_history_v1",
+            "writer_callback_threading": (
+                "payload_copy_in_writer_callback_publish_on_control_thread_v1"
+            ),
+            "completed_frame_join": {
+                "method": "nearest_reference_time_to_post_substep_pose_history_v1",
+                "rounding_tolerance_ns": POSE_HISTORY_JOIN_TOLERANCE_NS,
+                "fail_closed_outside_tolerance": True,
+            },
+            "warmup": camera_warmup,
+            "cameras": [inventory.to_mapping() for inventory in camera_capture.inventories],
+            "tf_ownership": {
+                "owner": "isaac_consumer",
+                "dynamic_edges": [
+                    "world->wujihand_left_hand_base",
+                    "world->wujihand_right_hand_base",
+                ],
+                "static_edges": [
+                    "wujihand_left_hand_base->wujihand_left_wrist_camera_optical",
+                    "wujihand_right_hand_base->wujihand_right_wrist_camera_optical",
+                ],
+                "world_to_optical_direct_edge": False,
+                "authoritative_dataset_join": "frame_truth",
+            },
+            "storage": {
+                "image_compression": "none",
+                "mcap_compression": "none",
+                "raw_payload_estimate_decimal_mb_s": 129,
+            },
         },
         "scene": {
             **scene.workcell_materialization.to_mapping(),
@@ -1418,6 +1699,9 @@ def _run_manifest_payload(
             "control_schedule_missed_period_counter": True,
             "physics_substep_trace": True,
             "render_trace": True,
+            "synthetic_d405_rgb_depth_camera_info_truth": True,
+            "camera_completed_frame_identity": ("camera_sensor_writer_reference_time_v1"),
+            "camera_pose_history_join": True,
             "sequence_and_join_gap_detection": "offline",
         },
         "privacy": {
@@ -1444,6 +1728,7 @@ def _run_receipt_payload(
     stop_signal: int | None,
     failure_reason: str | None,
     recording_failure_reason: str | None,
+    camera_capture_receipt: dict[str, object] | None,
 ) -> dict[str, object]:
     return {
         "scope": "consumer_and_trace_producer_only",
@@ -1490,6 +1775,7 @@ def _run_receipt_payload(
             },
         },
         "executor": executor_metrics,
+        "synthetic_d405_wrist_cameras": camera_capture_receipt,
         "quality_metrics_computed": False,
     }
 

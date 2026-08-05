@@ -134,7 +134,10 @@ def assert_profile_matches_readback(
         *readback.clipping_range_m,
     )
     if not np.allclose(actual, expected, rtol=0.0, atol=absolute_tolerance):
-        raise ValueError("camera optics readback differs from profile")
+        raise ValueError(
+            "camera optics readback differs from profile: "
+            f"expected={expected!r}, actual={actual!r}"
+        )
     calibration = derive_pinhole_calibration(readback)
     if not math.isclose(
         calibration.horizontal_fov_deg,

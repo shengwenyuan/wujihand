@@ -29,10 +29,7 @@ DEPLOYMENT_NAMES = (
     "isaac_nero_hand2_left_single_live_v1.yaml",
     "isaac_nero_hand2_right_single_live_v1.yaml",
 )
-LOCAL_BINDING_EXAMPLE = (
-    ROOT
-    / "configs/examples/workstation2_nv4_local_device_binding.example.yaml"
-)
+LOCAL_BINDING_EXAMPLE = ROOT / "configs/examples/workstation2_nv4_local_device_binding.example.yaml"
 
 
 def local_binding() -> LocalDeviceBindingSpec:
@@ -91,14 +88,9 @@ def test_nv4_deployments_resolve_around_the_same_five_layer_session(
         local_binding=local_binding(),
     )
 
-    assert resolved.session.session.session_id == (
-        "isaac_nero_dual_hand2_teleop_v1"
-    )
+    assert resolved.session.session.session_id == ("isaac_nero_dual_hand2_d405_wrist_rig_teleop_v1")
     assert resolved.session.session.runtime_role == "teleop_consumer"
-    assert (
-        resolved.session.session.runtime.transport_contract
-        == DUAL_TELEOPERATION_CONTRACT
-    )
+    assert resolved.session.session.runtime.transport_contract == DUAL_TELEOPERATION_CONTRACT
     assert len(resolved.session.session.runtime.control_layouts) == 4
     assert len(resolved.deployment.control_bindings) == 4
     assert resolved.mapping.mapping_id == "vive_tracker_workcell_workstation2"
@@ -118,9 +110,8 @@ def test_live_session_reuses_lower_four_layers_without_mutating_qualification() 
         local_binding=local_binding(),
     ).session
     qualification = resolver.session_resolver.resolve(
-        ROOT
-        / "configs/sessions/"
-        "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
+        ROOT / "configs/sessions/"
+        "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
     )
 
     assert qualification.session.runtime_role == "simulation"
@@ -135,22 +126,12 @@ def test_live_session_reuses_lower_four_layers_without_mutating_qualification() 
         for instance in qualification.instances
     }
     hashes = dict(live.referenced_file_hashes)
-    assert (
-        "configs/profiles/"
-        "isaac_nero_hand2_dual_teleoperation_v1.yaml"
-    ) in hashes
-    assert (
-        "configs/profiles/"
-        "isaac_nero_dual_tabletop_qualification_v1.yaml"
-    ) in hashes
+    assert ("configs/profiles/isaac_nero_hand2_dual_teleoperation_v1.yaml") in hashes
+    assert ("configs/profiles/isaac_nero_dual_tabletop_qualification_v1.yaml") in hashes
     profile = repository.load_dual_teleoperation_profile(
-        live.session.runtime.compatibility_profile
-        or ""
+        live.session.runtime.compatibility_profile or ""
     )
-    assert (
-        profile.transport_contract
-        == DUAL_TELEOPERATION_CONTRACT
-    )
+    assert profile.transport_contract == DUAL_TELEOPERATION_CONTRACT
 
 
 def test_native_deployments_have_explicit_route_ownership() -> None:
@@ -195,14 +176,17 @@ def test_native_deployments_have_explicit_route_ownership() -> None:
         left.session.session_hash,
         right.session.session_hash,
     } == {default.session.session_hash}
-    assert len(
-        {
-            default.deployment_hash,
-            arms_only.deployment_hash,
-            left.deployment_hash,
-            right.deployment_hash,
-        }
-    ) == 4
+    assert (
+        len(
+            {
+                default.deployment_hash,
+                arms_only.deployment_hash,
+                left.deployment_hash,
+                right.deployment_hash,
+            }
+        )
+        == 4
+    )
 
 
 @pytest.mark.parametrize(
@@ -261,17 +245,11 @@ def test_runtime_plan_exposes_four_routes_without_mode_aggregates(
     assert plan.route("hand_right", "finger_joints").side == "right"
     with pytest.raises(KeyError):
         plan.route("nero_left", "finger_joints")
-    assert (
-        resolved.process("isaac_runtime").process.component_id
-        == NATIVE_DUAL_RUNTIME_COMPONENT
-    )
+    assert resolved.process("isaac_runtime").process.component_id == NATIVE_DUAL_RUNTIME_COMPONENT
 
 
 def test_exactly_four_native_deployments_are_committed() -> None:
-    committed = {
-        path.name
-        for path in DEPLOYMENTS.glob("isaac_nero_hand2_*live_v1.yaml")
-    }
+    committed = {path.name for path in DEPLOYMENTS.glob("isaac_nero_hand2_*live_v1.yaml")}
 
     assert committed == set(DEPLOYMENT_NAMES)
 
@@ -304,14 +282,10 @@ def test_resolved_snapshot_redacts_local_identity_and_endpoint() -> None:
 
 
 def test_committed_local_binding_example_is_strictly_parseable() -> None:
-    example = ConfigRepository(ROOT).load_local_device_binding(
-        LOCAL_BINDING_EXAMPLE
-    )
+    example = ConfigRepository(ROOT).load_local_device_binding(LOCAL_BINDING_EXAMPLE)
 
     assert example.binding_id == "workstation2_nv4_v1"
-    assert {
-        process.process_id for process in example.processes
-    } == {"openvr_producer"}
+    assert {process.process_id for process in example.processes} == {"openvr_producer"}
     assert {source.binding_key for source in example.sources} == {
         "tracker_left",
         "tracker_right",
