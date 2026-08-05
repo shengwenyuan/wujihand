@@ -1,6 +1,6 @@
 # ADR-0010：D405 140°纯仿真腕部组件边界
 
-- 状态：已接受，实施中
+- 状态：已接受；2026-08-05 修订 self-collision 生产边界
 - 日期：2026-08-04
 - 前置决策：[ADR-0003：五层 Session 组合](0003-five-layer-session-composition.md)、
   [ADR-0005：NERO 模型来源](0005-nero-model-source-and-provisional-limits.md)、
@@ -45,9 +45,10 @@ RealSense D405 的产品规格或实体标定。D405 上游资料在本功能中
    `swhFrameNumber` 恒为 `0`，不得作为帧身份。
 7. `record=false` 保留 visual、collision 与 Camera prim，但不创建数据 render product；
    `record=true` 才启用双侧 30 Hz 发布和 MCAP 录制。
-8. 碰撞资格验证严格按 C0→C1→C2→C3：既有无 self-collision 基线、仅打开合并 q27
-   articulation self-collision、加入 mount compound collision、最后加入 D405 collision。
-   C1 失败时停止，不得通过全局关闭 self-collision 或静默忽略 contact 继续。
+8. 日常 Isaac、ROS2、static inspector 和 D405 render 入口保持 merged-q27
+   self-collision disabled；mount/D405 collision proxy 仍加载并对外部刚体生效。已有
+   self-collision qualification 工具、profile 与报告作为隔离实验设施保留，不属于 D405
+   发布 Gate，也不证明 Hand 2 internal 或 finger—accessory contact 可用于动态遥操作。
 9. mount/D405 collision 作为 Hand 2 base rigid body 的 compound child shapes；不得新增
    rigid body、MassAPI、joint、articulation root 或 DoF，也不得把有空隙的桁架替换为
    单一大 convex hull。
@@ -92,7 +93,8 @@ S0 证据记录见
 - 普通 Python：v1/v2 schema round-trip、空控制组边界、source lock、左右镜像、相机
   profile、图像转换和 Session 八实例/四控制组合同。
 - Isaac headless：CameraSensor/RtxCamera API、completed-frame identity、K/P provenance、
-  C0—C3、双 q27 root/DoF、质量/惯量不变和 30 Hz capture。
+  self-collision disabled readback、外部 mount/D405 probe、双 q27 root/DoF、质量/惯量不变
+  和 30 Hz capture。
 - Isaac GUI：tabletop 姿态、完整左右装配、接口近景、collision debug 及左右 140°视图。
 - ROS2/MCAP：同帧 join、单父 TF、recorder readiness、finalize、回放、吞吐和离线完整性。
 
@@ -102,4 +104,5 @@ S0 证据记录见
 - 把 `140°` 写成 D405 nominal/calibrated：会误导未来实体部署。
 - 在 USD 使用 `scale=(1,-1,1)`：会引入 reflection、法线和碰撞错误。
 - 同时发布 `hand_base -> optical` 与 `world -> optical`：会形成 TF 双父节点。
-- 先加入相机碰撞再排查 self-collision：无法隔离上游 collision mesh 问题。
+- 把静态 self-collision 报告直接作为动态遥操作发布依据：覆盖不到 tracker 驱动的 q7
+  工作空间与关节限位保持。

@@ -5,17 +5,20 @@
 - 结论：007 S5 通过
 - 正式入口：`tools/run_isaac_nero_hand2_realsense_d405_mount_inspection.py`
 
+> 2026-08-05 修订：当前正式入口保持 merged-q27 self-collision disabled。下述已保存
+> rest/grasp 数值来自修订前报告，仅作为 pause 生命周期与画面历史证据。
+
 ## 构景与姿态合同
 
-CLI 只选择版本化 Session、self-collision profile、`rest/grasp` 和初始视图；不接受
-rear-mount、optical origin、tilt、FOV 或 Hand 2 base transform。默认双手使用 q20 rest；
+CLI 只选择版本化 Session、settling/pose qualification profile、`rest/grasp` 和初始视图；
+不接受 rear-mount、optical origin、tilt、FOV 或 Hand 2 base transform。默认双手使用 q20 rest；
 `--hand-pose grasp` 使用 qualification profile 的同一 representative grasp 规则分别生成
 左右 q20。兼容参数 `--right-hand-pose rest|grasp` 也轴对称地作用于双手，不再单独旋转
 右 Hand 2 base。
 
-两种姿态都保留 tabletop q7、左右两棵 q27 articulation、双侧 self-collision 及最小
-filtered pair，并加载左右各 14 个 mount compound shapes、一个 D405 box 与一个 synthetic
-140° Camera prim。
+两种姿态都保留 tabletop q7、左右两棵 q27 articulation，并加载左右各 14 个 mount
+compound shapes、一个 D405 box 与一个 synthetic 140° Camera prim。当前入口不加载
+self-collision filtered-pair，也不打开 articulation self-collision。
 
 ## 生命周期 Gate
 

@@ -1,6 +1,7 @@
 # 007：双 NERO—Hand 2—v2 Mount—D405 140°纯仿真集成计划
 
-- 状态：已完成（S0—S7 已通过；见
+- 状态：已完成；日常入口保持 merged-q27 self-collision disabled，历史实验与回退原因
+  独立记录；mount/D405 结论见
   [D405 录制、Analyzer 与性能验证](validation/2026-08-05-d405-recording-analyzer-performance.md)）
 - 日期：2026-08-04
 - 范围：Isaac Sim 6.0.1 双侧腕部组件、碰撞、纯仿真相机与 ROS2 录制
@@ -44,8 +45,8 @@ NERO link7 -> Hand 2 base -> v2 mount -> D405 housing -> synthetic optical camer
 | 初始 q7 | 左右 `[∓10°, 45°, 0°, 45°, 90°, 0°, 0°]` | `isaac_nero_dual_tabletop_qualification_v1` 仿真准备位 |
 | NERO—Hand 2 | `[0.023, 0, -0.0235] m + Ry(+90°)` | ADR-0005 simulation-nominal Assembly |
 | static inspector 生命周期 | settle 后 `pause`，再截图/打开 GUI；退出 GUI 后才 `stop` | Isaac 检查入口合同 |
-| self-collision | 先对现有合并 q27 articulation 单独开启并通过 Gate | 用户要求的仿真碰撞阶段 |
-| mount/camera collision | self-collision Gate 通过后才加入 | 用户要求的阶段依赖 |
+| merged-q27 self-collision | 日常 Isaac/ROS2/inspector 入口保持 disabled | 动态遥操作稳定性边界 |
+| mount/camera collision | visual 与 collision proxy 始终加载；只验收外部刚体接触 | 007 配件边界 |
 
 `140°` 与 `640×480` 的组合在当前 pinhole 模型下产生约 `128.226°` 的垂直 FOV。
 代码、配置、日志、manifest、报告和截图说明必须使用明确标识，例如：
@@ -113,6 +114,20 @@ OmniPBR 材质，不影响 articulation、mount 或相机 pose。只要最终外
 只代表 GUI 预览，headless 下不会产生数据相机帧。现有 manifest 也没有双侧活动相机的
 实际 K/D/R/P、分辨率或逐帧外参。该缺口必须在本功能内闭合，不能由 bag 到达时间或
 当前 USD pose 离线猜测。
+
+### 3.5 Self-collision 历史实验与生产回退（2026-08-05）
+
+原 C0—C3 报告仍是固定场景下的历史实验事实，但覆盖范围只有 tabletop q7、rest、慢速
+开合、representative grasp 和外部 probe。tracker 驱动左臂运动的 A/B 与命令回放进一步
+发现：开启 merged-q27 self-collision 时，Hand 2 base 与 NERO terminal collision 可触发
+joint5 反馈越过已声明限位并持续旋转；关闭 self-collision、保留 mount/D405 collision 后，
+command/feedback 保持一致。
+
+因此 007 的生产边界恢复为 merged-q27 self-collision disabled。专用 qualification runner、
+filtered-pair profile 和既有报告保留为独立实验设施；它们不再是 mount/D405 的发布 Gate。
+完整诊断见
+[NERO—Hand 2 self-collision qualification](validation/2026-08-04-nero-hand2-self-collision.md)。
+007 不声明 Hand 2 内部、finger—mount 或 finger—D405 自碰撞已经验收。
 
 ## 4. 五层架构与事实所有权
 
@@ -275,57 +290,25 @@ mount 与 D405 使用稳定、简单的材质，优先 `UsdPreviewSurface` 或�
 
 visual 的 `body_count == 1` 与 collision proxy 的覆盖/间隙是两个独立 Gate，不能互相替代。
 
-## 6. Self-collision 分阶段 Gate
+## 6. 碰撞边界与独立 self-collision 设施
 
-当前每侧 NERO 与 Hand 2 已合并为一棵 q27 articulation。Isaac/PhysX 的
-USD 属性 `physxArticulation:enabledSelfCollisions` 位于合并后的 articulation root
-（通过 `PhysxArticulationAPI.CreateEnabledSelfCollisionsAttr` author）；因此“打开 Hand 2
-self-collision”在实现上会先打开整棵 NERO—Hand 2 q27 的 self-collision，而不是一个
-仍然独立存在的 Hand 2 articulation。
+所有日常 Isaac、ROS2、static inspector 和 D405 render 入口必须显式保持
+`self_collision_sides=frozenset()`；左右 mount compound proxy 与 D405 box 仍以
+`wrist_rig_collision_mode="all"` 加载。007 的碰撞验收限定为：
 
-必须严格按以下顺序实施：
+- 左右 collision prim、数量、hash 与 visual 覆盖关系正确；
+- mount/D405 不新增 rigid body、MassAPI、joint、articulation root 或 DoF；
+- tabletop 初始姿态无配件—桌面非预期穿透；
+- 外部 probe、桌面或任务物体可命中 mount/D405 collision；
+- tracker 驱动时 q7 command/feedback 有界、有限且不越过 profile 限位。
 
-### Gate C0：现有场景基线
+self-collision disabled 时，同一 merged-q27 articulation 内的 Hand 2 internal、
+NERO—Hand 2、finger—mount 与 finger—D405 接触不在 007 验收范围。若未来重新启用，必须在
+独立计划中覆盖动态 q7 工作空间、具体 contact pair、joint-limit 保持和 enabled/disabled
+反事实，不能复用 007 的静态报告直接进入生产。
 
-- 不加载 mount/camera collision；
-- 保持当前 self-collision disabled；
-- 重跑 tabletop qualification、q27 partition、两棵 articulation root 和稳定性基线；
-- 保存 q27、hand-base transform、solver/contact 基线。
-
-### Gate C1：原始 self-collision 单独测试
-
-- 仅把合并 q27 articulation 的 self-collision 打开；
-- 不加入 mount/camera collision；
-- 左右单侧分别测试，再运行双侧；
-- 覆盖 q20 rest、当前 representative power-grasp 和一组缓慢开合轨迹；
-- 记录启动 overlap/contact pair、持续 contact、penetration、solver warning、q27 error、
-  NaN/Inf、articulation root/DoF 变化和静态漂移。
-
-rest 下不得存在未解释的持续穿透或姿态爆炸；grasp 中允许有意的手指接触，但不得出现
-深穿透、发散或错误跨侧 contact。碰撞阈值必须在版本化 qualification profile 中按
-固定 collision mesh 分辨率冻结，不散落在 runner。
-
-如果原始 C1 因 NERO 相邻 link 或上游 Hand 2 collision 的既有重叠失败：
-
-1. 停止，不加入 mount/camera collision；
-2. 输出具体 prim pair、时间、penetration/contact 和截图；
-3. 设计最小的版本化 filtered-pair profile；
-4. 保持 root self-collision 打开，只过滤有证据的固有相邻/重叠 pair；
-5. 重新通过 C1。不得回退为全局关闭，也不得静默忽略 contact。
-
-### Gate C2：加入 mount collision
-
-- 只加入左右 mount compound collision；
-- 重跑 C1 的全部姿态和轨迹；
-- 验证 mount 与手指、NERO terminal、桌面和测试物体的 contact pair；
-- 验证 mount 不引入新 rigid body、joint、root 或 DoF。
-
-### Gate C3：加入 D405 collision
-
-- 加入 D405 box collision；
-- 重跑 rest/grasp/慢速开合与外部物体接触 smoke；
-- 验证相机与手指的自碰撞响应、外部环境碰撞和无初始穿透；
-- C0—C3 的 q27 几何、稳定性和控制 Gate 全部通过后，碰撞集成才算完成。
+仓库继续保留 `tools/qualify_isaac_nero_hand2_self_collision.py`、两个版本化 profile 和历史
+报告，使该能力可隔离复现；任何日常入口都不隐式调用它们。
 
 ## 7. 140°仿真相机与同帧真值
 
@@ -563,11 +546,11 @@ settle 最后一帧保存第一份双 q27、左右 hand-base 与 wrist-rig trans
 
 ### 11.2 Isaac headless
 
-- C0—C3 collision Gate；
 - 始终恰好两棵 q27 articulation、每棵 27 DoF；
-- self-collision 实际 readback 为 enabled；
+- merged-q27 self-collision 实际 readback 为 disabled；
 - 左右各一套 mount visual/collision、D405 visual/collision 和 Camera prim；
 - 无负 scale、无新增 rigid body/root/joint；
+- 外部 probe 可命中 mount 与 D405 collision，且初始姿态无非预期桌面穿透；
 - tabletop q7、q20 rest、hand-base 与 camera transforms 达标；
 - 两侧 140° authored/readback/derived provenance 与最终 K/D/R/P、profile/分辨率一致；
 - headless `record=true` 可产生完整 30 Hz camera frames。
@@ -598,15 +581,15 @@ settle 最后一帧保存第一份双 q27、左右 hand-base 与 wrist-rig trans
 |---|---|---|
 | S0 | ADR/schema、source pin 与 Isaac 6.0.1 camera API spike | passive/sensor、K provenance、payload conversion 与 completed-frame identity 可证明 |
 | S1 | SCAD 双侧导出与 visual/collision 资产 | 左右 body_count、镜像、hash、proxy Gate 通过 |
-| S2 | C0/C1 self-collision 独立资格验证 | 合并 q27 root 保持 enabled 且稳定 |
-| S3 | shared materializer + mount collision | C2 通过，所有入口共享一份实现 |
-| S4 | D405 collision + Camera prim | C3、双侧外观与 140°截图通过 |
+| S2 | self-collision 隔离实验（历史、非发布 Gate） | 设施和证据保留，生产入口保持 disabled |
+| S3 | shared materializer + mount collision | 外部 probe 与 topology Gate 通过，所有入口共享一份实现 |
+| S4 | D405 collision + Camera prim | 外部 probe、双侧外观与 140°截图通过 |
 | S5 | static inspector 与 pause 生命周期 | GUI READY 前后 pose 不变 |
 | S6 | ROS image/info/truth 与 recorder | 同帧合同、MCAP 闭合、headless 30 Hz 通过 |
 | S7 | analyzer、性能与正式文档 | 完整性/60 Hz/吞吐 Gate 通过 |
 
-任何阶段不得越过前一 Gate。特别是 C1 未通过时，不得开始 mount/camera collision；
-同帧 camera truth 未通过时，不得把输出称为正式数据集。
+S2 是保留的独立历史实验，不再阻塞 S3—S7。同帧 camera truth 未通过时，不得把输出称为
+正式数据集；动态遥操作出现 q7 越限或自发旋转时，不得以静态碰撞报告判定通过。
 
 ## 13. 预计修改面
 
@@ -653,9 +636,11 @@ Lula kinematics 或实体设备 adapter。
 
 - 所有日常 NERO 双臂 Isaac/ROS2 默认 Session 均包含左右 v2 mount 与 D405 housing；
 - 左右 visual、compound collision 与 Camera prim 存在，镜像正确，无负 scale；
-- 合并 q27 articulation self-collision 保持 enabled，C0—C3 全通过；
+- 日常入口的 merged-q27 self-collision 保持 disabled；专用实验设施不进入生产调用链；
+- mount/D405 collision 与外部刚体接触有效，且不声明 articulation 内部自碰撞能力；
 - static inspector 使用 pause，双臂不再在窗口打开时恢复全零姿态；native/ROS live GUI
   继续运行既有调度；
+- ROS live 在建立 tracker 零点前同时满足 q27 收敛与 q7 初始 target error Gate；
 - 双侧 `140°`、`640×480 @ 30 Hz` RGB+optical-Z-depth 画面通过人工截图观察；
 - `record=true` 的 RGB/depth/CameraInfo/truth 同帧、外参闭合、MCAP 可回放；
 - `record=false` 不产生 camera 数据渲染负载；

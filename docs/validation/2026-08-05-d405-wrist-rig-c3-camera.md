@@ -5,6 +5,10 @@
 - 结论：007 S4 / Gate C3 通过
 - Session hash：`85cdf69707da499f38fa1ee306524665d78f72b22b69535d9bdc4eaf9395c889`
 
+> 2026-08-05 修订：C3 的 self-collision enabled 结果保留为历史隔离实验；当前 D405
+> render 与生产入口均保持 merged-q27 self-collision disabled。配件 topology、Camera prim、
+> 外部 probe 和截图结论不因此撤销。
+
 ## C3 collision
 
 在 C2 的左右各 14 个 mount compound child shapes 基础上，每侧新增一个 D405 housing box
@@ -39,9 +43,10 @@ shared materializer 为左右 housing 各 author 一个 USD Camera。相机局�
 
 ## headless 截图观察
 
-资格工具在 tabletop q7、双手 q20 rest、双侧 self-collision 与完整 wrist-rig collision
-开启时 settle，然后 `world.pause()`。暂停后仅做 render update，保存 5 张 `640x480`
-截图；渲染前后的双 q27、hand-base 与 Camera world transform 完全一致。
+历史资格报告在 tabletop q7、双手 q20 rest、双侧 self-collision 与完整 wrist-rig collision
+开启时 settle，然后 `world.pause()`。当前工具使用相同姿态与 wrist-rig collision，但保持
+merged-q27 self-collision disabled。暂停后仅做 render update，保存 5 张 `640x480` 截图；
+渲染前后的双 q27、hand-base 与 Camera world transform 必须完全一致。
 
 - 双臂全景：左右 NERO 保持 tabletop 初始姿态，左右 mount 与 D405 均存在；
 - 左右装配近景：flange 连接、四根蓝色连杆、camera plate 与 D405 housing 连续可见；
