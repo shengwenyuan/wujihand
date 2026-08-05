@@ -34,6 +34,8 @@ def test_d405_session_resolves_two_complete_passive_wrist_rigs() -> None:
     assert all(len(rig.mount_collision.primitives) == 14 for rig in rigs)
     assert all(len(rig.camera_collision.primitives) == 1 for rig in rigs)
     assert all(rig.camera_profile_path.name.endswith("wide_angle_140_v1.yaml") for rig in rigs)
+    assert all(rig.camera_profile.optics.horizontal_fov_deg == 140.0 for rig in rigs)
+    assert all(rig.camera_profile.simulation_only for rig in rigs)
     assert all("not a physical RealSense D405" in rig.simulation_warning for rig in rigs)
     assert tuple(
         side.hand_instance_id

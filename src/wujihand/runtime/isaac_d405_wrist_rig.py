@@ -19,8 +19,9 @@ from wujihand.adapters.simulation.d405_wrist_rig_assets import (
     load_stl_triangles,
 )
 from wujihand.integrity import sha256_file
-from wujihand.specs import AttachmentSpec, PoseSpec
+from wujihand.specs import AttachmentSpec, IsaacCameraProfile, PoseSpec
 
+from .config_repository import ConfigRepository
 from .session_resolver import ResolvedInstance, ResolvedSession
 
 
@@ -80,6 +81,7 @@ class D405WristRigRuntime:
     camera_collision_path: Path
     camera_collision_sha256: str
     camera_profile_path: Path
+    camera_profile: IsaacCameraProfile
     body_in_hand: RigidTransform
     optical_in_hand: RigidTransform
     optical_in_body: RigidTransform
@@ -104,6 +106,7 @@ class D405WristRigHandles:
     root_path: str
     mount_visual_path: str
     camera_visual_path: str
+    camera_prim_path: str
     mount_collision_paths: tuple[str, ...]
     camera_collision_paths: tuple[str, ...]
     hand_base_mass_before: MassPropertiesSnapshot
@@ -432,6 +435,10 @@ def resolve_d405_wrist_rig_runtimes(
         mount_collision = cast(Any, mount.collision_artifact)
         camera_visual = cast(Any, camera.artifact)
         camera_collision = cast(Any, camera.collision_artifact)
+        camera_profile_path = (project_root / camera.binding.sensor_profile).resolve()
+        camera_profile = ConfigRepository(project_root).load_isaac_camera_profile(
+            camera_profile_path
+        )
         result.append(
             D405WristRigRuntime(
                 side=side,
@@ -447,7 +454,8 @@ def resolve_d405_wrist_rig_runtimes(
                 camera_visual_sha256=camera_visual.expected_sha256,
                 camera_collision_path=camera_collision.absolute_path,
                 camera_collision_sha256=camera_collision.expected_sha256,
-                camera_profile_path=(project_root / camera.binding.sensor_profile).resolve(),
+                camera_profile_path=camera_profile_path,
+                camera_profile=camera_profile,
                 body_in_hand=RigidTransform(
                     translation_m=_vector3(
                         frames.get("body_translation_in_hand_mm"),
@@ -539,6 +547,22 @@ def _quat_wxyz(rotation: Matrix3) -> tuple[float, float, float, float]:
     return cast(tuple[float, float, float, float], tuple(value / norm for value in values))
 
 
+def _matrix_multiply(left: Matrix3, right: Matrix3) -> Matrix3:
+    return cast(
+        Matrix3,
+        tuple(
+            cast(
+                Vector3,
+                tuple(
+                    sum(left[row][inner] * right[inner][column] for inner in range(3))
+                    for column in range(3)
+                ),
+            )
+            for row in range(3)
+        ),
+    )
+
+
 def _capsule_quat_wxyz(direction: Vector3) -> tuple[float, float, float, float]:
     length = math.sqrt(sum(value * value for value in direction))
     unit = tuple(value / length for value in direction)
@@ -602,6 +626,78 @@ def _author_visual_mesh(
     mesh.GetPrim().CreateAttribute(
         "wujihand:sourceSha256", Sdf.ValueTypeNames.String
     ).Set(expected_sha256)
+    return path
+
+
+def _author_synthetic_camera(
+    stage: Any,
+    *,
+    path: str,
+    runtime: D405WristRigRuntime,
+) -> str:
+    from pxr import Gf, Sdf, UsdGeom
+
+    profile = runtime.camera_profile
+    if (
+        not profile.simulation_only
+        or profile.optics.horizontal_fov_deg != 140.0
+        or "not a physical RealSense D405" not in profile.warning
+    ):
+        raise RuntimeError("D405 Camera prim requires the synthetic 140-degree profile")
+    # SIMULATION ONLY: synthetic 140-degree HFOV; not a physical RealSense
+    # D405 specification or calibration.
+    usd_camera_from_ros_optical: Matrix3 = (
+        (1.0, 0.0, 0.0),
+        (0.0, -1.0, 0.0),
+        (0.0, 0.0, -1.0),
+    )
+    camera = UsdGeom.Camera.Define(stage, path)
+    _set_pose(
+        camera.GetPrim(),
+        RigidTransform(
+            translation_m=runtime.optical_in_body.translation_m,
+            rotation=_matrix_multiply(
+                runtime.optical_in_body.rotation,
+                usd_camera_from_ros_optical,
+            ),
+        ),
+    )
+    optics = profile.optics
+    camera.CreateProjectionAttr(optics.projection)
+    camera.CreateFocalLengthAttr(optics.focal_length_mm)
+    camera.CreateHorizontalApertureAttr(optics.horizontal_aperture_mm)
+    camera.CreateVerticalApertureAttr(optics.vertical_aperture_mm)
+    camera.CreateHorizontalApertureOffsetAttr(optics.horizontal_aperture_offset_mm)
+    camera.CreateVerticalApertureOffsetAttr(optics.vertical_aperture_offset_mm)
+    camera.CreateClippingRangeAttr(Gf.Vec2f(*optics.clipping_range_m))
+    prim = camera.GetPrim()
+    custom = {
+        "wujihand:cameraProfileId": (Sdf.ValueTypeNames.String, profile.profile_id),
+        "wujihand:projectionClassification": (
+            Sdf.ValueTypeNames.String,
+            profile.projection_classification,
+        ),
+        "wujihand:simulationWarning": (Sdf.ValueTypeNames.String, profile.warning),
+        "wujihand:simulationOnly": (Sdf.ValueTypeNames.Bool, True),
+        "wujihand:captureWidthPx": (
+            Sdf.ValueTypeNames.Int,
+            profile.capture.width_px,
+        ),
+        "wujihand:captureHeightPx": (
+            Sdf.ValueTypeNames.Int,
+            profile.capture.height_px,
+        ),
+        "wujihand:captureRateHz": (
+            Sdf.ValueTypeNames.Double,
+            profile.capture.rate_hz,
+        ),
+        "wujihand:opticalFrameConvention": (
+            Sdf.ValueTypeNames.String,
+            "ros_optical_x_right_y_down_z_forward",
+        ),
+    }
+    for name, (value_type, value) in custom.items():
+        prim.CreateAttribute(name, value_type).Set(value)
     return path
 
 
@@ -729,6 +825,11 @@ def materialize_isaac_d405_wrist_rigs(
             expected_sha256=runtime.camera_visual_sha256,
             color=(0.08, 0.09, 0.105),
         )
+        camera_prim_path = _author_synthetic_camera(
+            stage,
+            path=f"{root_path}/D405Housing/OpticalCamera",
+            runtime=runtime,
+        )
         mount_collision_paths = (
             _author_collision_proxy(
                 stage,
@@ -756,6 +857,7 @@ def materialize_isaac_d405_wrist_rigs(
                 root_path=root_path,
                 mount_visual_path=mount_visual_path,
                 camera_visual_path=camera_visual_path,
+                camera_prim_path=camera_prim_path,
                 mount_collision_paths=mount_collision_paths,
                 camera_collision_paths=camera_collision_paths,
                 hand_base_mass_before=mass_before,

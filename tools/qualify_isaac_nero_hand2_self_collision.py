@@ -20,6 +20,11 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from wujihand.adapters.simulation.isaac_camera import (
+    IsaacCameraApiReadback,
+    assert_profile_matches_readback,
+    derive_pinhole_calibration,
+)
 from wujihand.adapters.simulation.nero_hand2_self_collision import (
     load_nero_hand2_self_collision_filter_profile,
     load_nero_hand2_self_collision_qualification_profile,
@@ -312,7 +317,11 @@ def _run_external_probe_smoke(
     start_frame: int,
 ) -> int:
     for handles in scene.wrist_rigs:
-        target_path = handles.mount_collision_paths[0]
+        target_path = (
+            handles.camera_collision_paths[0]
+            if handles.camera_collision_paths
+            else handles.mount_collision_paths[0]
+        )
         target = _world_transform(scene.stage, target_path)["translation_m"]
         probes[handles.side].set_world_poses(
             positions=np.asarray([target], dtype=np.float64),
@@ -325,6 +334,90 @@ def _run_external_probe_smoke(
         scene.world.step(render=False)
     scene.world.pause()
     return frames
+
+
+def _camera_prim_readback(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
+    result: dict[str, object] = {}
+    runtimes = {runtime.side: runtime for runtime in scene.wrist_rig_runtimes}
+    for handles in scene.wrist_rigs:
+        runtime = runtimes[handles.side]
+        prim = scene.stage.GetPrimAtPath(handles.camera_prim_path)
+        if not prim.IsValid() or not prim.IsA(UsdGeom.Camera):
+            raise RuntimeError(f"{handles.side} synthetic Camera prim is missing")
+        camera = UsdGeom.Camera(prim)
+        readback = IsaacCameraApiReadback(
+            width_px=int(prim.GetAttribute("wujihand:captureWidthPx").Get()),
+            height_px=int(prim.GetAttribute("wujihand:captureHeightPx").Get()),
+            projection=str(camera.GetProjectionAttr().Get()),
+            focal_length_mm=float(camera.GetFocalLengthAttr().Get()),
+            horizontal_aperture_mm=float(camera.GetHorizontalApertureAttr().Get()),
+            vertical_aperture_mm=float(camera.GetVerticalApertureAttr().Get()),
+            horizontal_aperture_offset_mm=float(
+                camera.GetHorizontalApertureOffsetAttr().Get()
+            ),
+            vertical_aperture_offset_mm=float(
+                camera.GetVerticalApertureOffsetAttr().Get()
+            ),
+            clipping_range_m=cast(
+                tuple[float, float],
+                tuple(float(value) for value in camera.GetClippingRangeAttr().Get()),
+            ),
+        )
+        assert_profile_matches_readback(
+            runtime.camera_profile,
+            readback,
+            absolute_tolerance=1e-4,
+        )
+        calibration = derive_pinhole_calibration(readback)
+        custom = {
+            "camera_profile_id": prim.GetAttribute("wujihand:cameraProfileId").Get(),
+            "projection_classification": prim.GetAttribute(
+                "wujihand:projectionClassification"
+            ).Get(),
+            "simulation_warning": prim.GetAttribute(
+                "wujihand:simulationWarning"
+            ).Get(),
+            "simulation_only": prim.GetAttribute("wujihand:simulationOnly").Get(),
+            "capture_rate_hz": prim.GetAttribute("wujihand:captureRateHz").Get(),
+            "optical_frame_convention": prim.GetAttribute(
+                "wujihand:opticalFrameConvention"
+            ).Get(),
+        }
+        expected_custom = {
+            "camera_profile_id": runtime.camera_profile.profile_id,
+            "projection_classification": (
+                runtime.camera_profile.projection_classification
+            ),
+            "simulation_warning": runtime.camera_profile.warning,
+            "simulation_only": True,
+            "capture_rate_hz": runtime.camera_profile.capture.rate_hz,
+            "optical_frame_convention": "ros_optical_x_right_y_down_z_forward",
+        }
+        if custom != expected_custom:
+            raise RuntimeError(f"{handles.side} Camera prim metadata differs")
+        result[handles.side] = {
+            "prim_path": handles.camera_prim_path,
+            "custom": custom,
+            "readback": {
+                "resolution": [readback.width_px, readback.height_px],
+                "projection": readback.projection,
+                "focal_length_mm": readback.focal_length_mm,
+                "horizontal_aperture_mm": readback.horizontal_aperture_mm,
+                "vertical_aperture_mm": readback.vertical_aperture_mm,
+                "horizontal_aperture_offset_mm": (
+                    readback.horizontal_aperture_offset_mm
+                ),
+                "vertical_aperture_offset_mm": (
+                    readback.vertical_aperture_offset_mm
+                ),
+                "clipping_range_m": list(readback.clipping_range_m),
+                "horizontal_fov_deg": calibration.horizontal_fov_deg,
+                "vertical_fov_deg": calibration.vertical_fov_deg,
+                "k_row_major": list(calibration.k_row_major),
+                "p_row_major": list(calibration.p_row_major),
+            },
+        }
+    return result
 
 
 def _self_collision_readback(scene: DualNeroHand2IsaacScene) -> dict[str, bool]:
@@ -489,6 +582,7 @@ def main() -> int:
     scene.apply_arm_drive_gains(scene.partitions)
     readback = _self_collision_readback(scene)
     runtime_body_properties = _runtime_body_properties(scene)
+    camera_prim_readback = _camera_prim_readback(scene)
     mass_baseline_matches, mass_baseline = _mass_baseline_check(
         requested_sides=requested_sides,
         session_hash=resolved.session_hash,
@@ -762,11 +856,29 @@ def main() -> int:
             for handles in scene.wrist_rigs
         ),
         "runtime_body_mass_properties_match_c1_baseline": mass_baseline_matches,
+        "camera_prims_match_synthetic_140_profiles": (
+            len(camera_prim_readback) == len(scene.wrist_rigs)
+            and all(
+                math.isclose(
+                    float(
+                        cast(Mapping[str, object], values["readback"])[
+                            "horizontal_fov_deg"
+                        ]
+                    ),
+                    140.0,
+                    rel_tol=0.0,
+                    abs_tol=1e-4,
+                )
+                for values in cast(
+                    Mapping[str, Mapping[str, object]], camera_prim_readback
+                ).values()
+            )
+        ),
         "wrist_rig_adds_no_rigid_mass_joint_or_root": not cast(
             list[str],
             wrist_rig_physics_inventory["forbidden_rigid_mass_joint_root_paths"],
         ),
-        "external_mount_contact_smoke_passes": (
+        "external_accessory_contact_smoke_passes": (
             len(external_probe_contact_pairs) == len(scene.wrist_rigs)
             if ARGS.wrist_rig_collision_mode != "none"
             else True
@@ -834,6 +946,7 @@ def main() -> int:
                 "root_path": handles.root_path,
                 "mount_visual_path": handles.mount_visual_path,
                 "camera_visual_path": handles.camera_visual_path,
+                "camera_prim_path": handles.camera_prim_path,
                 "mount_collision_paths": list(handles.mount_collision_paths),
                 "camera_collision_paths": list(handles.camera_collision_paths),
                 "authored_mass_properties_before": {
@@ -850,6 +963,7 @@ def main() -> int:
             for handles in scene.wrist_rigs
         ],
         "runtime_body_properties": runtime_body_properties,
+        "camera_prim_readback": camera_prim_readback,
         "mass_baseline": mass_baseline,
         "wrist_rig_physics_inventory": wrist_rig_physics_inventory,
         "external_probe_contact_pairs": external_probe_contact_pairs,
