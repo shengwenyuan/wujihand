@@ -16,9 +16,6 @@ def test_static_inspector_preflight_owns_the_complete_dual_rig_contract() -> Non
             "configs/sessions/"
             "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
         ),
-        filter_profile_path=(
-            "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
-        ),
         qualification_profile_path=(
             "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
         ),
@@ -28,7 +25,6 @@ def test_static_inspector_preflight_owns_the_complete_dual_rig_contract() -> Non
     assert plan.resolved.session.runtime.transport_contract is None
     assert tuple(rig.side for rig in plan.wrist_rigs) == ("left", "right")
     assert plan.self_collision_qualification.physics_hz == 120
-    assert len(plan.self_collision_filter.filtered_pairs) == 1
     assert all(rig.camera_profile.simulation_only for rig in plan.wrist_rigs)
     assert all(rig.camera_profile.optics.horizontal_fov_deg == 140.0 for rig in plan.wrist_rigs)
 

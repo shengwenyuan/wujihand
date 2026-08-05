@@ -16,11 +16,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SESSION = Path(
-    "configs/sessions/"
-    "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
-)
-DEFAULT_FILTER_PROFILE = Path(
-    "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
+    "configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
 )
 PERSPECTIVE_CAMERA_PATH = "/OmniverseKit_Persp"
 
@@ -29,7 +25,6 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--session", type=Path, default=DEFAULT_SESSION)
-    parser.add_argument("--filter-profile", type=Path, default=DEFAULT_FILTER_PROFILE)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--physics-hz", type=int, default=120)
     parser.add_argument("--settle-frames", type=int, default=240)
@@ -47,9 +42,6 @@ PROJECT_ROOT = ARGS.project_root.expanduser().resolve()
 OUTPUT_DIR = ARGS.output_dir.expanduser().resolve()
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from wujihand.adapters.simulation.nero_hand2_self_collision import (
-    load_nero_hand2_self_collision_filter_profile,
-)
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
     load_nero_link_geometry_alignment,
 )
@@ -70,7 +62,6 @@ def _project_file(path: Path) -> Path:
 
 
 SESSION_PATH = _project_file(ARGS.session)
-FILTER_PROFILE_PATH = _project_file(ARGS.filter_profile)
 RESOLVED = SessionResolver(PROJECT_ROOT).resolve(SESSION_PATH, verify_artifacts=True)
 SIDES = resolve_dual_side_runtimes(PROJECT_ROOT, RESOLVED)
 ALIGNMENT_REFS = {
@@ -85,7 +76,6 @@ if QUALIFICATION_REF is None:
 QUALIFICATION_PATH = _project_file(Path(QUALIFICATION_REF))
 ALIGNMENT = load_nero_link_geometry_alignment(ALIGNMENT_PATH)
 QUALIFICATION = load_nero_dual_tabletop_qualification_profile(QUALIFICATION_PATH)
-FILTER_PROFILE = load_nero_hand2_self_collision_filter_profile(FILTER_PROFILE_PATH)
 
 from isaacsim import SimulationApp
 
@@ -131,9 +121,7 @@ def _world_transform(stage: Any, prim_path: str) -> list[list[float]]:
 
 def _state_snapshot(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
     return {
-        "q27": {
-            side: scene.feedback_q27(side).tolist() for side in ("left", "right")
-        },
+        "q27": {side: scene.feedback_q27(side).tolist() for side in ("left", "right")},
         "hand_base_world": {
             side: _world_transform(scene.stage, scene.authored[side].config.child_base_link_path)
             for side in ("left", "right")
@@ -216,15 +204,12 @@ def main() -> int:
             alignment_profile=ALIGNMENT,
             qualification_profile=QUALIFICATION,
             physics_hz=ARGS.physics_hz,
-            self_collision_sides=frozenset({"left", "right"}),
-            self_collision_filter_profile=FILTER_PROFILE,
+            self_collision_sides=frozenset(),
             wrist_rig_collision_mode="all",
         )
         for frame in range(ARGS.settle_frames):
             scene.apply_targets()
-            scene.world.step(
-                render=frame >= ARGS.settle_frames - ARGS.render_settle_frames
-            )
+            scene.world.step(render=frame >= ARGS.settle_frames - ARGS.render_settle_frames)
         scene.world.pause()
         before = _state_snapshot(scene)
         screenshots: dict[str, object] = {}
@@ -254,6 +239,7 @@ def main() -> int:
         report = {
             "schema": "wujihand.isaac_d405_wrist_rig_s4_render_report.v1",
             "passed": _stable(before, after),
+            "self_collision_policy": "merged_q27_disabled",
             "session": {
                 "path": str(SESSION_PATH),
                 "sha256": sha256_file(SESSION_PATH),

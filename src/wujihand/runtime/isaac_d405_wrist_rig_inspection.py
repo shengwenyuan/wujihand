@@ -9,9 +9,7 @@ from typing import Any, Literal, cast
 import numpy as np
 
 from wujihand.adapters.simulation.nero_hand2_self_collision import (
-    NeroHand2SelfCollisionFilterProfile,
     NeroHand2SelfCollisionQualificationProfile,
-    load_nero_hand2_self_collision_filter_profile,
     load_nero_hand2_self_collision_qualification_profile,
 )
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
@@ -48,14 +46,12 @@ class D405WristRigInspectionPlan:
 
     project_root: Path
     session_path: Path
-    filter_profile_path: Path
     qualification_profile_path: Path
     resolved: ResolvedSession
     sides: tuple[DualSideRuntime, DualSideRuntime]
     wrist_rigs: tuple[D405WristRigRuntime, D405WristRigRuntime]
     alignment: NeroLinkGeometryAlignment
     tabletop: NeroDualTabletopQualificationProfile
-    self_collision_filter: NeroHand2SelfCollisionFilterProfile
     self_collision_qualification: NeroHand2SelfCollisionQualificationProfile
 
 
@@ -85,9 +81,7 @@ class D405WristRigInspection:
         prim = self.scene.stage.GetPrimAtPath(path)
         if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
             raise RuntimeError(f"invalid Hand 2 inspection frame: {path}")
-        transform = UsdGeom.XformCache(Usd.TimeCode.Default()).GetLocalToWorldTransform(
-            prim
-        )
+        transform = UsdGeom.XformCache(Usd.TimeCode.Default()).GetLocalToWorldTransform(prim)
         point = transform.Transform(Gf.Vec3d(*local_point_m))
         return cast(
             tuple[float, float, float],
@@ -109,7 +103,6 @@ def preflight_d405_wrist_rig_inspection(
     *,
     project_root: str | Path,
     session_path: str | Path,
-    filter_profile_path: str | Path,
     qualification_profile_path: str | Path,
     verify_artifacts: bool = True,
 ) -> D405WristRigInspectionPlan:
@@ -119,7 +112,6 @@ def preflight_d405_wrist_rig_inspection(
     if not root.is_dir():
         raise FileNotFoundError(root)
     session = _project_file(root, session_path)
-    filter_path = _project_file(root, filter_profile_path)
     qualification_path = _project_file(root, qualification_profile_path)
     resolved = SessionResolver(root).resolve(
         session,
@@ -139,23 +131,21 @@ def preflight_d405_wrist_rig_inspection(
     ):
         raise RuntimeError("inspection Session must contain left and right D405 wrist rigs")
     alignment_refs = {
-        resolved.instance(side.arm_instance_id).binding.compatibility_profile
-        for side in sides
+        resolved.instance(side.arm_instance_id).binding.compatibility_profile for side in sides
     }
     if None in alignment_refs or len(alignment_refs) != 1:
         raise RuntimeError("both NERO bindings must share one geometry alignment profile")
     tabletop_ref = resolved.session.runtime.compatibility_profile
     if tabletop_ref is None:
         raise RuntimeError("inspection Session lacks a tabletop qualification profile")
-    self_collision_qualification = (
-        load_nero_hand2_self_collision_qualification_profile(qualification_path)
+    self_collision_qualification = load_nero_hand2_self_collision_qualification_profile(
+        qualification_path
     )
     if self_collision_qualification.physics_hz != 120:
         raise RuntimeError("static inspector requires the qualified 120 Hz physics rate")
     return D405WristRigInspectionPlan(
         project_root=root,
         session_path=session,
-        filter_profile_path=filter_path,
         qualification_profile_path=qualification_path,
         resolved=resolved,
         sides=sides,
@@ -163,12 +153,7 @@ def preflight_d405_wrist_rig_inspection(
         alignment=load_nero_link_geometry_alignment(
             _project_file(root, cast(str, alignment_refs.pop()))
         ),
-        tabletop=load_nero_dual_tabletop_qualification_profile(
-            _project_file(root, tabletop_ref)
-        ),
-        self_collision_filter=load_nero_hand2_self_collision_filter_profile(
-            filter_path
-        ),
+        tabletop=load_nero_dual_tabletop_qualification_profile(_project_file(root, tabletop_ref)),
         self_collision_qualification=self_collision_qualification,
     )
 
@@ -185,14 +170,10 @@ def inspection_state_snapshot(scene: DualNeroHand2IsaacScene) -> dict[str, objec
         if not prim.IsValid() or not prim.IsA(UsdGeom.Xformable):
             raise RuntimeError(f"inspection transform prim disappeared: {path}")
         matrix = cache.GetLocalToWorldTransform(prim)
-        return [
-            [float(matrix[row][column]) for column in range(4)] for row in range(4)
-        ]
+        return [[float(matrix[row][column]) for column in range(4)] for row in range(4)]
 
     return {
-        "q27": {
-            side: scene.feedback_q27(side).tolist() for side in ("left", "right")
-        },
+        "q27": {side: scene.feedback_q27(side).tolist() for side in ("left", "right")},
         "hand_base_world": {
             side: transform(scene.authored[side].config.child_base_link_path)
             for side in ("left", "right")
@@ -201,8 +182,7 @@ def inspection_state_snapshot(scene: DualNeroHand2IsaacScene) -> dict[str, objec
             handles.side: transform(handles.root_path) for handles in scene.wrist_rigs
         },
         "camera_world": {
-            handles.side: transform(handles.camera_prim_path)
-            for handles in scene.wrist_rigs
+            handles.side: transform(handles.camera_prim_path) for handles in scene.wrist_rigs
         },
     }
 
@@ -227,8 +207,7 @@ def materialize_d405_wrist_rig_inspection(
         alignment_profile=plan.alignment,
         qualification_profile=plan.tabletop,
         physics_hz=plan.self_collision_qualification.physics_hz,
-        self_collision_sides=frozenset({"left", "right"}),
-        self_collision_filter_profile=plan.self_collision_filter,
+        self_collision_sides=frozenset(),
         wrist_rig_collision_mode="all",
     )
     for side in ("left", "right"):

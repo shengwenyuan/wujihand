@@ -18,9 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SESSION = Path(
     "configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
 )
-DEFAULT_FILTER_PROFILE = Path(
-    "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
-)
 DEFAULT_QUALIFICATION_PROFILE = Path(
     "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
 )
@@ -31,7 +28,6 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", type=Path, default=ROOT)
     parser.add_argument("--session", type=Path, default=DEFAULT_SESSION)
-    parser.add_argument("--filter-profile", type=Path, default=DEFAULT_FILTER_PROFILE)
     parser.add_argument(
         "--qualification-profile",
         type=Path,
@@ -103,7 +99,6 @@ from wujihand.runtime.isaac_d405_wrist_rig_inspection import (
 PLAN = preflight_d405_wrist_rig_inspection(
     project_root=PROJECT_ROOT,
     session_path=ARGS.session,
-    filter_profile_path=ARGS.filter_profile,
     qualification_profile_path=ARGS.qualification_profile,
 )
 
@@ -358,6 +353,7 @@ def main() -> int:
             "schema": "wujihand.isaac_d405_wrist_rig_static_inspection_report.v1",
             "passed": all(checks.values()),
             "hand_pose": inspection.hand_pose,
+            "self_collision_policy": "merged_q27_disabled",
             "initial_view": ARGS.initial_view,
             "active_camera": active_camera,
             "session": {

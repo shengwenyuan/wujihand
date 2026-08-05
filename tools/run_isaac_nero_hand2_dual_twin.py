@@ -98,9 +98,6 @@ DEFAULT_SESSION = (
 DEFAULT_DEPLOYMENT = ROOT / "configs/deployments/isaac_nero_hand2_native_dual_live_v1.yaml"
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv4_v1.yaml"
 DEFAULT_TRACKER_MAPPING = ROOT / "configs/calibrations/vive_tracker_workcell_workstation2.yaml"
-SELF_COLLISION_FILTER_PATH = (
-    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
-)
 
 
 def parse_args() -> argparse.Namespace:
@@ -423,9 +420,6 @@ from wujihand.adapters.simulation import (
     load_nero_dual_tabletop_qualification_profile,
     load_nero_link_geometry_alignment,
 )
-from wujihand.adapters.simulation.nero_hand2_self_collision import (
-    load_nero_hand2_self_collision_filter_profile,
-)
 from wujihand.adapters.simulation.nero_model import (
     NERO_JOINT_NAMES,
     NeroModelProfile,
@@ -656,7 +650,6 @@ TABLETOP_PROFILE_PATH = ROOT / (
     else NATIVE_PROFILE.base_qualification.path
 )
 TABLETOP_PROFILE = load_nero_dual_tabletop_qualification_profile(TABLETOP_PROFILE_PATH)
-SELF_COLLISION_FILTER = load_nero_hand2_self_collision_filter_profile(SELF_COLLISION_FILTER_PATH)
 
 
 def _set_world_pose(prim: Any, pose: Pose) -> None:
@@ -2724,8 +2717,7 @@ def main() -> int:
         alignment_profile=ALIGNMENT_PROFILE,
         qualification_profile=TABLETOP_PROFILE,
         physics_hz=PHYSICS_HZ,
-        self_collision_sides=frozenset({"left", "right"}),
-        self_collision_filter_profile=SELF_COLLISION_FILTER,
+        self_collision_sides=frozenset(),
         wrist_rig_collision_mode="all",
     )
     world = scene.world
