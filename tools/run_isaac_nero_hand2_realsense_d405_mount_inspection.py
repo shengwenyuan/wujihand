@@ -8,6 +8,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import traceback
 from typing import cast
 
 import numpy as np
@@ -15,8 +16,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SESSION = Path(
-    "configs/sessions/"
-    "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
+    "configs/sessions/isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
 )
 DEFAULT_FILTER_PROFILE = Path(
     "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
@@ -205,9 +205,7 @@ def _capture_exploded_interface(
         copy_prim = inspection.scene.stage.GetPrimAtPath(copy_path)
         xformable = UsdGeom.Xformable(copy_prim)
         xformable.ClearXformOpOrder()
-        xformable.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
-            Gf.Vec3d(-0.20, 0.0, 0.0)
-        )
+        xformable.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(-0.20, 0.0, 0.0))
         sign = -1.0 if side == "left" else 1.0
         eye = inspection.hand_base_point_world_m(side, (-0.20, sign * 0.03, 0.09))
         target = inspection.hand_base_point_world_m(side, (-0.20, sign * 0.02, 0.0))
@@ -218,7 +216,12 @@ def _capture_exploded_interface(
             target_m=target,
         )
     finally:
-        inspection.scene.stage.RemovePrim(copy_path)
+        # Isaac 6.0.1 invalidates every deprecated Articulation physics view
+        # when any stage prim is deleted. Keep this inspection-only copy in the
+        # transient stage and hide it; the stage is discarded when Kit closes.
+        copy_prim = inspection.scene.stage.GetPrimAtPath(copy_path)
+        if copy_prim.IsValid():
+            UsdGeom.Imageable(copy_prim).MakeInvisible()
 
 
 def _set_collision_debug(
@@ -265,9 +268,7 @@ def _select_initial_view(
         return PERSPECTIVE_CAMERA_PATH
     side = ARGS.initial_view.removesuffix("-optical")
     camera_path = next(
-        handles.camera_prim_path
-        for handles in inspection.scene.wrist_rigs
-        if handles.side == side
+        handles.camera_prim_path for handles in inspection.scene.wrist_rigs if handles.side == side
     )
     viewport.camera_path = camera_path
     return camera_path
@@ -277,9 +278,7 @@ def _render_acceptance_screenshots(
     inspection: D405WristRigInspection,
 ) -> dict[str, object]:
     screenshots: dict[str, object] = {}
-    handles_by_side = {
-        handles.side: handles for handles in inspection.scene.wrist_rigs
-    }
+    handles_by_side = {handles.side: handles for handles in inspection.scene.wrist_rigs}
     if inspection.hand_pose == "grasp":
         for side in ("left", "right"):
             screenshots[f"{side}_optical_grasp_140"] = _capture(
@@ -343,15 +342,12 @@ def main() -> int:
             "two_q27_roots_preserved": len(inspection.scene.root_paths_before_reset) == 2,
             "both_wrist_rigs_present": len(inspection.scene.wrist_rigs) == 2,
             "selected_pose_is_axis_symmetric": all(
-                inspection.scene.hand_targets[side].shape == (20,)
-                for side in ("left", "right")
+                inspection.scene.hand_targets[side].shape == (20,) for side in ("left", "right")
             ),
             "settled_to_pause_state_unchanged": (
                 inspection.settled_snapshot == inspection.paused_snapshot
             ),
-            "render_only_updates_preserve_state": (
-                inspection.paused_snapshot == before_gui_ready
-            ),
+            "render_only_updates_preserve_state": (inspection.paused_snapshot == before_gui_ready),
             "timeline_is_paused_not_stopped": (
                 not timeline.is_playing() and not timeline.is_stopped()
             ),
@@ -409,6 +405,12 @@ def main() -> int:
             simulation_app.update()
             completed += 1
         return 0
+    except BaseException:
+        # Isaac's fast shutdown can terminate before Python's default exception
+        # hook runs. Emit the original failure while Kit is still alive.
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
     finally:
         if inspection is not None:
             inspection.scene.world.stop()

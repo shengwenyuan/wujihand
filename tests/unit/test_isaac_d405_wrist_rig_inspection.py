@@ -6,6 +6,7 @@ from wujihand.runtime.isaac_d405_wrist_rig_inspection import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TOOL = ROOT / "tools/run_isaac_nero_hand2_realsense_d405_mount_inspection.py"
 
 
 def test_static_inspector_preflight_owns_the_complete_dual_rig_contract() -> None:
@@ -29,7 +30,12 @@ def test_static_inspector_preflight_owns_the_complete_dual_rig_contract() -> Non
     assert plan.self_collision_qualification.physics_hz == 120
     assert len(plan.self_collision_filter.filtered_pairs) == 1
     assert all(rig.camera_profile.simulation_only for rig in plan.wrist_rigs)
-    assert all(
-        rig.camera_profile.optics.horizontal_fov_deg == 140.0
-        for rig in plan.wrist_rigs
-    )
+    assert all(rig.camera_profile.optics.horizontal_fov_deg == 140.0 for rig in plan.wrist_rigs)
+
+
+def test_static_inspector_preserves_articulation_views_during_exploded_capture() -> None:
+    source = TOOL.read_text(encoding="utf-8")
+
+    assert "RemovePrim" not in source
+    assert "MakeInvisible" in source
+    assert "traceback.print_exc" in source

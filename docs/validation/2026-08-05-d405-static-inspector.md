@@ -41,9 +41,10 @@ hand-base、wrist-rig root 与 Camera world transform 完全一致。最终 q27 
 
 rest 运行保存双臂全景、左右装配外侧近景、左右 exploded flange 接口、左右 140° optical
 frame 和左右 collision debug，共 9 张。exploded 接口图清楚显示每侧两个圆孔和两个 45°
-胶囊 key；它只是暂停后的临时视觉副本，保存后立即从 stage 移除，不改变正式装配。collision
-debug 将 mount compound 标为橙色、D405 box 标为半透明绿色，可辨认桁架空隙没有被单一 hull
-填满。
+胶囊 key；它只是 transient stage 中的临时视觉副本，保存后立即隐藏，不改变正式装配。
+Isaac 6.0.1 会在运行期删除任意 prim 时使 deprecated Articulation physics view 失效，因此
+副本随 Kit stage 一并销毁。collision debug 将 mount compound 标为橙色、D405 box 标为
+半透明绿色，可辨认桁架空隙没有被单一 hull 填满。
 
 grasp 运行只补左右两张 140° optical frame，避免重复 rest 已覆盖的结构截图。左右画面保持
 镜像，拇指/食指根部与少量手背可见，主要 workspace 仍未被遮挡；不对图像做人为旋转。
