@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -16,11 +18,15 @@ from .camera_integrity import (
 from .model import (
     ArmTick,
     BagDataset,
+    DatasetBoundaryRecord,
+    DatasetKinematicLinkRecord,
+    DatasetRigidBodyRecord,
     GloveSample,
     HandTick,
     RecordingStatusRecord,
     SceneRecord,
     Side,
+    SimulationStateRecord,
     SourceRef,
     StageTimes,
     TickExecution,
@@ -60,6 +66,8 @@ TICK_MESSAGE_V1 = "wujihand_interfaces/msg/TeleoperationTickTrace"
 TICK_MESSAGE_V2 = "wujihand_interfaces/msg/TeleoperationTickTraceV2"
 SCENE_SCHEMA = "wujihand.scene_rigid_body_state.v1"
 STATUS_SCHEMA = "wujihand.run_recording_status.v1"
+DATASET_BOUNDARY_SCHEMA = "wujihand.dataset_episode_boundary.v1"
+SIMULATION_STATE_SCHEMA = "wujihand.simulation_state_frame.v1"
 ROUTE_COMMAND_SCHEMA = "wujihand.ros_route_command.v1"
 SAFETY_EVENT_SCHEMA = "wujihand.ros_safety_event.v1"
 LANDMARK_LAYOUT = "mediapipe.hand_landmarks.v1"
@@ -561,6 +569,229 @@ def _status(
     )
 
 
+def _dataset_boundary(
+    message: Any,
+    *,
+    bag_time_ns: int,
+    expected_run_id: str,
+) -> DatasetBoundaryRecord:
+    _require_schema(message, DATASET_BOUNDARY_SCHEMA)
+    _require_run(message, expected_run_id)
+    _require_host_clock(message)
+    if str(message.episode_id) != expected_run_id:
+        raise ValueError("dataset boundary episode_id must equal run_id")
+    has_index = bool(message.has_control_index)
+    if has_index != bool(message.has_tick_id):
+        raise ValueError("dataset boundary control/tick optionals differ")
+    control_index = int(message.control_index) if has_index else None
+    tick_id = int(message.tick_id) if has_index else None
+    if control_index != tick_id:
+        raise ValueError("dataset boundary control/tick indices differ")
+    simulation_time_s = (
+        _non_negative_float(message.simulation_time_s, field="boundary simulation time")
+        if bool(message.has_simulation_time)
+        else None
+    )
+    requested_signal = int(message.requested_signal) if bool(message.has_requested_signal) else None
+    final_index = (
+        int(message.effective_final_control_index)
+        if bool(message.has_effective_final_control_index)
+        else None
+    )
+    return DatasetBoundaryRecord(
+        bag_time_ns=bag_time_ns,
+        run_id=str(message.run_id),
+        episode_id=str(message.episode_id),
+        collection_id=str(message.collection_id),
+        event=str(message.event),
+        reason=str(message.reason),
+        host_time_ns=_non_negative_int(message.host_time_ns, field="boundary host time"),
+        control_index=control_index,
+        tick_id=tick_id,
+        simulation_time_s=simulation_time_s,
+        recorder_ready=bool(message.recorder_ready),
+        inputs_ready=bool(message.inputs_ready),
+        references_ready=bool(message.references_ready),
+        scene_settled=bool(message.scene_settled),
+        source_mode=str(message.source_mode),
+        dataset_eligible=bool(message.dataset_eligible),
+        requested_signal=requested_signal,
+        effective_final_control_index=final_index,
+    )
+
+
+def _dataset_rigid_body(message: Any) -> DatasetRigidBodyRecord:
+    quaternion = _vector(message.quat_wxyz, 4, field="rigid body quaternion")
+    valid = bool(message.valid)
+    if valid and not np.isclose(np.linalg.norm(quaternion), 1.0, rtol=0.0, atol=1e-6):
+        raise ValueError("valid rigid body quaternion must be normalized")
+    if not valid and any(quaternion):
+        raise ValueError("invalid rigid body quaternion must use a zero sentinel")
+    return DatasetRigidBodyRecord(
+        logical_object_id=str(message.logical_object_id),
+        prim_path=str(message.prim_path),
+        position_m=cast(
+            tuple[float, float, float],
+            _vector(message.position_m, 3, field="rigid body position"),
+        ),
+        quat_wxyz=cast(tuple[float, float, float, float], quaternion),
+        linear_velocity_m_s=cast(
+            tuple[float, float, float],
+            _vector(message.linear_velocity_m_s, 3, field="rigid body linear velocity"),
+        ),
+        angular_velocity_rad_s=cast(
+            tuple[float, float, float],
+            _vector(message.angular_velocity_rad_s, 3, field="rigid body angular velocity"),
+        ),
+        sleeping=bool(message.sleeping) if bool(message.has_sleeping) else None,
+        kinematic=bool(message.kinematic),
+        valid=valid,
+    )
+
+
+def _dataset_link(message: Any) -> DatasetKinematicLinkRecord:
+    quaternion = _vector(message.quat_wxyz, 4, field="kinematic link quaternion")
+    valid = bool(message.valid)
+    if valid and not np.isclose(np.linalg.norm(quaternion), 1.0, rtol=0.0, atol=1e-6):
+        raise ValueError("valid kinematic link quaternion must be normalized")
+    if not valid and any(quaternion):
+        raise ValueError("invalid kinematic link quaternion must use a zero sentinel")
+    return DatasetKinematicLinkRecord(
+        side=_side(message.side),
+        logical_link_id=str(message.logical_link_id),
+        prim_path=str(message.prim_path),
+        position_m=cast(
+            tuple[float, float, float],
+            _vector(message.position_m, 3, field="kinematic link position"),
+        ),
+        quat_wxyz=cast(tuple[float, float, float, float], quaternion),
+        valid=valid,
+    )
+
+
+def _rigid_mapping(record: DatasetRigidBodyRecord) -> dict[str, object]:
+    return {
+        "logical_object_id": record.logical_object_id,
+        "prim_path": record.prim_path,
+        "position_m": list(record.position_m),
+        "quat_wxyz": list(record.quat_wxyz),
+        "linear_velocity_m_s": list(record.linear_velocity_m_s),
+        "angular_velocity_rad_s": list(record.angular_velocity_rad_s),
+        "sleeping": record.sleeping,
+        "kinematic": record.kinematic,
+        "valid": record.valid,
+    }
+
+
+def _link_mapping(record: DatasetKinematicLinkRecord) -> dict[str, object]:
+    return {
+        "side": record.side,
+        "logical_link_id": record.logical_link_id,
+        "prim_path": record.prim_path,
+        "position_m": list(record.position_m),
+        "quat_wxyz": list(record.quat_wxyz),
+        "valid": record.valid,
+    }
+
+
+def _simulation_state(
+    message: Any,
+    *,
+    bag_time_ns: int,
+    expected_run_id: str,
+) -> SimulationStateRecord:
+    _require_schema(message, SIMULATION_STATE_SCHEMA)
+    _require_run(message, expected_run_id)
+    if str(message.episode_id) != expected_run_id:
+        raise ValueError("simulation state episode_id must equal run_id")
+    conventions = {
+        "state_source_api": "isaac_articulation_usd_physics_v1",
+        "world_frame_id": "world",
+        "quaternion_order": "wxyz",
+        "joint_position_unit": "rad",
+        "joint_velocity_unit": "rad_s",
+        "angular_velocity_unit": "rad_s",
+    }
+    if any(str(getattr(message, key)) != value for key, value in conventions.items()):
+        raise ValueError("simulation state coordinate or unit convention differs")
+    control_index = _non_negative_int(message.control_index, field="state control index")
+    tick_id = _non_negative_int(message.tick_id, field="state tick id")
+    if control_index != tick_id:
+        raise ValueError("simulation state control/tick indices differ")
+    phase = str(message.phase)
+    if phase not in {"pre_action", "post_action"}:
+        raise ValueError("simulation state phase differs")
+    q54 = _vector(message.q54_rad, 54, field="state q54")
+    qdot54 = _vector(message.qdot54_rad_s, 54, field="state qdot54")
+    bodies = tuple(_dataset_rigid_body(item) for item in message.rigid_bodies)
+    links = tuple(_dataset_link(item) for item in message.kinematic_links)
+    expected_bodies = _non_negative_int(
+        message.expected_rigid_body_count,
+        field="expected rigid body count",
+    )
+    expected_links = _non_negative_int(
+        message.expected_kinematic_link_count,
+        field="expected kinematic link count",
+    )
+    if len(bodies) != expected_bodies or len(links) != expected_links:
+        raise ValueError("simulation state inventory count differs")
+    if len({item.logical_object_id for item in bodies}) != len(bodies):
+        raise ValueError("simulation state rigid body IDs are duplicated")
+    if len({(item.side, item.logical_link_id) for item in links}) != len(links):
+        raise ValueError("simulation state kinematic link IDs are duplicated")
+    simulation_time = _non_negative_float(
+        message.simulation_time_s,
+        field="state simulation time",
+    )
+    physics_boundary = _non_negative_int(
+        message.physics_boundary_index,
+        field="state physics boundary",
+    )
+    payload = {
+        "run_id": str(message.run_id),
+        "episode_id": str(message.episode_id),
+        "control_index": control_index,
+        "tick_id": tick_id,
+        "phase": phase,
+        "simulation_time_s": simulation_time,
+        "physics_boundary_index": physics_boundary,
+        **conventions,
+        "q54_rad": list(q54),
+        "qdot54_rad_s": list(qdot54),
+        "rigid_bodies": [_rigid_mapping(item) for item in bodies],
+        "kinematic_links": [_link_mapping(item) for item in links],
+        "expected_rigid_body_count": expected_bodies,
+        "expected_kinematic_link_count": expected_links,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    if str(message.payload_digest_sha256) != digest:
+        raise ValueError("simulation state payload digest differs")
+    return SimulationStateRecord(
+        bag_time_ns=bag_time_ns,
+        run_id=str(message.run_id),
+        episode_id=str(message.episode_id),
+        control_index=control_index,
+        tick_id=tick_id,
+        phase=phase,
+        simulation_time_s=simulation_time,
+        physics_boundary_index=physics_boundary,
+        q54_rad=q54,
+        qdot54_rad_s=qdot54,
+        rigid_bodies=bodies,
+        kinematic_links=links,
+        expected_rigid_body_count=expected_bodies,
+        expected_kinematic_link_count=expected_links,
+        payload_digest_sha256=digest,
+    )
+
+
 def _expected_message_type(topic: str) -> str:
     camera_type = expected_camera_message_type(topic)
     if camera_type is not None:
@@ -583,6 +814,10 @@ def _expected_message_type(topic: str) -> str:
         return "wujihand_interfaces/msg/SceneRigidBodyState"
     if topic.endswith("/recording/status"):
         return "wujihand_interfaces/msg/RunRecordingStatus"
+    if topic.endswith("/dataset/episode_boundary"):
+        return "wujihand_interfaces/msg/DatasetEpisodeBoundary"
+    if topic.endswith("/dataset/simulation_state"):
+        return "wujihand_interfaces/msg/SimulationStateFrame"
     raise ValueError(f"the analyzer has no schema contract for topic {topic!r}")
 
 
@@ -660,6 +895,8 @@ class Ros2BagReader:
         ticks: list[TickRecord] = []
         scenes: list[SceneRecord] = []
         statuses: list[RecordingStatusRecord] = []
+        dataset_boundaries: list[DatasetBoundaryRecord] = []
+        simulation_states: list[SimulationStateRecord] = []
         camera_integrity = CameraIntegrityAccumulator(expected_run_id=expected_run_id)
 
         def decode(topic: str, payload: bytes) -> Any:
@@ -716,6 +953,26 @@ class Ros2BagReader:
                         expected_run_id=expected_run_id,
                     )
                 )
+            elif topic.endswith("/dataset/episode_boundary"):
+                if expected_run_id is None:
+                    raise ValueError("expected_run_id is required for dataset boundaries")
+                dataset_boundaries.append(
+                    _dataset_boundary(
+                        message,
+                        bag_time_ns=bag_time,
+                        expected_run_id=expected_run_id,
+                    )
+                )
+            elif topic.endswith("/dataset/simulation_state"):
+                if expected_run_id is None:
+                    raise ValueError("expected_run_id is required for simulation states")
+                simulation_states.append(
+                    _simulation_state(
+                        message,
+                        bag_time_ns=bag_time,
+                        expected_run_id=expected_run_id,
+                    )
+                )
             elif is_camera_topic(topic):
                 camera_integrity.observe_camera(
                     topic,
@@ -751,6 +1008,8 @@ class Ros2BagReader:
             ticks=tuple(ticks),
             scenes=tuple(scenes),
             statuses=tuple(statuses),
+            dataset_boundaries=tuple(dataset_boundaries),
+            simulation_states=tuple(simulation_states),
             camera_frames=camera_frames,
             transforms=transforms,
         )

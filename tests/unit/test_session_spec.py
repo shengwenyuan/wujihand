@@ -55,6 +55,21 @@ def test_session_round_trip_and_mapping_lookup() -> None:
     assert session.mount_for("right_hand") == "right_mount"
 
 
+def test_session_v2_owns_dataset_profile_without_launch_level_camera_args() -> None:
+    value = _session()
+    value["schema"] = "wujihand.session.v2"
+    value["dataset_profile"] = _ref(
+        "configs/profiles/mini_dataset.yaml",
+        "mini_dataset_v1",
+    )
+
+    session = SessionSpec.from_mapping(value)
+
+    assert session.dataset_profile is not None
+    assert session.dataset_profile.expected_id == "mini_dataset_v1"
+    assert SessionSpec.from_mapping(session.to_mapping()) == session
+
+
 def test_session_rejects_extra_keys_invalid_role_and_unsafe_ref() -> None:
     extra = _session()
     extra["camera"] = "default"

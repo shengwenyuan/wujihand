@@ -1,0 +1,43 @@
+schema: wujihand.dataset_camera_profile.v1
+profile_id: isaac_d435i_scene_synthetic_rgb_90_v1
+status: simulation_design_pending_isaac_api_readback
+logical_role: scene_rgb
+carrier_identity: intel_realsense_d435i
+simulation_only: true
+physical_calibration_compatible: false
+warning: "SIMULATION ONLY: synthetic 90-degree scene RGB lens carried by a D435i model; not a physical D435i specification or calibration."
+projection_classification: synthetic_scene_rgb_90_simulation_only
+capture:
+  width_px: 640
+  height_px: 480
+  rate_hz: 30.0
+  warmup_frames: 8
+optics:
+  projection: perspective
+  lens_model: pinhole
+  horizontal_fov_deg: 90.0
+  focal_length_mm: 10.0
+  horizontal_aperture_mm: 20.0
+  vertical_aperture_mm: 15.0
+  horizontal_aperture_offset_mm: 0.0
+  vertical_aperture_offset_mm: 0.0
+  clipping_range_m: [0.02, 5.0]
+  pixel_geometry_convention: usd_aperture_to_ros_raster_v1
+  distortion_model: plumb_bob
+  distortion_coefficients: [0.0, 0.0, 0.0, 0.0, 0.0]
+payload:
+  annotator: rgb
+  source_shape: [480, 640, 4]
+  source_dtype: uint8
+  source_encoding: RGBA
+  output_encoding: rgb8
+schedule:
+  capture_phase: offline_fixed_state_pre_action
+  control_ticks_per_capture: 2
+  completed_frame_identity: completed_render_product_reference_time_v1
+provenance:
+  design_scope: synthetic_scene_composition_not_physical_intrinsics
+  physical_model_reference: d435i_carrier_identity_only
+  official_source_id: d400_datasheet_2026_03
+  official_source_url: https://www.realsenseai.com/wp-content/uploads/2026/03/RealSense-D400-Series-Datasheet-Mar-2026.pdf
+  qualification_required: isaac_6_0_1_camera_api_readback_and_projection_marker

@@ -30,10 +30,14 @@ from .tracking import (
     tracked_sample_to_message,
 )
 from .recording import (
+    dataset_episode_boundary_from_message,
+    dataset_episode_boundary_to_message,
     run_recording_status_from_message,
     run_recording_status_to_message,
     scene_rigid_body_state_from_message,
     scene_rigid_body_state_to_message,
+    simulation_state_frame_from_message,
+    simulation_state_frame_to_message,
     teleoperation_tick_trace_from_message,
     teleoperation_tick_trace_to_message,
 )
@@ -48,6 +52,8 @@ __all__ = [
     "SimulationCameraRosMessages",
     "camera_dynamic_transform",
     "camera_static_transform",
+    "dataset_episode_boundary_from_message",
+    "dataset_episode_boundary_to_message",
     "hand_envelope_from_message",
     "hand_envelope_to_message",
     "lifecycle_event_from_message",
@@ -62,6 +68,8 @@ __all__ = [
     "simulation_camera_frame_to_messages",
     "scene_rigid_body_state_from_message",
     "scene_rigid_body_state_to_message",
+    "simulation_state_frame_from_message",
+    "simulation_state_frame_to_message",
     "teleoperation_tick_trace_from_message",
     "teleoperation_tick_trace_to_message",
     "tracked_sample_from_message",

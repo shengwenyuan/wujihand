@@ -188,6 +188,70 @@ class RecordingStatusRecord:
     host_time_ns: int
 
 
+@dataclass(frozen=True, slots=True)
+class DatasetBoundaryRecord:
+    bag_time_ns: int
+    run_id: str
+    episode_id: str
+    collection_id: str
+    event: str
+    reason: str
+    host_time_ns: int
+    control_index: int | None
+    tick_id: int | None
+    simulation_time_s: float | None
+    recorder_ready: bool
+    inputs_ready: bool
+    references_ready: bool
+    scene_settled: bool
+    source_mode: str
+    dataset_eligible: bool
+    requested_signal: int | None
+    effective_final_control_index: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetRigidBodyRecord:
+    logical_object_id: str
+    prim_path: str
+    position_m: tuple[float, float, float]
+    quat_wxyz: tuple[float, float, float, float]
+    linear_velocity_m_s: tuple[float, float, float]
+    angular_velocity_rad_s: tuple[float, float, float]
+    sleeping: bool | None
+    kinematic: bool
+    valid: bool
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetKinematicLinkRecord:
+    side: Side
+    logical_link_id: str
+    prim_path: str
+    position_m: tuple[float, float, float]
+    quat_wxyz: tuple[float, float, float, float]
+    valid: bool
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationStateRecord:
+    bag_time_ns: int
+    run_id: str
+    episode_id: str
+    control_index: int
+    tick_id: int
+    phase: str
+    simulation_time_s: float
+    physics_boundary_index: int
+    q54_rad: tuple[float, ...]
+    qdot54_rad_s: tuple[float, ...]
+    rigid_bodies: tuple[DatasetRigidBodyRecord, ...]
+    kinematic_links: tuple[DatasetKinematicLinkRecord, ...]
+    expected_rigid_body_count: int
+    expected_kinematic_link_count: int
+    payload_digest_sha256: str
+
+
 Matrix4 = tuple[
     tuple[float, float, float, float],
     tuple[float, float, float, float],
@@ -250,5 +314,7 @@ class BagDataset:
     ticks: tuple[TickRecord, ...]
     scenes: tuple[SceneRecord, ...]
     statuses: tuple[RecordingStatusRecord, ...]
+    dataset_boundaries: tuple[DatasetBoundaryRecord, ...] = ()
+    simulation_states: tuple[SimulationStateRecord, ...] = ()
     camera_frames: tuple[CameraFrameRecord, ...] = ()
     transforms: tuple[TransformRecord, ...] = ()

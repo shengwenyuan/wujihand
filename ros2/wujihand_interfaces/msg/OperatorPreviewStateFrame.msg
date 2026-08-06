@@ -1,0 +1,23 @@
+# Unrecorded operator-preview transport. Keep this layout compatible with
+# SimulationStateFrame while allowing every articulation link to be replayed.
+string<=128 schema
+string<=128 run_id
+string<=128 episode_id
+uint64 control_index
+uint64 tick_id
+string<=32 phase
+float64 simulation_time_s
+uint64 physics_boundary_index
+string<=128 state_source_api
+string<=128 world_frame_id
+string<=32 quaternion_order
+string<=32 joint_position_unit
+string<=32 joint_velocity_unit
+string<=32 angular_velocity_unit
+float64[54] q54_rad
+float64[54] qdot54_rad_s
+DatasetRigidBodyTruth[<=32] rigid_bodies
+DatasetKinematicLinkTruth[<=128] kinematic_links
+uint32 expected_rigid_body_count
+uint32 expected_kinematic_link_count
+string<=64 payload_digest_sha256

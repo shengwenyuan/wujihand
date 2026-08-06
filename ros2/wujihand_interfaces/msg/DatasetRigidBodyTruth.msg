@@ -1,0 +1,10 @@
+string<=128 logical_object_id
+string<=512 prim_path
+float64[3] position_m
+float64[4] quat_wxyz
+float64[3] linear_velocity_m_s
+float64[3] angular_velocity_rad_s
+bool has_sleeping
+bool sleeping
+bool kinematic
+bool valid

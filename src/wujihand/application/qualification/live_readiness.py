@@ -31,10 +31,7 @@ class Q27ReadinessPolicy:
             raise ValueError("window_frames must be a positive integer")
         if type(self.minimum_windows) is not int or self.minimum_windows < 2:
             raise ValueError("minimum_windows must be an integer of at least two")
-        if (
-            type(self.maximum_windows) is not int
-            or self.maximum_windows < self.minimum_windows
-        ):
+        if type(self.maximum_windows) is not int or self.maximum_windows < self.minimum_windows:
             raise ValueError("maximum_windows must be at least minimum_windows")
         if (
             isinstance(self.max_window_delta_rad, bool)
@@ -72,6 +69,16 @@ GLOVE_LIVE_Q27_READINESS_POLICY = Q27ReadinessPolicy(
 )
 
 
+ROS_TELEOP_Q27_SETTLING_POLICY = Q27ReadinessPolicy(
+    policy_id="nv5.ros_teleop_q27_settling.v1",
+    window_frames=60,
+    minimum_windows=2,
+    maximum_windows=10,
+    max_window_delta_rad=0.005,
+    require_convergence=True,
+)
+
+
 def q27_window_max_delta_rad(
     previous: Mapping[str, object],
     current: Mapping[str, object],
@@ -98,9 +105,35 @@ def q27_window_max_delta_rad(
     return maximum
 
 
+def joint_target_max_errors_rad(
+    actual: Mapping[str, object],
+    target: Mapping[str, object],
+) -> dict[str, float]:
+    """Return the maximum absolute joint-target error for every side."""
+
+    if not actual or set(actual) != set(target):
+        raise ValueError("joint target inputs must contain the same non-empty sides")
+    errors: dict[str, float] = {}
+    for side in sorted(actual):
+        actual_values = np.asarray(actual[side], dtype=np.float64)
+        target_values = np.asarray(target[side], dtype=np.float64)
+        if (
+            actual_values.ndim != 1
+            or actual_values.size == 0
+            or actual_values.shape != target_values.shape
+            or not np.isfinite(actual_values).all()
+            or not np.isfinite(target_values).all()
+        ):
+            raise ValueError("joint target inputs must contain matching finite vectors")
+        errors[side] = float(np.max(np.abs(actual_values - target_values)))
+    return errors
+
+
 __all__ = [
     "FULL_SCRIPTED_Q27_SETTLING_POLICY",
     "GLOVE_LIVE_Q27_READINESS_POLICY",
+    "ROS_TELEOP_Q27_SETTLING_POLICY",
     "Q27ReadinessPolicy",
+    "joint_target_max_errors_rad",
     "q27_window_max_delta_rad",
 ]

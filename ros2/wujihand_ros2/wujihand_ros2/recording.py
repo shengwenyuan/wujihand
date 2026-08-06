@@ -12,9 +12,14 @@ def recording_topics(
     route_plan: DualTeleoperationRoutePlan,
     *,
     include_synthetic_d405: bool = False,
+    include_dataset_facts: bool = False,
 ) -> tuple[str, ...]:
     """Return the frozen allowlist for one resolved ROS control graph."""
 
+    if include_synthetic_d405 and include_dataset_facts:
+        raise ValueError(
+            "dataset recording uses separate offline RGB and cannot include online D405 payloads"
+        )
     root = "/" + namespace.strip("/")
     topics: list[str] = []
     tracker_sides = sorted(
@@ -53,6 +58,13 @@ def recording_topics(
                 )
             )
         topics.extend(("/tf", "/tf_static"))
+    if include_dataset_facts:
+        topics.extend(
+            (
+                f"{root}/dataset/episode_boundary",
+                f"{root}/dataset/simulation_state",
+            )
+        )
     return _unique(topics)
 
 

@@ -64,12 +64,8 @@ class ResolvedInstance:
             "asset": self.asset.to_mapping(),
             "binding_path": self.binding_path,
             "binding": self.binding.to_mapping(),
-            "artifact": (
-                None if self.artifact is None else self.artifact.to_mapping()
-            ),
-            "resource_trees": [
-                resource.to_mapping() for resource in self.resource_trees
-            ],
+            "artifact": (None if self.artifact is None else self.artifact.to_mapping()),
+            "resource_trees": [resource.to_mapping() for resource in self.resource_trees],
             "namespace": self.namespace,
             "effective_root": self.effective_root,
             "effective_frame_map": {
@@ -78,21 +74,15 @@ class ResolvedInstance:
             },
             "effective_group_bindings": {
                 group.group_id: {
-                    "joints": [
-                        self.qualify_backend_name(name) for name in group.joints
-                    ],
-                    "actuators": [
-                        self.qualify_backend_name(name) for name in group.actuators
-                    ],
+                    "joints": [self.qualify_backend_name(name) for name in group.joints],
+                    "actuators": [self.qualify_backend_name(name) for name in group.actuators],
                 }
                 for group in self.binding.group_bindings
             },
         }
         if self.binding.schema == BACKEND_BINDING_SCHEMA_V2:
             mapping["collision_artifact"] = (
-                None
-                if self.collision_artifact is None
-                else self.collision_artifact.to_mapping()
+                None if self.collision_artifact is None else self.collision_artifact.to_mapping()
             )
         return mapping
 
@@ -174,9 +164,7 @@ class SessionResolver:
     ) -> ResolvedSession:
         """Resolve a Session without importing a simulator or device SDK."""
 
-        config_path = self.repository.project_relative(
-            session_path, field="session config"
-        )
+        config_path = self.repository.project_relative(session_path, field="session config")
         session = self.repository.load_session(session_path)
         assembly = self.repository.load_assembly(session.assembly)
         workcell = self.repository.load_workcell(session.workcell)
@@ -198,9 +186,7 @@ class SessionResolver:
             )
         mount_ids = {mount.mount_id for mount in workcell.mounts}
         missing_mounts = sorted(
-            mount_id
-            for _, mount_id in session.placements
-            if mount_id not in mount_ids
+            mount_id for _, mount_id in session.placements if mount_id not in mount_ids
         )
         if missing_mounts:
             raise ValueError(
@@ -210,6 +196,12 @@ class SessionResolver:
         resolved_instances: list[ResolvedInstance] = []
         used_source_names: set[str] = set()
         referenced_paths: set[str] = set()
+        if session.dataset_profile is not None:
+            if session.backend != "isaac" or session.runtime_role != "teleop_consumer":
+                raise ValueError("dataset Session v2 requires an Isaac teleop_consumer runtime")
+            referenced_paths.add(
+                self.repository.validate_profile_reference(session.dataset_profile)
+            )
         for instance in assembly.instances:
             asset = self.repository.load_asset(instance.asset)
             binding_ref = session.binding_for(instance.instance_id)
@@ -242,9 +234,7 @@ class SessionResolver:
             else:
                 lock_prefix = f"{self.source_lock.lock_path}#"
                 if asset.provenance_source.startswith(lock_prefix):
-                    used_source_names.add(
-                        asset.provenance_source.removeprefix(lock_prefix)
-                    )
+                    used_source_names.add(asset.provenance_source.removeprefix(lock_prefix))
             if asset.canonical_profile is not None:
                 referenced_paths.add(asset.canonical_profile)
             for group in asset.control_groups:
@@ -253,9 +243,7 @@ class SessionResolver:
             if binding.compatibility_profile is not None:
                 referenced_paths.add(binding.compatibility_profile)
             if binding.sensor_profile is not None:
-                self.repository.load_isaac_camera_profile(
-                    binding.sensor_profile
-                )
+                self.repository.load_isaac_camera_profile(binding.sensor_profile)
                 referenced_paths.add(binding.sensor_profile)
 
             artifact = (
@@ -306,52 +294,25 @@ class SessionResolver:
         self._validate_attachments(assembly, tuple(resolved_instances))
         self._validate_control_layouts(session, tuple(resolved_instances))
         self._validate_runtime_contract(session)
-        if (
-            session.runtime.transport_contract
-            == NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT
-        ):
+        if session.runtime.transport_contract == NATIVE_DUAL_TELEOPERATION_TRANSPORT_CONTRACT:
             profile_path = session.runtime.compatibility_profile
             if profile_path is None:
-                raise ValueError(
-                    "native dual teleoperation requires a compatibility profile"
-                )
-            live_profile = (
-                self.repository.load_native_dual_teleoperation_profile(
-                    profile_path
-                )
-            )
-            if (
-                live_profile.transport_contract
-                != session.runtime.transport_contract
-            ):
-                raise ValueError(
-                    "native dual profile and Session transport contracts differ"
-                )
+                raise ValueError("native dual teleoperation requires a compatibility profile")
+            live_profile = self.repository.load_native_dual_teleoperation_profile(profile_path)
+            if live_profile.transport_contract != session.runtime.transport_contract:
+                raise ValueError("native dual profile and Session transport contracts differ")
             referenced_paths.add(
-                self.repository.validate_profile_reference(
-                    live_profile.base_qualification
-                )
+                self.repository.validate_profile_reference(live_profile.base_qualification)
             )
         elif session.runtime.transport_contract == DUAL_TELEOPERATION_CONTRACT:
             profile_path = session.runtime.compatibility_profile
             if profile_path is None:
-                raise ValueError(
-                    "dual teleoperation requires a compatibility profile"
-                )
-            dual_profile = self.repository.load_dual_teleoperation_profile(
-                profile_path
-            )
-            if (
-                dual_profile.transport_contract
-                != session.runtime.transport_contract
-            ):
-                raise ValueError(
-                    "dual teleoperation profile and Session contracts differ"
-                )
+                raise ValueError("dual teleoperation requires a compatibility profile")
+            dual_profile = self.repository.load_dual_teleoperation_profile(profile_path)
+            if dual_profile.transport_contract != session.runtime.transport_contract:
+                raise ValueError("dual teleoperation profile and Session contracts differ")
             referenced_paths.add(
-                self.repository.validate_profile_reference(
-                    dual_profile.base_qualification
-                )
+                self.repository.validate_profile_reference(dual_profile.base_qualification)
             )
 
         if workcell.compatibility_profile is not None:
@@ -369,9 +330,7 @@ class SessionResolver:
             )
             for path in sorted(referenced_paths)
         )
-        source_records = tuple(
-            self.source_lock.record(name) for name in sorted(used_source_names)
-        )
+        source_records = tuple(self.source_lock.record(name) for name in sorted(used_source_names))
         normalized_overrides = tuple(
             _resolve_override(str(key), value, project_root=self.repository.project_root)
             for key, value in sorted((overrides or {}).items(), key=lambda item: str(item[0]))
@@ -386,17 +345,12 @@ class SessionResolver:
             "workcell": workcell.to_mapping(),
             "instances": [
                 instance.to_mapping()
-                for instance in sorted(
-                    resolved_instances, key=lambda item: item.instance_id
-                )
+                for instance in sorted(resolved_instances, key=lambda item: item.instance_id)
             ],
             "source_lock": self.source_lock.lock_path,
             "sources": [record.to_mapping() for record in source_records],
             "referenced_file_hashes": dict(referenced_file_hashes),
-            "overrides": {
-                override.key: override.to_mapping()
-                for override in normalized_overrides
-            },
+            "overrides": {override.key: override.to_mapping() for override in normalized_overrides},
         }
         snapshot_json = json.dumps(
             snapshot,
@@ -413,9 +367,7 @@ class SessionResolver:
             assembly=assembly,
             workcell_path=workcell_path,
             workcell=workcell,
-            instances=tuple(
-                sorted(resolved_instances, key=lambda item: item.instance_id)
-            ),
+            instances=tuple(sorted(resolved_instances, key=lambda item: item.instance_id)),
             source_records=source_records,
             referenced_file_hashes=referenced_file_hashes,
             overrides=normalized_overrides,
@@ -423,9 +375,7 @@ class SessionResolver:
             session_hash=session_hash,
         )
 
-    def _validate_asset_binding(
-        self, asset: AssetManifest, binding: BackendBinding
-    ) -> None:
+    def _validate_asset_binding(self, asset: AssetManifest, binding: BackendBinding) -> None:
         schema_pairs = {
             (ASSET_MANIFEST_SCHEMA_V1, BACKEND_BINDING_SCHEMA_V1),
             (ASSET_MANIFEST_SCHEMA_V2, BACKEND_BINDING_SCHEMA_V2),
@@ -443,9 +393,7 @@ class SessionResolver:
                 f"asset {asset.asset_id!r} frames"
             )
         asset_group_ids = {group.group_id for group in asset.control_groups}
-        binding_group_ids = {
-            group.group_id for group in binding.group_bindings
-        }
+        binding_group_ids = {group.group_id for group in binding.group_bindings}
         if binding_group_ids != asset_group_ids:
             raise ValueError(
                 f"binding {binding.binding_id!r} group_bindings must exactly cover "
@@ -475,9 +423,7 @@ class SessionResolver:
                     f"passive binding {binding.binding_id!r} must use prefix namespace policy"
                 )
             if binding.loader != "mesh":
-                raise ValueError(
-                    f"passive binding {binding.binding_id!r} must use the mesh loader"
-                )
+                raise ValueError(f"passive binding {binding.binding_id!r} must use the mesh loader")
             if binding.artifact is None or binding.collision_artifact is None:
                 raise ValueError(
                     f"passive binding {binding.binding_id!r} requires visual and collision artifacts"
@@ -511,10 +457,7 @@ class SessionResolver:
                 )
             self.source_lock.record(source_name)
             return None
-        if any(
-            record.name == asset.provenance_source
-            for record in self.source_lock.records
-        ):
+        if any(record.name == asset.provenance_source for record in self.source_lock.records):
             raise ValueError(
                 f"asset {asset.asset_id!r} source-lock provenance must use "
                 f"{self.source_lock.lock_path}#<source-id>"
@@ -557,8 +500,7 @@ class SessionResolver:
             for group in instance.asset.control_groups
         }
         actual_routes = {
-            (layout.instance_id, layout.group_id)
-            for layout in session.runtime.control_layouts
+            (layout.instance_id, layout.group_id) for layout in session.runtime.control_layouts
         }
         if actual_routes != expected_routes:
             raise ValueError(
@@ -611,21 +553,11 @@ class SessionResolver:
         if category == "roots":
             return {instance.effective_root}
         if category == "frames":
-            names = {
-                name for _, name in instance.binding.frame_map
-            }
+            names = {name for _, name in instance.binding.frame_map}
         elif category == "joints":
-            names = {
-                name
-                for group in instance.binding.group_bindings
-                for name in group.joints
-            }
+            names = {name for group in instance.binding.group_bindings for name in group.joints}
         elif category == "actuators":
-            names = {
-                name
-                for group in instance.binding.group_bindings
-                for name in group.actuators
-            }
+            names = {name for group in instance.binding.group_bindings for name in group.actuators}
         else:
             raise ValueError(f"unknown backend symbol category: {category}")
         return {instance.qualify_backend_name(name) for name in names}
@@ -635,18 +567,14 @@ class SessionResolver:
         transport = session.runtime.transport_contract
         if session.runtime_role in {"teleop_producer", "teleop_consumer"}:
             if transport is None:
-                raise ValueError(
-                    f"{session.runtime_role} session requires a transport contract"
-                )
+                raise ValueError(f"{session.runtime_role} session requires a transport contract")
         elif transport is not None:
             raise ValueError(
                 f"{session.runtime_role} session must not declare a transport contract"
             )
 
 
-def validate_transport_pair(
-    producer: ResolvedSession, consumer: ResolvedSession
-) -> None:
+def validate_transport_pair(producer: ResolvedSession, consumer: ResolvedSession) -> None:
     """Validate producer/consumer wire and semantic layout compatibility."""
 
     if producer.session.runtime_role != "teleop_producer":
@@ -663,24 +591,18 @@ def validate_transport_pair(
     producer_layouts = _transport_layout_signature(producer)
     consumer_layouts = _transport_layout_signature(consumer)
     if producer_layouts != consumer_layouts:
-        raise ValueError(
-            "teleop producer and consumer control layouts are incompatible"
-        )
+        raise ValueError("teleop producer and consumer control layouts are incompatible")
 
 
 def _transport_layout_signature(
     resolved: ResolvedSession,
 ) -> Counter[tuple[str, str, str, str, str, str, int, str]]:
-    signatures: Counter[
-        tuple[str, str, str, str, str, str, int, str]
-    ] = Counter()
+    signatures: Counter[tuple[str, str, str, str, str, str, int, str]] = Counter()
     for route in resolved.session.runtime.control_layouts:
         try:
             instance = resolved.instance(route.instance_id)
         except KeyError as exc:
-            raise ValueError(
-                "teleop control layouts reference an unresolved instance"
-            ) from exc
+            raise ValueError("teleop control layouts reference an unresolved instance") from exc
         group = instance.asset.control_group(route.group_id)
         signatures[
             (

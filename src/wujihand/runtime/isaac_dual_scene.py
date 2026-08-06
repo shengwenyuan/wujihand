@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Any, cast
 
@@ -45,6 +46,13 @@ from wujihand.adapters.simulation.q27_execution import (
     IsaacQ27ExecutionAdapter,
 )
 from wujihand.specs import AttachmentSpec, PoseSpec
+from wujihand.dataset.profile import Q54JointProfile
+from wujihand.domain.dataset_recording import (
+    DynamicRigidBodyTruth,
+    KinematicLinkTruth,
+    SimulationFramePhase,
+    SimulationStateFrame,
+)
 
 from .isaac_d405_wrist_rig import (
     WristRigCollisionMode,
@@ -95,6 +103,50 @@ class SceneFixedBodySnapshot:
     prim_path: str
     position_m: tuple[float, float, float]
     quat_wxyz: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class SceneKinematicLinkSnapshot:
+    side: str
+    logical_link_id: str
+    prim_path: str
+    position_m: tuple[float, float, float]
+    quat_wxyz: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True, slots=True)
+class SceneDatasetStateSnapshot:
+    """Exact simulator truth before frame metadata and digest materialization."""
+
+    q54_rad: tuple[float, ...]
+    qdot54_rad_s: tuple[float, ...]
+    rigid_bodies: tuple[DynamicRigidBodyTruth, ...]
+    kinematic_links: tuple[KinematicLinkTruth, ...]
+
+    def to_frame(
+        self,
+        *,
+        run_id: str,
+        control_index: int,
+        phase: SimulationFramePhase,
+        simulation_time_s: float,
+        physics_boundary_index: int,
+    ) -> SimulationStateFrame:
+        return SimulationStateFrame.create(
+            run_id=run_id,
+            episode_id=run_id,
+            control_index=control_index,
+            tick_id=control_index,
+            phase=phase,
+            simulation_time_s=simulation_time_s,
+            physics_boundary_index=physics_boundary_index,
+            q54_rad=self.q54_rad,
+            qdot54_rad_s=self.qdot54_rad_s,
+            rigid_bodies=self.rigid_bodies,
+            kinematic_links=self.kinematic_links,
+            expected_rigid_body_count=len(self.rigid_bodies),
+            expected_kinematic_link_count=len(self.kinematic_links),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +353,7 @@ class DualNeroHand2IsaacScene:
         self_collision_sides: frozenset[str] = frozenset(),
         self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
         wrist_rig_collision_mode: WristRigCollisionMode = "none",
+        visual_replay_only: bool = False,
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
@@ -317,6 +370,13 @@ class DualNeroHand2IsaacScene:
 
         if not self_collision_sides <= {"left", "right"}:
             raise ValueError("self_collision_sides must contain only left/right")
+        if type(visual_replay_only) is not bool:
+            raise TypeError("visual_replay_only must be a bool")
+        if visual_replay_only and self_collision_sides:
+            raise ValueError("visual replay must not enable runtime self collisions")
+        if visual_replay_only and self_collision_filter_profile is not None:
+            raise ValueError("visual replay must not author runtime collision filters")
+        self.visual_replay_only = visual_replay_only
         self.resolved = resolved
         self.sides = sides
         self.alignment_profile = alignment_profile
@@ -337,15 +397,19 @@ class DualNeroHand2IsaacScene:
         self.workcell_materialization: IsaacWorkcellMaterialization = materialize_isaac_workcell(
             self.world, workcell_plan
         )
-        self.dynamic_workcell_prims = {
-            path: self.world.scene.add(
-                SingleRigidPrim(
-                    prim_path=path,
-                    name=f"camera_replay_dynamic_{index}",
+        self.dynamic_workcell_prims = (
+            {}
+            if visual_replay_only
+            else {
+                path: self.world.scene.add(
+                    SingleRigidPrim(
+                        prim_path=path,
+                        name=f"camera_replay_dynamic_{index}",
+                    )
                 )
-            )
-            for index, path in enumerate(self.workcell_materialization.rigid_body_paths)
-        }
+                for index, path in enumerate(self.workcell_materialization.rigid_body_paths)
+            }
+        )
         UsdGeom.Xform.Define(self.stage, "/World/Robots")
         UsdGeom.Xform.Define(self.stage, "/World/Attachments")
 
@@ -433,12 +497,13 @@ class DualNeroHand2IsaacScene:
                     enable_self_collisions=runtime.side in self_collision_sides,
                 ),
             )
-            self.articulations[runtime.side] = self.world.scene.add(
-                Articulation(
-                    str(arm_articulation_root.GetPath()),
-                    name=f"nero_hand2_{runtime.side}",
+            if not visual_replay_only:
+                self.articulations[runtime.side] = self.world.scene.add(
+                    Articulation(
+                        str(arm_articulation_root.GetPath()),
+                        name=f"nero_hand2_{runtime.side}",
+                    )
                 )
-            )
             arm_profile = load_nero_model_profile(runtime.arm_profile)
             hand_profile = load_hand2_model_profile(runtime.hand_profile)
             self.arm_profiles[runtime.side] = arm_profile
@@ -473,6 +538,21 @@ class DualNeroHand2IsaacScene:
         self.expected_root_paths = tuple(
             sorted(handle.articulation_root_path for handle in self.authored.values())
         )
+        self.partitions: dict[str, NeroHand2DofPartition] = {}
+        self.dataset_dynamic_object_paths: dict[str, str] = {}
+        self.dataset_kinematic_link_paths: dict[tuple[str, str], str] = {}
+        self.dataset_kinematic_link_indices: dict[tuple[str, str], int] = {}
+        self.operator_preview_link_paths: dict[tuple[str, str], str] = {}
+        self.operator_preview_link_indices: dict[tuple[str, str], int] = {}
+        if visual_replay_only:
+            self.root_paths_before_reset = self.expected_root_paths
+            self.arm_drive_runtime = {}
+            self.external_fixed_collider_paths = list(
+                self.workcell_materialization.fixed_collider_paths
+            )
+            self.arm_targets = {}
+            self.hand_targets = {}
+            return
         self.world.reset()
         (
             self.partitions,
@@ -491,12 +571,379 @@ class DualNeroHand2IsaacScene:
         self.hand_targets = {
             side: self.hand_profiles[side].rest_position.copy() for side in ("left", "right")
         }
+        if resolved.session.dataset_profile is not None:
+            self._discover_dataset_truth_inventory()
 
     def feedback_q27(
         self,
         side: str,
     ) -> npt.NDArray[np.float64]:
         return self.q27_execution.read_feedback_q27(side)
+
+    def feedback_qdot27(
+        self,
+        side: str,
+    ) -> npt.NDArray[np.float64]:
+        """Read backend joint velocity; never derive qdot from adjacent positions."""
+
+        if side not in {"left", "right"}:
+            raise ValueError("side must be left or right")
+        values = np.asarray(
+            self.articulations[side].get_joint_velocities(),
+            dtype=np.float64,
+        )
+        if values.shape == (1, 27):
+            values = values[0]
+        if values.shape != (27,) or not np.isfinite(values).all():
+            raise RuntimeError(f"{side} qdot27 backend readback is invalid: {values.shape}")
+        return values.copy()
+
+    def runtime_joint_inventory(
+        self,
+        side: str,
+    ) -> tuple[tuple[str, ...], tuple[tuple[float, float], ...]]:
+        """Return exact runtime order and limits used by the q54 startup gate."""
+
+        if side not in {"left", "right"}:
+            raise ValueError("side must be left or right")
+        articulation = self.articulations[side]
+        names = tuple(str(name) for name in articulation.dof_names)
+        limits = np.asarray(articulation.get_dof_limits(), dtype=np.float64)
+        if limits.shape == (1, 27, 2):
+            limits = limits[0]
+        if (
+            len(names) != 27
+            or len(set(names)) != 27
+            or limits.shape != (27, 2)
+            or not np.isfinite(limits).all()
+        ):
+            raise RuntimeError(f"{side} q27 runtime inventory is invalid")
+        return names, tuple((float(row[0]), float(row[1])) for row in limits)
+
+    def _discover_dataset_truth_inventory(self) -> None:
+        """Freeze the deliberately small privileged-truth inventory for 008."""
+
+        dynamic_paths = self.workcell_materialization.rigid_body_paths
+        dynamic = {Path(path).name.lower(): path for path in dynamic_paths}
+        if set(dynamic) != {"banana"}:
+            raise RuntimeError(
+                f"008 dataset dynamic inventory must contain only banana: actual={sorted(dynamic)}"
+            )
+        self.dataset_dynamic_object_paths = dynamic
+
+        link_paths: dict[tuple[str, str], str] = {}
+        fingertip_ids = (
+            "thumb_tip",
+            "index_finger_tip",
+            "middle_finger_tip",
+            "ring_finger_tip",
+            "pinky_tip",
+        )
+        for runtime in self.sides:
+            side = runtime.side
+            link7 = _one_prim(
+                self.stage,
+                prefix=runtime.arm_prim_path,
+                name="link7",
+                rigid_body=True,
+            )
+            link_paths[(side, "arm_link7")] = str(link7.GetPath())
+            link_paths[(side, "palm")] = self.authored[side].config.child_base_link_path
+            prefix = "l" if side == "left" else "r"
+            for logical_id in fingertip_ids:
+                prim = _one_prim(
+                    self.stage,
+                    prefix=runtime.hand_prim_path,
+                    name=f"{prefix}_{logical_id}",
+                    rigid_body=True,
+                )
+                link_paths[(side, logical_id)] = str(prim.GetPath())
+        if len(link_paths) != 14:
+            raise RuntimeError("008 dataset kinematic inventory must contain 14 links")
+        self.dataset_kinematic_link_paths = link_paths
+
+        link_indices: dict[tuple[str, str], int] = {}
+        for side in ("left", "right"):
+            body_names = tuple(str(name) for name in self.articulations[side].body_names)
+            if len(body_names) != len(set(body_names)):
+                raise RuntimeError(f"{side} articulation link names are not unique")
+            body_indices = {name: index for index, name in enumerate(body_names)}
+            for identity, path in link_paths.items():
+                if identity[0] != side:
+                    continue
+                body_name = Path(path).name
+                if body_name not in body_indices:
+                    raise RuntimeError(
+                        f"dataset kinematic prim is not an articulation link: {path}"
+                    )
+                link_indices[identity] = body_indices[body_name]
+        if set(link_indices) != set(link_paths):
+            raise RuntimeError("dataset kinematic articulation-link inventory drifted")
+        self.dataset_kinematic_link_indices = link_indices
+
+        # The MCAP deliberately stores only the 14 privileged links above.  The
+        # unrecorded operator-preview topic carries every articulation link so a
+        # passive renderer can reproduce the complete robot pose without stepping
+        # its own physics scene.
+        from pxr import UsdPhysics
+
+        preview_paths: dict[tuple[str, str], str] = {}
+        preview_indices: dict[tuple[str, str], int] = {}
+        for runtime in self.sides:
+            side = runtime.side
+            prefixes = (runtime.arm_prim_path + "/", runtime.hand_prim_path + "/")
+            rigid_paths_by_name: dict[str, list[str]] = {}
+            for prim in self.stage.Traverse():
+                path = str(prim.GetPath())
+                if not path.startswith(prefixes) or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                    continue
+                rigid_paths_by_name.setdefault(prim.GetName(), []).append(path)
+            body_names = tuple(str(name) for name in self.articulations[side].body_names)
+            for index, body_name in enumerate(body_names):
+                candidates = rigid_paths_by_name.get(body_name, [])
+                if len(candidates) != 1:
+                    raise RuntimeError(
+                        f"{side} preview link path is ambiguous for {body_name}: {candidates}"
+                    )
+                identity = (side, body_name)
+                preview_paths[identity] = candidates[0]
+                preview_indices[identity] = index
+        if len(preview_paths) <= len(link_paths):
+            raise RuntimeError("operator preview must contain more than the 14 MCAP links")
+        if set(preview_paths) != set(preview_indices):
+            raise RuntimeError("operator preview articulation-link inventory drifted")
+        self.operator_preview_link_paths = preview_paths
+        self.operator_preview_link_indices = preview_indices
+
+    def kinematic_link_snapshots(self) -> tuple[SceneKinematicLinkSnapshot, ...]:
+        """Read exact world poses for link7, palm and all declared fingertips."""
+
+        return self._kinematic_link_snapshots(
+            paths=self.dataset_kinematic_link_paths,
+            indices=self.dataset_kinematic_link_indices,
+        )
+
+    def operator_preview_link_snapshots(self) -> tuple[SceneKinematicLinkSnapshot, ...]:
+        """Read every articulation-link pose for the unrecorded GUI replica."""
+
+        return self._kinematic_link_snapshots(
+            paths=self.operator_preview_link_paths,
+            indices=self.operator_preview_link_indices,
+        )
+
+    def _kinematic_link_snapshots(
+        self,
+        *,
+        paths: Mapping[tuple[str, str], str],
+        indices: Mapping[tuple[str, str], int],
+    ) -> tuple[SceneKinematicLinkSnapshot, ...]:
+        """Read one declared articulation-link inventory from the tensor backend."""
+
+        transforms_by_side: dict[str, npt.NDArray[np.float64]] = {}
+        for side in ("left", "right"):
+            articulation = self.articulations[side]
+            physics_view = getattr(articulation, "_physics_view", None)
+            if physics_view is None:
+                raise RuntimeError(f"{side} articulation physics view is unavailable")
+            transforms = np.asarray(
+                physics_view.get_link_transforms(),
+                dtype=np.float64,
+            )
+            body_count = len(articulation.body_names)
+            if transforms.shape != (1, body_count, 7) or not np.isfinite(transforms).all():
+                raise RuntimeError(
+                    f"{side} articulation link transforms are invalid: {transforms.shape}"
+                )
+            transforms_by_side[side] = transforms[0]
+
+        result: list[SceneKinematicLinkSnapshot] = []
+        for (side, logical_id), path in sorted(paths.items()):
+            index = indices.get((side, logical_id))
+            if index is None:
+                raise RuntimeError(f"kinematic link index disappeared: {path}")
+            transform = transforms_by_side[side][index]
+            result.append(
+                SceneKinematicLinkSnapshot(
+                    side=side,
+                    logical_link_id=logical_id,
+                    prim_path=path,
+                    position_m=(
+                        float(transform[0]),
+                        float(transform[1]),
+                        float(transform[2]),
+                    ),
+                    quat_wxyz=(
+                        float(transform[6]),
+                        float(transform[3]),
+                        float(transform[4]),
+                        float(transform[5]),
+                    ),
+                )
+            )
+        return tuple(result)
+
+    def dataset_state_snapshot(
+        self,
+        *,
+        q54_profile: Q54JointProfile,
+        q27_by_side: Mapping[str, npt.NDArray[np.float64]],
+        qdot27_by_side: Mapping[str, npt.NDArray[np.float64]],
+    ) -> SceneDatasetStateSnapshot:
+        """Read and freeze all variable simulator truth without hashing it."""
+
+        if set(q27_by_side) != {"left", "right"} or set(qdot27_by_side) != {
+            "left",
+            "right",
+        }:
+            raise ValueError("dataset state must cover left and right q27/qdot27")
+        bodies: list[DynamicRigidBodyTruth] = []
+        snapshots = {item.prim_path: item for item in self.rigid_body_snapshots()}
+        if set(snapshots) != set(self.dataset_dynamic_object_paths.values()):
+            raise RuntimeError("dataset dynamic rigid-body inventory drifted")
+        for logical_id, path in sorted(self.dataset_dynamic_object_paths.items()):
+            item = snapshots[path]
+            if item.linear_velocity_m_s is None or item.angular_velocity_deg_s is None:
+                raise RuntimeError(f"{logical_id} pose/twist backend readback is incomplete")
+            bodies.append(
+                DynamicRigidBodyTruth(
+                    logical_object_id=logical_id,
+                    prim_path=path,
+                    position_m=item.position_m,
+                    quat_wxyz=item.quat_wxyz,
+                    linear_velocity_m_s=item.linear_velocity_m_s,
+                    angular_velocity_rad_s=cast(
+                        tuple[float, float, float],
+                        tuple(math.radians(value) for value in item.angular_velocity_deg_s),
+                    ),
+                    sleeping=None,
+                    kinematic=item.kinematic_enabled,
+                    valid=True,
+                )
+            )
+        links = tuple(
+            KinematicLinkTruth(
+                side=item.side,
+                logical_link_id=item.logical_link_id,
+                prim_path=item.prim_path,
+                position_m=item.position_m,
+                quat_wxyz=item.quat_wxyz,
+                valid=True,
+            )
+            for item in self.kinematic_link_snapshots()
+        )
+        q54 = q54_profile.assemble_from_q27(
+            left_q27_rad=tuple(float(value) for value in q27_by_side["left"]),
+            right_q27_rad=tuple(float(value) for value in q27_by_side["right"]),
+        )
+        qdot54 = q54_profile.assemble_velocity_from_q27(
+            left_qdot27_rad_s=tuple(float(value) for value in qdot27_by_side["left"]),
+            right_qdot27_rad_s=tuple(float(value) for value in qdot27_by_side["right"]),
+        )
+        return SceneDatasetStateSnapshot(
+            q54_rad=q54,
+            qdot54_rad_s=qdot54,
+            rigid_bodies=tuple(bodies),
+            kinematic_links=links,
+        )
+
+    def operator_preview_state_snapshot(
+        self,
+        *,
+        dataset_snapshot: SceneDatasetStateSnapshot,
+    ) -> SceneDatasetStateSnapshot:
+        """Expand one dataset snapshot with all links for the unrecorded GUI topic."""
+
+        links = tuple(
+            KinematicLinkTruth(
+                side=item.side,
+                logical_link_id=item.logical_link_id,
+                prim_path=item.prim_path,
+                position_m=item.position_m,
+                quat_wxyz=item.quat_wxyz,
+                valid=True,
+            )
+            for item in self.operator_preview_link_snapshots()
+        )
+        return SceneDatasetStateSnapshot(
+            q54_rad=dataset_snapshot.q54_rad,
+            qdot54_rad_s=dataset_snapshot.qdot54_rad_s,
+            rigid_bodies=dataset_snapshot.rigid_bodies,
+            kinematic_links=links,
+        )
+
+    def create_dataset_state_frame(
+        self,
+        *,
+        run_id: str,
+        control_index: int,
+        phase: SimulationFramePhase,
+        simulation_time_s: float,
+        physics_boundary_index: int,
+        q54_profile: Q54JointProfile,
+        q27_by_side: Mapping[str, npt.NDArray[np.float64]],
+        qdot27_by_side: Mapping[str, npt.NDArray[np.float64]],
+    ) -> SimulationStateFrame:
+        """Close one independently reconstructable pre/post simulation state."""
+
+        snapshot = self.dataset_state_snapshot(
+            q54_profile=q54_profile,
+            q27_by_side=q27_by_side,
+            qdot27_by_side=qdot27_by_side,
+        )
+        return snapshot.to_frame(
+            run_id=run_id,
+            control_index=control_index,
+            phase=phase,
+            simulation_time_s=simulation_time_s,
+            physics_boundary_index=physics_boundary_index,
+        )
+
+    def restore_dataset_state_frame(
+        self,
+        frame: SimulationStateFrame,
+        *,
+        q54_profile: Q54JointProfile,
+    ) -> None:
+        """Inject an immutable pre-action state without advancing physics."""
+
+        if frame.phase is not SimulationFramePhase.PRE_ACTION:
+            raise ValueError("offline renderer accepts pre_action frames only")
+        self._inject_dataset_state_frame(frame, q54_profile=q54_profile)
+
+    def _inject_dataset_state_frame(
+        self,
+        frame: SimulationStateFrame,
+        *,
+        q54_profile: Q54JointProfile,
+    ) -> None:
+        """Restore recorded articulation and object truth without stepping."""
+
+        left_q27, right_q27 = q54_profile.decompose_to_q27(frame.q54_rad)
+        left_qdot27, right_qdot27 = q54_profile.decompose_velocity_to_q27(frame.qdot54_rad_s)
+        for side, positions, velocities in (
+            ("left", left_q27, left_qdot27),
+            ("right", right_q27, right_qdot27),
+        ):
+            self.articulations[side].set_joint_positions(
+                np.asarray(positions, dtype=np.float64)[np.newaxis, :]
+            )
+            self.articulations[side].set_joint_velocities(
+                np.asarray(velocities, dtype=np.float64)[np.newaxis, :]
+            )
+        bodies = {item.logical_object_id: item for item in frame.rigid_bodies}
+        if set(bodies) != set(self.dataset_dynamic_object_paths):
+            raise ValueError("offline render rigid-body inventory drifted")
+        for logical_id, path in self.dataset_dynamic_object_paths.items():
+            item = bodies[logical_id]
+            if item.prim_path != path or not item.valid:
+                raise ValueError(f"offline render state differs for {logical_id}")
+            rigid = self.dynamic_workcell_prims[path]
+            rigid.set_world_pose(
+                position=np.asarray(item.position_m, dtype=np.float64),
+                orientation=np.asarray(item.quat_wxyz, dtype=np.float64),
+            )
+            rigid.set_linear_velocity(np.asarray(item.linear_velocity_m_s, dtype=np.float64))
+            rigid.set_angular_velocity(np.asarray(item.angular_velocity_rad_s, dtype=np.float64))
 
     def apply_targets(
         self,
@@ -820,7 +1267,9 @@ def _optional_vec3(
 __all__ = [
     "DualNeroHand2IsaacScene",
     "DualSideRuntime",
+    "SceneDatasetStateSnapshot",
     "ScenePose",
+    "SceneKinematicLinkSnapshot",
     "SceneReplaySnapshot",
     "SceneRigidBodySnapshot",
     "resolve_dual_side_runtimes",
