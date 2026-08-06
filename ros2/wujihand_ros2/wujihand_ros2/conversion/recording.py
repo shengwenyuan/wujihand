@@ -20,6 +20,15 @@ from wujihand.domain import (
     TickExecutionTrace,
     TickStageTimes,
 )
+from wujihand.domain.dataset_recording import (
+    DatasetEpisodeBoundary,
+    DatasetEpisodeEvent,
+    DatasetSourceMode,
+    DynamicRigidBodyTruth,
+    KinematicLinkTruth,
+    SimulationFramePhase,
+    SimulationStateFrame,
+)
 
 from ._message import new_message
 
@@ -117,14 +126,10 @@ def teleoperation_tick_trace_to_message(
     target.schedule_slot = execution.schedule_slot
     target.scheduled_control_time_ns = execution.scheduled_control_time_ns
     target.control_lateness_ns = execution.control_lateness_ns
-    target.missed_control_periods_before_tick = (
-        execution.missed_control_periods_before_tick
-    )
+    target.missed_control_periods_before_tick = execution.missed_control_periods_before_tick
     target.simulation_time_before_s = execution.simulation_time_before_s
     target.simulation_time_after_s = execution.simulation_time_after_s
-    target.target_effective_start_sim_time_s = (
-        execution.target_effective_start_sim_time_s
-    )
+    target.target_effective_start_sim_time_s = execution.target_effective_start_sim_time_s
     target.target_effective_end_sim_time_s = execution.target_effective_end_sim_time_s
     target.physics_substep_indices = execution.physics_substep_indices
     target.physics_substep_sim_times_s = execution.physics_substep_sim_times_s
@@ -409,17 +414,11 @@ def teleoperation_tick_trace_from_message(
             schedule_slot=int(message.schedule_slot),
             scheduled_control_time_ns=int(message.scheduled_control_time_ns),
             control_lateness_ns=int(message.control_lateness_ns),
-            missed_control_periods_before_tick=int(
-                message.missed_control_periods_before_tick
-            ),
+            missed_control_periods_before_tick=int(message.missed_control_periods_before_tick),
             simulation_time_before_s=float(message.simulation_time_before_s),
             simulation_time_after_s=float(message.simulation_time_after_s),
-            target_effective_start_sim_time_s=float(
-                message.target_effective_start_sim_time_s
-            ),
-            target_effective_end_sim_time_s=float(
-                message.target_effective_end_sim_time_s
-            ),
+            target_effective_start_sim_time_s=float(message.target_effective_start_sim_time_s),
+            target_effective_end_sim_time_s=float(message.target_effective_end_sim_time_s),
             physics_substep_indices=tuple(message.physics_substep_indices),
             physics_substep_sim_times_s=tuple(message.physics_substep_sim_times_s),
             physics_substep_start_ns=tuple(message.physics_substep_start_ns),
@@ -507,11 +506,216 @@ def run_recording_status_from_message(message: Any) -> RunRecordingStatus:
     )
 
 
+def dataset_episode_boundary_to_message(
+    boundary: DatasetEpisodeBoundary,
+    *,
+    factory: Callable[[], MessageT] | None = None,
+) -> MessageT:
+    message = new_message(factory, class_name="DatasetEpisodeBoundary")
+    target: Any = message
+    target.schema = boundary.schema
+    target.run_id = boundary.run_id
+    target.episode_id = boundary.episode_id
+    target.collection_id = boundary.collection_id
+    target.event = boundary.event.value
+    target.reason = boundary.reason
+    target.host_time_ns = boundary.host_time_ns
+    target.clock_domain = "host_monotonic"
+    target.has_control_index = boundary.control_index is not None
+    target.control_index = boundary.control_index or 0
+    target.has_tick_id = boundary.tick_id is not None
+    target.tick_id = boundary.tick_id or 0
+    target.has_simulation_time = boundary.simulation_time_s is not None
+    target.simulation_time_s = boundary.simulation_time_s or 0.0
+    target.recorder_ready = boundary.recorder_ready
+    target.inputs_ready = boundary.inputs_ready
+    target.references_ready = boundary.references_ready
+    target.scene_settled = boundary.scene_settled
+    target.source_mode = boundary.source_mode.value
+    target.dataset_eligible = boundary.dataset_eligible
+    target.has_requested_signal = boundary.requested_signal is not None
+    target.requested_signal = boundary.requested_signal or 0
+    target.has_effective_final_control_index = boundary.effective_final_control_index is not None
+    target.effective_final_control_index = boundary.effective_final_control_index or 0
+    return message
+
+
+def dataset_episode_boundary_from_message(message: Any) -> DatasetEpisodeBoundary:
+    if str(message.schema) != "wujihand.dataset_episode_boundary.v1":
+        raise ValueError("dataset boundary schema differs")
+    if message.clock_domain != "host_monotonic":
+        raise ValueError("dataset boundary clock must be host_monotonic")
+    if bool(message.has_control_index) != bool(message.has_tick_id):
+        raise ValueError("dataset boundary control/tick optionals differ")
+    return DatasetEpisodeBoundary(
+        run_id=str(message.run_id),
+        episode_id=str(message.episode_id),
+        collection_id=str(message.collection_id),
+        event=DatasetEpisodeEvent(str(message.event)),
+        reason=str(message.reason),
+        host_time_ns=int(message.host_time_ns),
+        control_index=(int(message.control_index) if bool(message.has_control_index) else None),
+        tick_id=int(message.tick_id) if bool(message.has_tick_id) else None,
+        simulation_time_s=(
+            float(message.simulation_time_s) if bool(message.has_simulation_time) else None
+        ),
+        recorder_ready=bool(message.recorder_ready),
+        inputs_ready=bool(message.inputs_ready),
+        references_ready=bool(message.references_ready),
+        scene_settled=bool(message.scene_settled),
+        source_mode=DatasetSourceMode(str(message.source_mode)),
+        dataset_eligible=bool(message.dataset_eligible),
+        requested_signal=(
+            int(message.requested_signal) if bool(message.has_requested_signal) else None
+        ),
+        effective_final_control_index=(
+            int(message.effective_final_control_index)
+            if bool(message.has_effective_final_control_index)
+            else None
+        ),
+    )
+
+
+def _rigid_body_truth_to_message(
+    truth: DynamicRigidBodyTruth,
+    *,
+    factory: Callable[[], Any] | None,
+) -> Any:
+    message = new_message(factory, class_name="DatasetRigidBodyTruth")
+    message.logical_object_id = truth.logical_object_id
+    message.prim_path = truth.prim_path
+    message.position_m = truth.position_m
+    message.quat_wxyz = truth.quat_wxyz
+    message.linear_velocity_m_s = truth.linear_velocity_m_s
+    message.angular_velocity_rad_s = truth.angular_velocity_rad_s
+    message.has_sleeping = truth.sleeping is not None
+    message.sleeping = truth.sleeping or False
+    message.kinematic = truth.kinematic
+    message.valid = truth.valid
+    return message
+
+
+def _rigid_body_truth_from_message(message: Any) -> DynamicRigidBodyTruth:
+    return DynamicRigidBodyTruth(
+        logical_object_id=str(message.logical_object_id),
+        prim_path=str(message.prim_path),
+        position_m=tuple(message.position_m),
+        quat_wxyz=tuple(message.quat_wxyz),
+        linear_velocity_m_s=tuple(message.linear_velocity_m_s),
+        angular_velocity_rad_s=tuple(message.angular_velocity_rad_s),
+        sleeping=bool(message.sleeping) if bool(message.has_sleeping) else None,
+        kinematic=bool(message.kinematic),
+        valid=bool(message.valid),
+    )
+
+
+def _kinematic_link_truth_to_message(
+    truth: KinematicLinkTruth,
+    *,
+    factory: Callable[[], Any] | None,
+) -> Any:
+    message = new_message(factory, class_name="DatasetKinematicLinkTruth")
+    message.side = truth.side
+    message.logical_link_id = truth.logical_link_id
+    message.prim_path = truth.prim_path
+    message.position_m = truth.position_m
+    message.quat_wxyz = truth.quat_wxyz
+    message.valid = truth.valid
+    return message
+
+
+def _kinematic_link_truth_from_message(message: Any) -> KinematicLinkTruth:
+    return KinematicLinkTruth(
+        side=str(message.side),
+        logical_link_id=str(message.logical_link_id),
+        prim_path=str(message.prim_path),
+        position_m=tuple(message.position_m),
+        quat_wxyz=tuple(message.quat_wxyz),
+        valid=bool(message.valid),
+    )
+
+
+def simulation_state_frame_to_message(
+    frame: SimulationStateFrame,
+    *,
+    factory: Callable[[], MessageT] | None = None,
+    rigid_body_factory: Callable[[], Any] | None = None,
+    kinematic_link_factory: Callable[[], Any] | None = None,
+) -> MessageT:
+    message = new_message(factory, class_name="SimulationStateFrame")
+    target: Any = message
+    target.schema = frame.schema
+    target.run_id = frame.run_id
+    target.episode_id = frame.episode_id
+    target.control_index = frame.control_index
+    target.tick_id = frame.tick_id
+    target.phase = frame.phase.value
+    target.simulation_time_s = frame.simulation_time_s
+    target.physics_boundary_index = frame.physics_boundary_index
+    target.state_source_api = frame.state_source_api
+    target.world_frame_id = frame.world_frame_id
+    target.quaternion_order = frame.quaternion_order
+    target.joint_position_unit = frame.joint_position_unit
+    target.joint_velocity_unit = frame.joint_velocity_unit
+    target.angular_velocity_unit = frame.angular_velocity_unit
+    target.q54_rad = frame.q54_rad
+    target.qdot54_rad_s = frame.qdot54_rad_s
+    target.rigid_bodies = [
+        _rigid_body_truth_to_message(item, factory=rigid_body_factory)
+        for item in frame.rigid_bodies
+    ]
+    target.kinematic_links = [
+        _kinematic_link_truth_to_message(item, factory=kinematic_link_factory)
+        for item in frame.kinematic_links
+    ]
+    target.expected_rigid_body_count = frame.expected_rigid_body_count
+    target.expected_kinematic_link_count = frame.expected_kinematic_link_count
+    target.payload_digest_sha256 = frame.payload_digest_sha256
+    return message
+
+
+def simulation_state_frame_from_message(message: Any) -> SimulationStateFrame:
+    if str(message.schema) != "wujihand.simulation_state_frame.v1":
+        raise ValueError("simulation state schema differs")
+    conventions = {
+        "state_source_api": SimulationStateFrame.state_source_api,
+        "world_frame_id": SimulationStateFrame.world_frame_id,
+        "quaternion_order": SimulationStateFrame.quaternion_order,
+        "joint_position_unit": SimulationStateFrame.joint_position_unit,
+        "joint_velocity_unit": SimulationStateFrame.joint_velocity_unit,
+        "angular_velocity_unit": SimulationStateFrame.angular_velocity_unit,
+    }
+    if any(str(getattr(message, key)) != value for key, value in conventions.items()):
+        raise ValueError("simulation state coordinate or unit convention differs")
+    return SimulationStateFrame(
+        run_id=str(message.run_id),
+        episode_id=str(message.episode_id),
+        control_index=int(message.control_index),
+        tick_id=int(message.tick_id),
+        phase=SimulationFramePhase(str(message.phase)),
+        simulation_time_s=float(message.simulation_time_s),
+        physics_boundary_index=int(message.physics_boundary_index),
+        q54_rad=tuple(message.q54_rad),
+        qdot54_rad_s=tuple(message.qdot54_rad_s),
+        rigid_bodies=tuple(_rigid_body_truth_from_message(item) for item in message.rigid_bodies),
+        kinematic_links=tuple(
+            _kinematic_link_truth_from_message(item) for item in message.kinematic_links
+        ),
+        expected_rigid_body_count=int(message.expected_rigid_body_count),
+        expected_kinematic_link_count=int(message.expected_kinematic_link_count),
+        payload_digest_sha256=str(message.payload_digest_sha256),
+    )
+
+
 __all__ = [
+    "dataset_episode_boundary_from_message",
+    "dataset_episode_boundary_to_message",
     "run_recording_status_from_message",
     "run_recording_status_to_message",
     "scene_rigid_body_state_from_message",
     "scene_rigid_body_state_to_message",
+    "simulation_state_frame_from_message",
+    "simulation_state_frame_to_message",
     "teleoperation_tick_trace_from_message",
     "teleoperation_tick_trace_to_message",
 ]

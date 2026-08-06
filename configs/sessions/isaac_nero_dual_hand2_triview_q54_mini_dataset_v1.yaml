@@ -1,0 +1,49 @@
+schema: wujihand.session.v2
+session_id: isaac_nero_dual_hand2_triview_q54_mini_dataset_v1
+backend: isaac
+runtime_role: teleop_consumer
+assembly:
+  path: configs/assemblies/nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1.yaml
+  expected_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1
+workcell:
+  path: configs/workcells/isaac_robolab_banana_bowl_dual_station_v1.yaml
+  expected_id: isaac_robolab_banana_bowl_dual_station_v1
+bindings:
+  nero_left:
+    path: configs/bindings/isaac/agilex_nero_f6642ce0_isaac_6_0_1_v1.yaml
+    expected_id: agilex_nero_f6642ce0_isaac_6_0_1
+  hand_left:
+    path: configs/bindings/isaac/wuji_hand2_beta1_left_v2026_6_27_physical_v1.yaml
+    expected_id: wuji_hand2_beta1_left_isaac_v2026_6_27_physical
+  mount_left:
+    path: configs/bindings/isaac/nero_hand2_beta1_d405_mount_v2_left.yaml
+    expected_id: nero_hand2_beta1_d405_mount_v2_left_isaac_v1
+  d405_left:
+    path: configs/bindings/isaac/realsense_d405_housing_sim_left.yaml
+    expected_id: realsense_d405_housing_sim_left_isaac_v1
+  nero_right:
+    path: configs/bindings/isaac/agilex_nero_f6642ce0_isaac_6_0_1_v1.yaml
+    expected_id: agilex_nero_f6642ce0_isaac_6_0_1
+  hand_right:
+    path: configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_physical_v1.yaml
+    expected_id: wuji_hand2_beta1_right_isaac_v2026_6_27_physical
+  mount_right:
+    path: configs/bindings/isaac/nero_hand2_beta1_d405_mount_v2_right.yaml
+    expected_id: nero_hand2_beta1_d405_mount_v2_right_isaac_v1
+  d405_right:
+    path: configs/bindings/isaac/realsense_d405_housing_sim_right.yaml
+    expected_id: realsense_d405_housing_sim_right_isaac_v1
+placements:
+  nero_left: table_near_left
+  nero_right: table_near_right
+runtime:
+  compatibility_profile: configs/profiles/isaac_nero_hand2_dual_teleoperation_v1.yaml
+  transport_contract: wujihand.dual_teleoperation.v1
+  control_layouts:
+    - {instance_id: nero_left, group_id: arm_joints, layout_id: agilex_nero_q7_v1}
+    - {instance_id: hand_left, group_id: finger_joints, layout_id: wuji_hand2_left_firmware_v1}
+    - {instance_id: nero_right, group_id: arm_joints, layout_id: agilex_nero_q7_v1}
+    - {instance_id: hand_right, group_id: finger_joints, layout_id: wuji_hand2_right_firmware_v1}
+dataset_profile:
+  path: configs/profiles/isaac_nero_hand2_triview_q54_mini_dataset_v1.yaml
+  expected_id: isaac_nero_hand2_triview_q54_mini_dataset_v1

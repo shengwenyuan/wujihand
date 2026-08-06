@@ -25,6 +25,17 @@ from wujihand.runtime import (
 from wujihand_ros2.recording import recording_topics, source_topics
 
 
+DATASET_PREVIEW_CPU_AFFINITY = "16-27"
+DATASET_AUXILIARY_CPU_AFFINITY = "28-31"
+DATASET_QUALIFICATION_CONTROL_FRAMES = 1080
+DATASET_QUALIFICATION_SOURCE_FRAMES = 2400
+DATASET_QUALIFICATION_PROFILE = "dataset_preview_e2e_aba_v1"
+
+
+def _taskset_command(command: list[str], *, cpu_affinity: str) -> list[str]:
+    return ["/usr/bin/taskset", "--cpu-list", cpu_affinity, *command]
+
+
 def _processes(context: object) -> list[object]:
     project_root = Path(LaunchConfiguration("project_root").perform(context)).resolve()
     deployment_path = LaunchConfiguration("deployment").perform(context)
@@ -32,6 +43,9 @@ def _processes(context: object) -> list[object]:
     gui = LaunchConfiguration("gui").perform(context).lower() == "true"
     frames = int(LaunchConfiguration("frames").perform(context))
     record = LaunchConfiguration("record").perform(context).lower() == "true"
+    qualification_fixture = (
+        LaunchConfiguration("qualification_fixture").perform(context).lower() == "true"
+    )
     isaac_cpu_affinity = (
         LaunchConfiguration("isaac_cpu_affinity", default="").perform(context).strip()
     )
@@ -52,6 +66,19 @@ def _processes(context: object) -> list[object]:
         local_binding=local_path,
         verify_artifacts=False,
     )
+    dataset_mode = resolved.session.session.dataset_profile is not None
+    split_dataset_preview = bool(record and dataset_mode and gui)
+    if qualification_fixture and not split_dataset_preview:
+        raise ValueError(
+            "dataset preview qualification requires gui:=true record:=true dataset mode"
+        )
+    if qualification_fixture:
+        frames = DATASET_QUALIFICATION_CONTROL_FRAMES
+    if split_dataset_preview and isaac_cpu_affinity != "0-15":
+        raise ValueError(
+            "Workstation2 dataset GUI recording requires isaac_cpu_affinity:=0-15; "
+            "the passive preview owns 16-31"
+        )
     runtime_environment = {
         "ROS_DOMAIN_ID": str(resolved.local_binding.ros_domain_id),
         "RMW_IMPLEMENTATION": (resolved.local_binding.rmw_implementation),
@@ -60,10 +87,14 @@ def _processes(context: object) -> list[object]:
         runtime_environment["FASTRTPS_DEFAULT_PROFILES_FILE"] = resolved.local_binding.dds_profile
     namespace = f"/{resolved.deployment.root_namespace}"
     current_run_id = requested_run_id or new_run_id()
-    current_run_root = run_root(
-        project_root,
-        resolved.deployment.report_root,
-        current_run_id,
+    current_run_root = (
+        project_root / "artifacts/diagnostics/dataset-preview-qualification" / current_run_id
+        if qualification_fixture
+        else run_root(
+            project_root,
+            resolved.deployment.report_root,
+            current_run_id,
+        )
     )
     if record and current_run_root.exists():
         raise FileExistsError(f"recording run directory already exists: {current_run_root}")
@@ -86,6 +117,8 @@ def _processes(context: object) -> list[object]:
     deployment_processes = {process.process_id for process in resolved.deployment.processes}
     lifecycle_nodes = []
     for process_id, module in source_modules.items():
+        if qualification_fixture:
+            continue
         if process_id not in deployment_processes:
             continue
         process = resolved.local_binding.process(process_id)
@@ -95,14 +128,20 @@ def _processes(context: object) -> list[object]:
             if binding.process_id == process_id
         )
         lifecycle_nodes.append(f"{namespace}/{node_name}")
+        source_command = [
+            process.executable,
+            "-m",
+            module,
+            *common_ros_args,
+        ]
+        if split_dataset_preview:
+            source_command = _taskset_command(
+                source_command,
+                cpu_affinity=DATASET_AUXILIARY_CPU_AFFINITY,
+            )
         actions.append(
             ExecuteProcess(
-                cmd=[
-                    process.executable,
-                    "-m",
-                    module,
-                    *common_ros_args,
-                ],
+                cmd=source_command,
                 name=process_id,
                 output="screen",
                 sigterm_timeout="10",
@@ -117,7 +156,7 @@ def _processes(context: object) -> list[object]:
         deployment_path,
         "--local-runtime-binding",
         local_path,
-        "--gui" if gui else "--no-gui",
+        "--gui" if gui and not split_dataset_preview else "--no-gui",
     ]
     if isaac_cpu_affinity:
         consumer_command.extend(["--cpu-affinity", isaac_cpu_affinity])
@@ -133,6 +172,10 @@ def _processes(context: object) -> list[object]:
                 str(current_run_root),
             ]
         )
+        if split_dataset_preview:
+            consumer_command.append("--external-preview-required")
+        if qualification_fixture:
+            consumer_command.extend(["--dataset-source-mode", "synthetic_fixture"])
     consumer_action = ExecuteProcess(
         cmd=consumer_command,
         name="isaac_consumer",
@@ -141,12 +184,43 @@ def _processes(context: object) -> list[object]:
         additional_env=runtime_environment,
     )
     actions.append(consumer_action)
+    if split_dataset_preview:
+        # Dataset RGB remains offline.  This second Isaac process is a passive
+        # latest-state operator view, isolated from the 120/60 Hz owner.
+        actions.append(
+            ExecuteProcess(
+                cmd=[
+                    consumer.executable,
+                    str(project_root / "tools/run_isaac_dataset_live_preview.py"),
+                    "--deployment",
+                    deployment_path,
+                    "--local-runtime-binding",
+                    local_path,
+                    "--run-id",
+                    current_run_id,
+                    "--run-root",
+                    str(current_run_root),
+                    "--cpu-affinity",
+                    DATASET_PREVIEW_CPU_AFFINITY,
+                ],
+                name="dataset_live_preview",
+                output="screen",
+                sigterm_timeout="12",
+                additional_env=runtime_environment,
+            )
+        )
     recorder_action = None
     if record:
         recorder_topics = recording_topics(
             namespace,
             resolved.route_plan,
-            include_synthetic_d405=True,
+            include_synthetic_d405=not dataset_mode,
+            include_dataset_facts=dataset_mode,
+        )
+        rosbag_qos_name = (
+            "ros2_jazzy_dual_teleoperation_dataset_rosbag_qos_v1.yaml"
+            if dataset_mode
+            else "ros2_jazzy_dual_teleoperation_d405_rosbag_qos_v1.yaml"
         )
         recorder_command = [
             "/usr/bin/python3",
@@ -156,13 +230,15 @@ def _processes(context: object) -> list[object]:
             "--run-id",
             current_run_id,
             "--qos-profile",
-            str(
-                project_root / "configs/profiles/"
-                "ros2_jazzy_dual_teleoperation_d405_rosbag_qos_v1.yaml"
-            ),
+            str(project_root / "configs/profiles" / rosbag_qos_name),
         ]
         for topic in recorder_topics:
             recorder_command.extend(["--topic", topic])
+        if split_dataset_preview:
+            recorder_command = _taskset_command(
+                recorder_command,
+                cpu_affinity=DATASET_AUXILIARY_CPU_AFFINITY,
+            )
         recorder_action = ExecuteProcess(
             cmd=recorder_command,
             name="rosbag2",
@@ -171,6 +247,36 @@ def _processes(context: object) -> list[object]:
             additional_env=runtime_environment,
         )
         actions.append(recorder_action)
+    if qualification_fixture:
+        actions.append(
+            ExecuteProcess(
+                cmd=_taskset_command(
+                    [
+                        "/usr/bin/python3",
+                        str(project_root / "ros2/wujihand_ros2/test/fixture_sources.py"),
+                        "--deployment",
+                        deployment_path,
+                        "--local-runtime-binding",
+                        local_path,
+                        "--profile",
+                        DATASET_QUALIFICATION_PROFILE,
+                        "--run-id",
+                        current_run_id,
+                        "--frames",
+                        str(DATASET_QUALIFICATION_SOURCE_FRAMES),
+                        "--minimum-subscribers",
+                        "2",
+                        "--receipt",
+                        str(current_run_root / "fixture" / "receipt.json"),
+                    ],
+                    cpu_affinity=DATASET_AUXILIARY_CPU_AFFINITY,
+                ),
+                name="dataset_preview_fixture",
+                output="screen",
+                sigterm_timeout="10",
+                additional_env=runtime_environment,
+            )
+        )
     lifecycle_command = [
         "/usr/bin/python3",
         "-m",
@@ -181,14 +287,15 @@ def _processes(context: object) -> list[object]:
             lifecycle_command.extend(["--wait-for-subscriber-topic", topic])
         lifecycle_command.extend(["--minimum-subscribers", "2"])
     lifecycle_command.extend(lifecycle_nodes)
-    actions.append(
-        ExecuteProcess(
-            cmd=lifecycle_command,
-            name="lifecycle_activate",
-            output="screen",
-            additional_env=runtime_environment,
+    if not qualification_fixture:
+        actions.append(
+            ExecuteProcess(
+                cmd=lifecycle_command,
+                name="lifecycle_activate",
+                output="screen",
+                additional_env=runtime_environment,
+            )
         )
-    )
     if record:
         assert recorder_action is not None
         actions.append(
@@ -236,6 +343,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("record", default_value="false"),
             DeclareLaunchArgument("run_id", default_value=""),
             DeclareLaunchArgument("isaac_cpu_affinity", default_value=""),
+            DeclareLaunchArgument("qualification_fixture", default_value="false"),
             OpaqueFunction(function=_processes),
         ]
     )

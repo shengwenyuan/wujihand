@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
 
-from teleoperation_quality.ros2_reader import _tick
+from teleoperation_quality.ros2_reader import (
+    _dataset_boundary,
+    _simulation_state,
+    _tick,
+)
 
 
 def v2_tick_message() -> SimpleNamespace:
@@ -89,3 +95,91 @@ def test_v2_tick_reader_rejects_inconsistent_lateness() -> None:
 
     with pytest.raises(ValueError, match="schedule fields"):
         _tick(message, bag_time_ns=2_000, expected_run_id="fixture-run")
+
+
+def test_dataset_boundary_reader_preserves_lifecycle_optionals() -> None:
+    message = SimpleNamespace(
+        schema="wujihand.dataset_episode_boundary.v1",
+        run_id="fixture-run",
+        episode_id="fixture-run",
+        collection_id="mini-v1",
+        event="stop_requested",
+        reason="requested_after_complete_control_tick",
+        host_time_ns=4_000,
+        clock_domain="host_monotonic",
+        has_control_index=True,
+        control_index=9,
+        has_tick_id=True,
+        tick_id=9,
+        has_simulation_time=True,
+        simulation_time_s=0.15,
+        recorder_ready=True,
+        inputs_ready=True,
+        references_ready=True,
+        scene_settled=True,
+        source_mode="live_teleoperation",
+        dataset_eligible=True,
+        has_requested_signal=True,
+        requested_signal=2,
+        has_effective_final_control_index=True,
+        effective_final_control_index=9,
+    )
+
+    record = _dataset_boundary(message, bag_time_ns=4_100, expected_run_id="fixture-run")
+
+    assert record.event == "stop_requested"
+    assert record.control_index == 9
+    assert record.requested_signal == 2
+
+
+def simulation_state_message() -> SimpleNamespace:
+    conventions = {
+        "state_source_api": "isaac_articulation_usd_physics_v1",
+        "world_frame_id": "world",
+        "quaternion_order": "wxyz",
+        "joint_position_unit": "rad",
+        "joint_velocity_unit": "rad_s",
+        "angular_velocity_unit": "rad_s",
+    }
+    payload = {
+        "run_id": "fixture-run",
+        "episode_id": "fixture-run",
+        "control_index": 3,
+        "tick_id": 3,
+        "phase": "pre_action",
+        "simulation_time_s": 0.05,
+        "physics_boundary_index": 6,
+        **conventions,
+        "q54_rad": [0.0] * 54,
+        "qdot54_rad_s": [0.1] * 54,
+        "rigid_bodies": [],
+        "kinematic_links": [],
+        "expected_rigid_body_count": 0,
+        "expected_kinematic_link_count": 0,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+    return SimpleNamespace(
+        schema="wujihand.simulation_state_frame.v1",
+        **payload,
+        payload_digest_sha256=digest,
+    )
+
+
+def test_simulation_state_reader_verifies_conventions_and_digest() -> None:
+    message = simulation_state_message()
+
+    record = _simulation_state(message, bag_time_ns=5_000, expected_run_id="fixture-run")
+
+    assert record.phase == "pre_action"
+    assert record.qdot54_rad_s == (0.1,) * 54
+
+    message.payload_digest_sha256 = "0" * 64
+    with pytest.raises(ValueError, match="digest"):
+        _simulation_state(message, bag_time_ns=5_000, expected_run_id="fixture-run")

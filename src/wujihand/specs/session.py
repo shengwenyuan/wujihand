@@ -16,16 +16,16 @@ from .common import (
 )
 
 
-SESSION_SCHEMA = "wujihand.session.v1"
+SESSION_SCHEMA_V1 = "wujihand.session.v1"
+SESSION_SCHEMA_V2 = "wujihand.session.v2"
+SESSION_SCHEMA = SESSION_SCHEMA_V1
 SUPPORTED_BACKENDS = frozenset({"mujoco", "isaac"})
 SUPPORTED_RUNTIME_ROLES = frozenset(
     {"simulation", "teleop_producer", "teleop_consumer", "qualification"}
 )
 
 
-def _reference_pairs(
-    value: object, *, field: str
-) -> tuple[tuple[str, ConfigRef], ...]:
+def _reference_pairs(value: object, *, field: str) -> tuple[tuple[str, ConfigRef], ...]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{field} must be a mapping")
     if any(not isinstance(key, str) for key in value):
@@ -75,9 +75,7 @@ class ControlLayoutSpec:
             field=field,
         )
         return cls(
-            instance_id=validate_identifier(
-                data["instance_id"], field=f"{field}.instance_id"
-            ),
+            instance_id=validate_identifier(data["instance_id"], field=f"{field}.instance_id"),
             group_id=validate_identifier(data["group_id"], field=f"{field}.group_id"),
             layout_id=validate_identifier(data["layout_id"], field=f"{field}.layout_id"),
         )
@@ -102,24 +100,18 @@ class RuntimeSpec:
     def from_mapping(cls, value: object, *, field: str = "runtime") -> Self:
         data = require_exact_mapping(
             value,
-            expected=frozenset(
-                {"compatibility_profile", "transport_contract", "control_layouts"}
-            ),
+            expected=frozenset({"compatibility_profile", "transport_contract", "control_layouts"}),
             field=field,
         )
         layouts = tuple(
-            ControlLayoutSpec.from_mapping(
-                item, field=f"{field}.control_layouts[{index}]"
-            )
+            ControlLayoutSpec.from_mapping(item, field=f"{field}.control_layouts[{index}]")
             for index, item in enumerate(
                 require_sequence(data["control_layouts"], field=f"{field}.control_layouts")
             )
         )
         routes = tuple((layout.instance_id, layout.group_id) for layout in layouts)
         if len(set(routes)) != len(routes):
-            raise ValueError(
-                f"{field}.control_layouts must route each instance/group at most once"
-            )
+            raise ValueError(f"{field}.control_layouts must route each instance/group at most once")
         return cls(
             compatibility_profile=optional_project_reference(
                 data["compatibility_profile"],
@@ -156,35 +148,39 @@ class SessionSpec:
     bindings: tuple[tuple[str, ConfigRef], ...]
     placements: tuple[tuple[str, str], ...]
     runtime: RuntimeSpec
+    dataset_profile: ConfigRef | None = None
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str = "session") -> Self:
+        if not isinstance(value, Mapping):
+            raise ValueError(f"{field} must be a mapping")
+        schema = require_string(value.get("schema"), field=f"{field}.schema")
+        if schema not in {SESSION_SCHEMA_V1, SESSION_SCHEMA_V2}:
+            raise ValueError(
+                f"{field}.schema must be {SESSION_SCHEMA_V1!r} or {SESSION_SCHEMA_V2!r}"
+            )
+        expected = {
+            "schema",
+            "session_id",
+            "backend",
+            "runtime_role",
+            "assembly",
+            "workcell",
+            "bindings",
+            "placements",
+            "runtime",
+        }
+        if schema == SESSION_SCHEMA_V2:
+            expected.add("dataset_profile")
         data = require_exact_mapping(
             value,
-            expected=frozenset(
-                {
-                    "schema",
-                    "session_id",
-                    "backend",
-                    "runtime_role",
-                    "assembly",
-                    "workcell",
-                    "bindings",
-                    "placements",
-                    "runtime",
-                }
-            ),
+            expected=frozenset(expected),
             field=field,
         )
-        schema = require_string(data["schema"], field=f"{field}.schema")
-        if schema != SESSION_SCHEMA:
-            raise ValueError(f"{field}.schema must be {SESSION_SCHEMA!r}")
         backend = require_string(data["backend"], field=f"{field}.backend")
         if backend not in SUPPORTED_BACKENDS:
             raise ValueError(f"{field}.backend must be one of {sorted(SUPPORTED_BACKENDS)}")
-        runtime_role = require_string(
-            data["runtime_role"], field=f"{field}.runtime_role"
-        )
+        runtime_role = require_string(data["runtime_role"], field=f"{field}.runtime_role")
         if runtime_role not in SUPPORTED_RUNTIME_ROLES:
             raise ValueError(
                 f"{field}.runtime_role must be one of {sorted(SUPPORTED_RUNTIME_ROLES)}"
@@ -197,20 +193,22 @@ class SessionSpec:
             raise ValueError(f"{field}.placements must not be empty")
         return cls(
             schema=schema,
-            session_id=validate_identifier(
-                data["session_id"], field=f"{field}.session_id"
-            ),
+            session_id=validate_identifier(data["session_id"], field=f"{field}.session_id"),
             backend=backend,
             runtime_role=runtime_role,
-            assembly=ConfigRef.from_mapping(
-                data["assembly"], field=f"{field}.assembly"
-            ),
-            workcell=ConfigRef.from_mapping(
-                data["workcell"], field=f"{field}.workcell"
-            ),
+            assembly=ConfigRef.from_mapping(data["assembly"], field=f"{field}.assembly"),
+            workcell=ConfigRef.from_mapping(data["workcell"], field=f"{field}.workcell"),
             bindings=bindings,
             placements=placements,
             runtime=RuntimeSpec.from_mapping(data["runtime"], field=f"{field}.runtime"),
+            dataset_profile=(
+                None
+                if schema == SESSION_SCHEMA_V1
+                else ConfigRef.from_mapping(
+                    data["dataset_profile"],
+                    field=f"{field}.dataset_profile",
+                )
+            ),
         )
 
     def binding_for(self, instance_id: str) -> ConfigRef:
@@ -226,7 +224,7 @@ class SessionSpec:
         raise KeyError(root_instance_id)
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "schema": self.schema,
             "session_id": self.session_id,
             "backend": self.backend,
@@ -234,18 +232,26 @@ class SessionSpec:
             "assembly": self.assembly.to_mapping(),
             "workcell": self.workcell.to_mapping(),
             "bindings": {
-                instance_id: reference.to_mapping()
-                for instance_id, reference in self.bindings
+                instance_id: reference.to_mapping() for instance_id, reference in self.bindings
             },
             "placements": dict(self.placements),
             "runtime": self.runtime.to_mapping(),
         }
+        if self.schema == SESSION_SCHEMA_V2:
+            if self.dataset_profile is None:
+                raise RuntimeError("Session v2 is missing its dataset profile")
+            result["dataset_profile"] = self.dataset_profile.to_mapping()
+        elif self.dataset_profile is not None:
+            raise RuntimeError("Session v1 cannot carry a dataset profile")
+        return result
 
 
 __all__ = [
     "ControlLayoutSpec",
     "RuntimeSpec",
     "SESSION_SCHEMA",
+    "SESSION_SCHEMA_V1",
+    "SESSION_SCHEMA_V2",
     "SUPPORTED_BACKENDS",
     "SUPPORTED_RUNTIME_ROLES",
     "SessionSpec",

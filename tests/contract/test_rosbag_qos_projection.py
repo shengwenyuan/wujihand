@@ -43,6 +43,44 @@ def test_rosbag_input_qos_is_a_projection_of_committed_profile() -> None:
         }
 
 
+def test_dataset_rosbag_qos_closes_rgb_free_fact_allowlist() -> None:
+    profile = ConfigRepository(ROOT).load_ros_qos_profile(
+        "configs/profiles/ros2_jazzy_dual_teleoperation_dataset_qos_v1.yaml"
+    )
+    projection = yaml.safe_load(
+        (
+            ROOT
+            / "configs/profiles/ros2_jazzy_dual_teleoperation_dataset_rosbag_qos_v1.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert isinstance(projection, dict)
+    resolved = RosDeploymentResolver(ROOT).resolve(
+        "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml",
+        local_binding=(
+            "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
+        ),
+    )
+    topics = recording_topics(
+        f"/{resolved.deployment.root_namespace}",
+        resolved.route_plan,
+        include_dataset_facts=True,
+    )
+    assert set(projection) == set(topics)
+    assert not any("/wrist_camera/" in topic or topic in {"/tf", "/tf_static"} for topic in topics)
+    assert topics[-2:] == (
+        "/wujihand/v1/teleop/dataset/episode_boundary",
+        "/wujihand/v1/teleop/dataset/simulation_state",
+    )
+    for topic, values in projection.items():
+        policy = profile.policy(_channel(topic))
+        assert values == {
+            "history": policy.history,
+            "depth": policy.depth,
+            "reliability": policy.reliability,
+            "durability": policy.durability,
+        }
+
+
 def _channel(topic: str) -> str:
     if topic.endswith("/input/tracker/lifecycle"):
         return "tracking_lifecycle"
@@ -62,6 +100,10 @@ def _channel(topic: str) -> str:
         return "scene_state"
     if topic.endswith("/recording/status"):
         return "run_status"
+    if topic.endswith("/dataset/episode_boundary"):
+        return "dataset_boundary"
+    if topic.endswith("/dataset/simulation_state"):
+        return "dataset_state"
     if topic.endswith("/color/image_raw") or topic.endswith("/depth/image_raw"):
         return "camera_image"
     if topic.endswith("/camera_info"):

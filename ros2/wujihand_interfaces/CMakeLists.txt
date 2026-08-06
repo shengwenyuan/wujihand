@@ -15,6 +15,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SceneRigidBodyState.msg"
   "msg/RunRecordingStatus.msg"
   "msg/SimulationCameraFrameTruth.msg"
+  "msg/DatasetEpisodeBoundary.msg"
+  "msg/DatasetRigidBodyTruth.msg"
+  "msg/DatasetKinematicLinkTruth.msg"
+  "msg/SimulationStateFrame.msg"
+  "msg/OperatorPreviewStateFrame.msg"
 )
 
 ament_export_dependencies(rosidl_default_runtime)

@@ -68,6 +68,8 @@ from .dual_teleoperation import (
 )
 from .session import (
     SESSION_SCHEMA,
+    SESSION_SCHEMA_V1,
+    SESSION_SCHEMA_V2,
     ControlLayoutSpec,
     RuntimeSpec,
     SessionSpec,
@@ -129,6 +131,8 @@ __all__ = [
     "ROS_LOCAL_RUNTIME_BINDING_SCHEMA",
     "ROS_QOS_PROFILE_SCHEMA",
     "SESSION_SCHEMA",
+    "SESSION_SCHEMA_V1",
+    "SESSION_SCHEMA_V2",
     "WORKCELL_SCHEMA",
     "ArtifactSpec",
     "AssemblySpec",

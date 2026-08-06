@@ -6,7 +6,9 @@ import pytest
 from wujihand.application.qualification import (
     FULL_SCRIPTED_Q27_SETTLING_POLICY,
     GLOVE_LIVE_Q27_READINESS_POLICY,
+    ROS_TELEOP_Q27_SETTLING_POLICY,
     Q27ReadinessPolicy,
+    joint_target_max_errors_rad,
     q27_window_max_delta_rad,
 )
 
@@ -22,6 +24,14 @@ def test_glove_live_policy_is_shorter_and_nonblocking_after_bounded_warmup() -> 
     assert live.window_frames * live.maximum_windows == 60
 
 
+def test_ros_teleoperation_policy_is_bounded_and_fail_closed() -> None:
+    policy = ROS_TELEOP_Q27_SETTLING_POLICY
+
+    assert policy.window_frames * policy.maximum_windows == 600
+    assert policy.max_window_delta_rad == pytest.approx(0.005)
+    assert policy.require_convergence is True
+
+
 def test_q27_window_delta_covers_both_sides() -> None:
     previous = {
         "left": np.zeros(27),
@@ -33,6 +43,21 @@ def test_q27_window_delta_covers_both_sides() -> None:
     }
 
     assert q27_window_max_delta_rad(previous, current) == pytest.approx(0.025)
+
+
+def test_joint_target_error_is_reported_per_side() -> None:
+    errors = joint_target_max_errors_rad(
+        {
+            "left": np.asarray((0.0, 0.3, -0.2)),
+            "right": np.asarray((0.1, 0.2, 0.4)),
+        },
+        {
+            "left": np.asarray((0.0, 0.1, -0.1)),
+            "right": np.asarray((0.0, 0.0, 0.0)),
+        },
+    )
+
+    assert errors == pytest.approx({"left": 0.2, "right": 0.4})
 
 
 @pytest.mark.parametrize(
