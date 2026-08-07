@@ -19,6 +19,7 @@ from wujihand.dataset.camera import (
     DatasetCameraRuntimeInventory,
     load_dataset_camera_projections,
 )
+from wujihand.dataset.domain_randomization import NOMINAL_VISUAL_DOMAIN_VARIANT
 from wujihand.dataset.normalized import write_normalized_episode_artifact
 from wujihand.dataset.profile import MiniDatasetProfile, load_mini_dataset_profile
 from wujihand.dataset.release import validate_episode_release
@@ -93,7 +94,12 @@ def _rgb_png(value: int) -> bytes:
 
 
 class _Backend:
-    renderer_identity = "fixture-fixed-state-renderer-v1"
+    visual_domain_variant = NOMINAL_VISUAL_DOMAIN_VARIANT
+    visual_domain_variant_profile_sha256 = "0" * 64
+    renderer_identity = (
+        "fixture-fixed-state-renderer-v1-nominal-"
+        f"{NOMINAL_VISUAL_DOMAIN_VARIANT.digest_sha256[:12]}"
+    )
     renderer_backend = "RayTracedLighting"
     lighting_identity = "session_workcell_authored_lighting"
     color_space = "isaac_rgb_annotator_srgb"

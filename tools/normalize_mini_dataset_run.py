@@ -163,14 +163,16 @@ def _raw_source_inventories(dataset: BagDataset) -> tuple[Counter[tuple[object, 
     return trackers, gloves
 
 
-def _require_raw_source(
+def _resolve_optional_raw_source(
     inventory: Counter[tuple[object, ...]],
     *,
     side: str,
     source: SourceRef | None,
     field: str,
-) -> SourceRef:
-    if source is None or inventory[_source_key(side, source)] != 1:
+) -> SourceRef | None:
+    if source is None:
+        return None
+    if inventory[_source_key(side, source)] != 1:
         raise ValueError(f"{field} does not uniquely resolve to one raw source sample")
     return source
 
@@ -231,13 +233,13 @@ def _tick_facts(
     route_facts: set[str] = set()
     for side in ("left", "right"):
         tick = by_side[side]
-        tracker = _require_raw_source(
+        tracker = _resolve_optional_raw_source(
             tracker_inventory,
             side=side,
             source=tick.arm.source,
             field=f"{side} selected tracker",
         )
-        active_tracker = _require_raw_source(
+        active_tracker = _resolve_optional_raw_source(
             tracker_inventory,
             side=side,
             source=tick.arm.active_source,
@@ -245,30 +247,39 @@ def _tick_facts(
         )
         if tick.hand is None:
             raise ValueError(f"{side} hand tick is missing")
-        glove = _require_raw_source(
+        glove = _resolve_optional_raw_source(
             glove_inventory,
             side=side,
             source=tick.hand.source,
             field=f"{side} selected glove",
         )
-        active_glove = _require_raw_source(
+        active_glove = _resolve_optional_raw_source(
             glove_inventory,
             side=side,
             source=tick.hand.active_source,
             field=f"{side} active glove",
         )
-        del tracker, glove
-        route_facts.update(
-            {
-                f"{side}.tracker.raw_selected",
-                f"{side}.glove.q21_selected",
-                f"{side}.applied.q27",
-            }
-        )
+        route_facts.add(f"{side}.applied.q27")
+        if tracker is not None:
+            route_facts.add(f"{side}.tracker.raw_selected")
+        if active_tracker is not None:
+            route_facts.add(f"{side}.tracker.raw_active")
+        if glove is not None:
+            route_facts.add(f"{side}.glove.q21_selected")
+        if active_glove is not None:
+            route_facts.add(f"{side}.glove.q21_active")
         if tick.arm.candidate_q7_rad is not None:
             route_facts.add(f"{side}.arm.q7_candidate")
         if tick.hand.has_intent and tick.hand.intent_q20_rad is not None:
             route_facts.add(f"{side}.hand.q20_intent")
+        if tick.arm.rate_limited:
+            route_facts.add(f"{side}.arm.rate_limited")
+        if tick.hand.rate_limited:
+            route_facts.add(f"{side}.hand.rate_limited")
+        if tick.arm.position_clamped:
+            route_facts.add(f"{side}.arm.clamped")
+        if tick.hand.position_clamped:
+            route_facts.add(f"{side}.hand.clamped")
         expected_applied = _expected_applied_q27(tick, profile)
         if any(
             not math.isclose(actual, expected, rel_tol=0.0, abs_tol=1e-12)
@@ -280,6 +291,8 @@ def _tick_facts(
         ):
             raise ValueError(f"{side} q7/q20 commands do not compose to applied q27")
         for source in (active_tracker, active_glove):
+            if source is None:
+                continue
             source_epochs.append(
                 SourceEpochFact(
                     source_id=source.source_id,
@@ -287,15 +300,20 @@ def _tick_facts(
                     transport_epoch=source.transport_epoch,
                 )
             )
-        input_ages.extend(
-            (
+        if active_tracker is not None:
+            input_ages.append(
                 (
                     f"{side}.tracker",
                     _age_ms(left.times.tick_time_ns, active_tracker, field="tracker"),
-                ),
-                (f"{side}.glove", _age_ms(left.times.tick_time_ns, active_glove, field="glove")),
+                )
             )
-        )
+        if active_glove is not None:
+            input_ages.append(
+                (
+                    f"{side}.glove",
+                    _age_ms(left.times.tick_time_ns, active_glove, field="glove"),
+                )
+            )
 
     pre = states[(left.tick_id, SimulationFramePhase.PRE_ACTION.value)]
     post = states[(left.tick_id, SimulationFramePhase.POST_ACTION.value)]

@@ -66,12 +66,14 @@ def test_alignment_carries_missed_period_mask_without_bridging_segments() -> Non
             frame.temporal_continuity,
             frame.missing_control_periods_before,
             frame.temporal_segment_index,
+            frame.gap_before_row,
+            frame.transition_valid,
         )
         for frame in alignment.frames
     ) == (
-        (True, 0, 0),
-        (False, 1, 1),
-        (True, 0, 1),
+        (True, 0, 0, False, False),
+        (False, 1, 1, True, True),
+        (True, 0, 1, False, False),
     )
 
 

@@ -18,6 +18,7 @@ from wujihand.domain.dataset_recording import SimulationFramePhase, SimulationSt
 
 from .artifacts import load_alignment_artifact
 from .camera import DatasetCameraRuntimeInventory
+from .domain_randomization import VisualDomainVariant
 from .normalized import load_normalized_episode_artifact
 from .profile import MiniDatasetProfile
 from .release_artifact import load_release_decision_artifact
@@ -56,6 +57,12 @@ class FixedStateRgbBackend(Protocol):
 
     @property
     def motion_blur_enabled(self) -> bool: ...
+
+    @property
+    def visual_domain_variant(self) -> VisualDomainVariant: ...
+
+    @property
+    def visual_domain_variant_profile_sha256(self) -> str: ...
 
     @property
     def simulation_time_s(self) -> float: ...
@@ -179,6 +186,7 @@ def render_exact_triview(
     *,
     dataset_profile: MiniDatasetProfile,
     backend: FixedStateRgbBackend,
+    artifact_name: str = "vision",
 ) -> VisionArtifact:
     """Render all alignment anchors without nearest joins or physics stepping."""
 
@@ -228,6 +236,13 @@ def render_exact_triview(
         camera_hashes=camera_hashes,
         collection_id=next(iter(collection_ids)),
     )
+    variant = backend.visual_domain_variant
+    if (
+        len(backend.visual_domain_variant_profile_sha256) != 64
+        or variant.variant_id not in backend.renderer_identity
+        or variant.digest_sha256[:12] not in backend.renderer_identity
+    ):
+        raise ValueError("renderer visual domain variant provenance differs")
     pre_frames = {
         tick.transition.control_index: tick.pre_action_frame for tick in normalized.facts.ticks
     }
@@ -239,6 +254,7 @@ def render_exact_triview(
         renderer_identity=backend.renderer_identity,
         provenance=provenance,
         camera_runtime_inventories=runtime_inventories,
+        artifact_name=artifact_name,
     )
     completed_identities: set[str] = set()
     try:

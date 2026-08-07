@@ -1,0 +1,25 @@
+schema: wujihand.mini_dataset_gate_profile.v1
+profile_id: mini_dataset_integrity_quality_gate_v1
+integrity:
+  expected_control_hz: 60.0
+  expected_physics_hz: 120.0
+  q54_continuity_atol_rad: 0.00000001
+  simulation_time_atol_s: 0.000000001
+  physics_grid_time_atol_s: 0.000005
+  static_reference_translation_limit_m: 0.000001
+  static_reference_rotation_limit_rad: 0.000001
+  replay_link_position_limit_m: 0.00002
+quality:
+  control_hz_lower: [59.5, 58.0, 55.0]
+  real_time_factor_lower: [0.99, 0.97, 0.90]
+  missed_fraction_upper: [0.005, 0.02, 0.03]
+  consecutive_misses_upper: [1.0, 2.0, 5.0]
+  maximum_interval_ms_upper: [50.0, 100.0, 250.0]
+  selected_missing_upper: [0.01, 0.05, 0.15]
+  active_missing_upper: [0.01, 0.05, 0.15]
+  q7_candidate_missing_upper: [0.01, 0.05, 0.25]
+  actionable_lower: [0.95, 0.80, 0.70]
+  input_age_p95_ms_upper: [20.0, 50.0, 100.0]
+  critical_gap_fraction_upper: [0.0, 0.005, 0.03]
+  rate_limit_fraction_upper: [0.05, 0.15, 0.30]
+  clamp_fraction_upper: [0.01, 0.05, 0.15]

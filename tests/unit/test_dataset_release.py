@@ -147,7 +147,7 @@ def test_normalized_episode_facts_strict_round_trip() -> None:
     assert NormalizedEpisodeFacts.from_mapping(facts.to_mapping()) == facts
 
 
-def test_schedule_miss_and_missing_q21_fail_with_machine_reasons() -> None:
+def test_missing_q21_is_quality_only_but_inconsistent_schedule_mask_is_hard() -> None:
     facts, profile = _episode()
     bad_tick = replace(
         facts.ticks[1],
@@ -161,11 +161,8 @@ def test_schedule_miss_and_missing_q21_fail_with_machine_reasons() -> None:
     )
 
     assert decision.passed is False
-    assert "q21_q20_q7_or_q27_fact_missing" in decision.rejection_reasons
-    assert (
-        "control_schedule_gap_exceeds_budget_or_hits_critical_motion"
-        in decision.rejection_reasons
-    )
+    assert decision.rejection_reasons == ("schedule_slot_and_missing_mask_conflict",)
+    assert decision.quality_grade == "D"
 
 
 def _declare_one_schedule_miss(
@@ -202,13 +199,15 @@ def test_isolated_schedule_miss_within_budget_is_usable_warning() -> None:
     assert decision.grade == "usable_with_warnings"
     assert decision.rejection_reasons == ()
     assert decision.warning_reasons == (
-        "control_schedule_gap_within_warning_budget",
+        "control_schedule_gap_quality_downgrade",
     )
-    gate = next(item for item in decision.gates if item.name == "control_schedule_gaps")
+    gate = next(
+        item for item in decision.gates if item.name == "control_schedule_gap_quality"
+    )
     assert gate.observed["missed_fraction"] == pytest.approx(1.0 / 241.0)
 
 
-def test_schedule_miss_above_fraction_budget_is_rejected() -> None:
+def test_schedule_miss_above_old_fraction_budget_is_quality_only() -> None:
     facts, profile = _episode(count=100)
 
     decision = validate_episode_release(
@@ -216,12 +215,10 @@ def test_schedule_miss_above_fraction_budget_is_rejected() -> None:
         profile,
     )
 
-    assert decision.passed is False
-    assert decision.grade == "rejected"
-    assert (
-        "control_schedule_gap_exceeds_budget_or_hits_critical_motion"
-        in decision.rejection_reasons
-    )
+    assert decision.passed is True
+    assert decision.grade == "usable_with_warnings"
+    assert decision.quality_grade == "B"
+    assert decision.rejection_reasons == ()
 
 
 def test_source_epoch_change_fails_closed() -> None:
@@ -251,7 +248,7 @@ def _rgb_availability(frame_count: int) -> dict[tuple[int, str], tuple[int, int]
     }
 
 
-def test_rgb_grid_is_strict_when_complete_and_warns_for_one_isolated_gap() -> None:
+def test_rgb_grid_is_strict_and_rejects_one_isolated_gap() -> None:
     availability = _rgb_availability(100)
     strict = evaluate_rgb_frame_grid(
         expected_frame_count=100,
@@ -265,8 +262,8 @@ def test_rgb_grid_is_strict_when_complete_and_warns_for_one_isolated_gap() -> No
 
     assert strict.passed is True
     assert warning.passed is False
-    assert warning.severity == "warning"
-    assert warning.reason == "rgb_isolated_missing_frames_within_warning_budget"
+    assert warning.severity == "hard"
+    assert warning.reason == "rgb_isolated_missing_frames_within_diagnostic_budget"
 
 
 def test_rgb_grid_rejects_consecutive_gap_or_reference_mismatch() -> None:

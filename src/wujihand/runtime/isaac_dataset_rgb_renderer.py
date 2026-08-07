@@ -27,6 +27,10 @@ from wujihand.dataset.camera import (
     assert_dataset_projection_matches_readback,
     load_dataset_camera_projections,
 )
+from wujihand.dataset.domain_randomization import (
+    NOMINAL_VISUAL_DOMAIN_VARIANT,
+    VisualDomainVariant,
+)
 from wujihand.dataset.profile import MiniDatasetProfile
 from wujihand.dataset.rendering import CompletedRgbRender, encode_rgb8_png
 from wujihand.domain.dataset_recording import SimulationStateFrame
@@ -196,7 +200,6 @@ class _CameraPipeline:
 class IsaacFixedStateRgbBackend:
     """Render three RGB images at fixed render times without taking physics steps."""
 
-    renderer_identity = ISAAC_DATASET_RENDERER_IDENTITY
     renderer_backend = "RayTracedLighting"
     lighting_identity = "session_workcell_authored_lighting"
     color_space = "isaac_rgb_annotator_srgb"
@@ -209,6 +212,8 @@ class IsaacFixedStateRgbBackend:
         scene: DualNeroHand2IsaacScene,
         dataset_profile: MiniDatasetProfile,
         warmup_update_app: Callable[[], None],
+        visual_domain_variant: VisualDomainVariant = NOMINAL_VISUAL_DOMAIN_VARIANT,
+        visual_domain_variant_profile_sha256: str = "0" * 64,
         callback_timeout_s: float = 10.0,
     ) -> None:
         if not math.isfinite(callback_timeout_s) or callback_timeout_s <= 0.0:
@@ -229,6 +234,14 @@ class IsaacFixedStateRgbBackend:
         self._project_root = root
         self._scene = scene
         self._dataset_profile = dataset_profile
+        self.visual_domain_variant = visual_domain_variant
+        if len(visual_domain_variant_profile_sha256) != 64:
+            raise ValueError("visual domain variant profile hash differs")
+        self.visual_domain_variant_profile_sha256 = visual_domain_variant_profile_sha256
+        self.renderer_identity = (
+            f"{ISAAC_DATASET_RENDERER_IDENTITY}-{visual_domain_variant.variant_id}-"
+            f"{visual_domain_variant.digest_sha256[:12]}"
+        )
         self._render_update_app: Callable[[], None] = lambda: rep.orchestrator.step(
             rt_subframes=1,
             pause_timeline=True,
@@ -264,6 +277,29 @@ class IsaacFixedStateRgbBackend:
         )
         if settings.get_as_bool("/rtx/post/motionblur/enabled"):
             raise RuntimeError("offline dataset renderer could not disable motion blur")
+        from pxr import UsdLux  # type: ignore[attr-defined]
+
+        dome = UsdLux.DomeLight.Get(scene.stage, "/World/Lighting/Environment")
+        if not dome:
+            raise RuntimeError("offline dataset renderer cannot resolve the environment light")
+        intensity_attr = dome.GetIntensityAttr()
+        exposure_attr = dome.GetExposureAttr()
+        authored_intensity = intensity_attr.Get()
+        authored_exposure = exposure_attr.Get()
+        if not isinstance(authored_intensity, (int, float)) or not isinstance(
+            authored_exposure,
+            (int, float),
+        ):
+            raise RuntimeError("offline dataset authored lighting values are unavailable")
+        intensity_attr.Set(
+            float(authored_intensity) * visual_domain_variant.lighting_intensity_scale
+        )
+        exposure_attr.Set(float(authored_exposure) + visual_domain_variant.exposure_offset)
+        if visual_domain_variant.background_color_rgb is not None:
+            settings.set_float_array(
+                "/rtx/background/source/color",
+                list(visual_domain_variant.background_color_rgb),
+            )
         import isaacsim.core.experimental.utils.prim as prim_utils  # type: ignore[import-not-found]
         import isaacsim.core.experimental.utils.stage as stage_utils  # type: ignore[import-not-found]
         from pxr import Sdf

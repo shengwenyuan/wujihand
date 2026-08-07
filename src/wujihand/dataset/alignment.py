@@ -13,7 +13,8 @@ from typing import Iterable, cast
 from wujihand.domain.recording import validate_run_id
 
 
-ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v2"
+ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v3"
+PREVIOUS_ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v2"
 LEGACY_ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v1"
 
 
@@ -153,6 +154,8 @@ class AlignmentFrame:
     temporal_continuity: bool = True
     missing_control_periods_before: int = 0
     temporal_segment_index: int = 0
+    gap_before_row: bool = False
+    transition_valid: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -196,6 +199,10 @@ class AlignmentFrame:
             raise ValueError("alignment gap mask fields must be non-negative integers")
         if self.temporal_continuity != (self.missing_control_periods_before == 0):
             raise ValueError("alignment temporal continuity and missing mask differ")
+        if self.gap_before_row != (self.missing_control_periods_before > 0):
+            raise ValueError("alignment gap_before_row and missing mask differ")
+        if type(self.transition_valid) is not bool:
+            raise ValueError("alignment transition_valid must be boolean")
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -210,6 +217,8 @@ class AlignmentFrame:
             "temporal_continuity": self.temporal_continuity,
             "missing_control_periods_before": self.missing_control_periods_before,
             "temporal_segment_index": self.temporal_segment_index,
+            "gap_before_row": self.gap_before_row,
+            "transition_valid": self.transition_valid,
         }
 
     @classmethod
@@ -234,8 +243,10 @@ class AlignmentFrame:
             "missing_control_periods_before",
             "temporal_segment_index",
         }
+        current_expected = expected | {"gap_before_row", "transition_valid"}
         legacy = frozenset(data) == legacy_expected
-        if not legacy and frozenset(data) != expected:
+        previous = frozenset(data) == expected
+        if not legacy and not previous and frozenset(data) != current_expected:
             raise ValueError(f"{field} keys differ from the alignment frame schema")
         for key in ("dataset_frame_index", "source_control_index", "source_tick_id"):
             if type(data[key]) is not int:
@@ -269,6 +280,16 @@ class AlignmentFrame:
             ),
             temporal_segment_index=(
                 0 if legacy else cast(int, data["temporal_segment_index"])
+            ),
+            gap_before_row=(
+                False
+                if legacy
+                else cast(int, data["missing_control_periods_before"]) > 0
+                if previous
+                else cast(bool, data["gap_before_row"])
+            ),
+            transition_valid=(
+                True if legacy or previous else cast(bool, data["transition_valid"])
             ),
         )
 
@@ -368,7 +389,8 @@ def build_exact_30hz_alignment(
     frames: list[AlignmentFrame] = []
     temporal_segment_index = 0
     previous_selected_control_index: int | None = None
-    for dataset_frame_index, row in enumerate(selected):
+    selected_missing_before: list[int] = []
+    for row in selected:
         first_covered = (
             row.control_index
             if previous_selected_control_index is None
@@ -380,6 +402,18 @@ def build_exact_30hz_alignment(
         )
         if previous_selected_control_index is not None and missing_before > 0:
             temporal_segment_index += 1
+        selected_missing_before.append(missing_before)
+        previous_selected_control_index = row.control_index
+    temporal_segment_index = 0
+    for dataset_frame_index, (row, missing_before) in enumerate(
+        zip(selected, selected_missing_before, strict=True)
+    ):
+        if dataset_frame_index > 0 and missing_before > 0:
+            temporal_segment_index += 1
+        transition_valid = (
+            dataset_frame_index + 1 < len(selected)
+            and selected_missing_before[dataset_frame_index + 1] == 0
+        )
         frames.append(
             AlignmentFrame(
                 dataset_frame_index=dataset_frame_index,
@@ -393,9 +427,10 @@ def build_exact_30hz_alignment(
                 temporal_continuity=missing_before == 0,
                 missing_control_periods_before=missing_before,
                 temporal_segment_index=temporal_segment_index,
+                gap_before_row=missing_before > 0,
+                transition_valid=transition_valid,
             )
         )
-        previous_selected_control_index = row.control_index
     frame_rows = tuple(frames)
     payload: dict[str, object] = {
         "schema": ALIGNMENT_SCHEMA,
@@ -427,6 +462,7 @@ def build_exact_30hz_alignment(
 __all__ = [
     "ALIGNMENT_SCHEMA",
     "LEGACY_ALIGNMENT_SCHEMA",
+    "PREVIOUS_ALIGNMENT_SCHEMA",
     "AlignmentFrame",
     "ExactAlignment",
     "RawTransition",

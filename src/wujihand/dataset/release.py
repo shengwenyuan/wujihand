@@ -1,4 +1,4 @@
-"""Fail-closed release gates for one normalized immutable episode."""
+"""Integrity gates and non-blocking quality grades for one immutable episode."""
 
 from __future__ import annotations
 
@@ -21,7 +21,8 @@ from .alignment import RawTransition
 from .profile import Q54JointProfile
 
 
-RELEASE_DECISION_SCHEMA: Final = "wujihand.dataset_release_decision.v2"
+RELEASE_DECISION_SCHEMA: Final = "wujihand.dataset_release_decision.v3"
+PREVIOUS_RELEASE_DECISION_SCHEMA: Final = "wujihand.dataset_release_decision.v2"
 LEGACY_RELEASE_DECISION_SCHEMA: Final = "wujihand.dataset_release_decision.v1"
 NORMALIZED_EPISODE_FACTS_SCHEMA: Final = "wujihand.normalized_episode_facts.v1"
 
@@ -29,21 +30,29 @@ GATE_SEVERITIES: Final = frozenset({"hard", "warning", "advisory"})
 RELEASE_GRADES: Final = frozenset(
     {"strict_qualified", "usable_with_warnings", "rejected"}
 )
+QUALITY_GRADES: Final = ("A", "B", "C", "D")
 RGB_CAMERA_IDS: Final = ("scene_rgb", "left_wrist_rgb", "right_wrist_rgb")
 
 REQUIRED_ROUTE_FACTS: Final = frozenset(
     {
         "left.tracker.raw_selected",
+        "left.tracker.raw_active",
         "left.glove.q21_selected",
+        "left.glove.q21_active",
         "left.arm.q7_candidate",
         "left.hand.q20_intent",
         "left.applied.q27",
         "right.tracker.raw_selected",
+        "right.tracker.raw_active",
         "right.glove.q21_selected",
+        "right.glove.q21_active",
         "right.arm.q7_candidate",
         "right.hand.q20_intent",
         "right.applied.q27",
     }
+)
+REQUIRED_INTEGRITY_ROUTE_FACTS: Final = frozenset(
+    {"left.applied.q27", "right.applied.q27"}
 )
 
 
@@ -99,6 +108,49 @@ class ReleaseGateConfig:
             or self.maximum_consecutive_missed_control_periods < 1
         ):
             raise ValueError("maximum consecutive missed-control periods must be positive")
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeQualityConfig:
+    """Versioned ABCD thresholds; no grade produced here is a release veto."""
+
+    control_hz_lower: tuple[float, float, float] = (59.5, 58.0, 55.0)
+    real_time_factor_lower: tuple[float, float, float] = (0.99, 0.97, 0.90)
+    missed_fraction_upper: tuple[float, float, float] = (0.005, 0.02, 0.03)
+    consecutive_misses_upper: tuple[float, float, float] = (1.0, 2.0, 5.0)
+    maximum_interval_ms_upper: tuple[float, float, float] = (50.0, 100.0, 250.0)
+    selected_missing_upper: tuple[float, float, float] = (0.01, 0.05, 0.15)
+    active_missing_upper: tuple[float, float, float] = (0.01, 0.05, 0.15)
+    q7_candidate_missing_upper: tuple[float, float, float] = (0.01, 0.05, 0.25)
+    actionable_lower: tuple[float, float, float] = (0.95, 0.80, 0.70)
+    input_age_p95_ms_upper: tuple[float, float, float] = (20.0, 50.0, 100.0)
+    critical_gap_fraction_upper: tuple[float, float, float] = (0.0, 0.005, 0.03)
+    rate_limit_fraction_upper: tuple[float, float, float] = (0.05, 0.15, 0.30)
+    clamp_fraction_upper: tuple[float, float, float] = (0.01, 0.05, 0.15)
+
+    def __post_init__(self) -> None:
+        lower = (self.control_hz_lower, self.real_time_factor_lower, self.actionable_lower)
+        upper = (
+            self.missed_fraction_upper,
+            self.consecutive_misses_upper,
+            self.maximum_interval_ms_upper,
+            self.selected_missing_upper,
+            self.active_missing_upper,
+            self.q7_candidate_missing_upper,
+            self.input_age_p95_ms_upper,
+            self.critical_gap_fraction_upper,
+            self.rate_limit_fraction_upper,
+            self.clamp_fraction_upper,
+        )
+        if any(
+            len(values) != 3 or any(not math.isfinite(value) or value < 0.0 for value in values)
+            for values in (*lower, *upper)
+        ):
+            raise ValueError("episode quality thresholds must contain three finite values")
+        if any(not first > second > third for first, second, third in lower):
+            raise ValueError("lower-is-better quality thresholds are not strictly descending")
+        if any(not first < second < third for first, second, third in upper):
+            raise ValueError("upper-is-better quality thresholds are not strictly ascending")
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,10 +489,72 @@ class ReleaseGateResult:
 
 
 @dataclass(frozen=True, slots=True)
+class EpisodeQualityMetric:
+    name: str
+    grade: str
+    observed: float
+    numerator: int | None = None
+    denominator: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name or self.grade not in QUALITY_GRADES:
+            raise ValueError("quality metric identity or grade differs")
+        if not math.isfinite(self.observed):
+            raise ValueError("quality metric observed value must be finite")
+        if (self.numerator is None) != (self.denominator is None):
+            raise ValueError("quality metric ratio counts must be both present or absent")
+        if self.numerator is not None and (
+            type(self.numerator) is not int
+            or type(self.denominator) is not int
+            or self.numerator < 0
+            or self.denominator <= 0
+            or self.numerator > self.denominator
+        ):
+            raise ValueError("quality metric ratio counts differ")
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "grade": self.grade,
+            "observed": self.observed,
+            "numerator": self.numerator,
+            "denominator": self.denominator,
+        }
+
+    @classmethod
+    def from_mapping(cls, value: object, *, field: str) -> EpisodeQualityMetric:
+        if not isinstance(value, Mapping) or frozenset(value) != {
+            "name",
+            "grade",
+            "observed",
+            "numerator",
+            "denominator",
+        }:
+            raise ValueError(f"{field} keys differ")
+        data = cast(Mapping[str, object], value)
+        if not isinstance(data["name"], str) or not isinstance(data["grade"], str):
+            raise ValueError(f"{field} string fields differ")
+        observed = data["observed"]
+        if isinstance(observed, bool) or not isinstance(observed, (int, float)):
+            raise ValueError(f"{field}.observed differs")
+        for key in ("numerator", "denominator"):
+            if data[key] is not None and type(data[key]) is not int:
+                raise ValueError(f"{field}.{key} differs")
+        return cls(
+            name=data["name"],
+            grade=data["grade"],
+            observed=float(observed),
+            numerator=cast(int | None, data["numerator"]),
+            denominator=cast(int | None, data["denominator"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ReleaseDecision:
     run_id: str
     passed: bool
     gates: tuple[ReleaseGateResult, ...]
+    quality_metrics: tuple[EpisodeQualityMetric, ...] = ()
 
     def __post_init__(self) -> None:
         expected_passed = not any(
@@ -448,6 +562,17 @@ class ReleaseDecision:
         )
         if self.passed != expected_passed:
             raise ValueError("release decision passed value differs from hard gates")
+        if len({metric.name for metric in self.quality_metrics}) != len(self.quality_metrics):
+            raise ValueError("release decision quality metric names are duplicated")
+
+    @property
+    def quality_grade(self) -> str:
+        if not self.quality_metrics:
+            return "A"
+        return max(
+            (metric.grade for metric in self.quality_metrics),
+            key=QUALITY_GRADES.index,
+        )
 
     @property
     def grade(self) -> str:
@@ -487,6 +612,8 @@ class ReleaseDecision:
             "run_id": self.run_id,
             "passed": self.passed,
             "grade": self.grade,
+            "quality_grade": self.quality_grade,
+            "quality_metrics": [item.to_mapping() for item in self.quality_metrics],
             "gates": [gate.to_mapping() for gate in self.gates],
             "rejection_reasons": list(self.rejection_reasons),
             "warning_reasons": list(self.warning_reasons),
@@ -499,6 +626,7 @@ class ReleaseDecision:
             raise ValueError("release decision must be a string-keyed mapping")
         data = cast(Mapping[str, object], value)
         legacy = data.get("schema") == LEGACY_RELEASE_DECISION_SCHEMA
+        previous = data.get("schema") == PREVIOUS_RELEASE_DECISION_SCHEMA
         expected = (
             {
                 "schema",
@@ -518,10 +646,27 @@ class ReleaseDecision:
                 "warning_reasons",
                 "advisory_reasons",
             }
+            if previous
+            else {
+                "schema",
+                "run_id",
+                "passed",
+                "grade",
+                "quality_grade",
+                "quality_metrics",
+                "gates",
+                "rejection_reasons",
+                "warning_reasons",
+                "advisory_reasons",
+            }
         )
         if frozenset(data) != frozenset(expected):
             raise ValueError("release decision keys differ")
-        if data["schema"] not in {RELEASE_DECISION_SCHEMA, LEGACY_RELEASE_DECISION_SCHEMA}:
+        if data["schema"] not in {
+            RELEASE_DECISION_SCHEMA,
+            PREVIOUS_RELEASE_DECISION_SCHEMA,
+            LEGACY_RELEASE_DECISION_SCHEMA,
+        }:
             raise ValueError("release decision schema differs")
         run_id = validate_run_id(data["run_id"])
         if type(data["passed"]) is not bool:
@@ -542,7 +687,19 @@ class ReleaseDecision:
             ReleaseGateResult.from_mapping(item, field=f"gates[{index}]")
             for index, item in enumerate(raw_gates)
         )
-        decision = cls(run_id=run_id, passed=data["passed"], gates=gates)
+        raw_metrics = () if legacy or previous else _strict_sequence(
+            data["quality_metrics"],
+            field="quality_metrics",
+        )
+        decision = cls(
+            run_id=run_id,
+            passed=data["passed"],
+            gates=gates,
+            quality_metrics=tuple(
+                EpisodeQualityMetric.from_mapping(item, field=f"quality_metrics[{index}]")
+                for index, item in enumerate(raw_metrics)
+            ),
+        )
         if tuple(raw_reasons) != decision.rejection_reasons:
             raise ValueError("release decision rejection reason closure differs")
         if not legacy:
@@ -556,6 +713,8 @@ class ReleaseDecision:
                 decision.advisory_reasons
             ):
                 raise ValueError("release decision advisory reason closure differs")
+        if not legacy and not previous and data["quality_grade"] != decision.quality_grade:
+            raise ValueError("release decision quality grade differs")
         return decision
 
 
@@ -657,20 +816,20 @@ def evaluate_rgb_frame_grid(
             else:
                 current_run = 0
     structural_closure = keys_complete and references_valid and reference_monotonic
-    within_warning_budget = (
+    within_diagnostic_budget = (
         structural_closure
         and missing_fraction <= maximum_missing_fraction
         and maximum_missing_run <= maximum_consecutive_missing_frames
     )
-    strict = within_warning_budget and not missing_keys
+    strict = structural_closure and not missing_keys
     return ReleaseGateResult(
         name="rgb_30hz_frame_grid",
         passed=strict,
         expected={
             "camera_ids": list(RGB_CAMERA_IDS),
             "frame_indices": [0, expected_frame_count - 1],
-            "usable_missing_fraction_maximum": maximum_missing_fraction,
-            "usable_consecutive_missing_maximum": (
+            "diagnostic_missing_fraction_maximum": maximum_missing_fraction,
+            "diagnostic_consecutive_missing_maximum": (
                 maximum_consecutive_missing_frames
             ),
             "shared_strictly_increasing_reference": True,
@@ -689,12 +848,12 @@ def evaluate_rgb_frame_grid(
             "passed"
             if strict
             else (
-                "rgb_isolated_missing_frames_within_warning_budget"
-                if within_warning_budget
+                "rgb_isolated_missing_frames_within_diagnostic_budget"
+                if within_diagnostic_budget
                 else "rgb_gap_budget_or_reference_closure_failed"
             )
         ),
-        severity="warning" if within_warning_budget else "hard",
+        severity="hard",
     )
 
 
@@ -723,7 +882,7 @@ def _source_epochs_stable(ticks: tuple[ControlTickFacts, ...]) -> bool:
             by_source.setdefault(fact.source_id, set()).add(
                 (fact.producer_instance, fact.transport_epoch)
             )
-    return bool(by_source) and all(len(values) == 1 for values in by_source.values())
+    return all(len(values) == 1 for values in by_source.values())
 
 
 def _rate_hz(ticks: tuple[ControlTickFacts, ...]) -> float | None:
@@ -862,11 +1021,243 @@ def _gap_motion_contexts(
     return tuple(contexts)
 
 
+def _percentile(values: Sequence[float], quantile: float) -> float:
+    if not values or not 0.0 <= quantile <= 1.0:
+        raise ValueError("quality percentile input differs")
+    ordered = sorted(values)
+    position = (len(ordered) - 1) * quantile
+    lower = math.floor(position)
+    upper = math.ceil(position)
+    if lower == upper:
+        return ordered[lower]
+    weight = position - lower
+    return ordered[lower] * (1.0 - weight) + ordered[upper] * weight
+
+
+def _grade_upper(value: float, thresholds: tuple[float, float, float]) -> str:
+    for grade, threshold in zip(QUALITY_GRADES[:3], thresholds, strict=True):
+        if value <= threshold:
+            return grade
+    return "D"
+
+
+def _grade_lower(value: float, thresholds: tuple[float, float, float]) -> str:
+    for grade, threshold in zip(QUALITY_GRADES[:3], thresholds, strict=True):
+        if value >= threshold:
+            return grade
+    return "D"
+
+
+def _ratio_metric(
+    name: str,
+    *,
+    numerator: int,
+    denominator: int,
+    thresholds: tuple[float, float, float],
+    higher_is_better: bool = False,
+) -> EpisodeQualityMetric:
+    if denominator <= 0 or not 0 <= numerator <= denominator:
+        raise ValueError(f"{name} quality ratio differs")
+    value = numerator / denominator
+    grade = _grade_lower(value, thresholds) if higher_is_better else _grade_upper(
+        value,
+        thresholds,
+    )
+    return EpisodeQualityMetric(
+        name=name,
+        grade=grade,
+        observed=value,
+        numerator=numerator,
+        denominator=denominator,
+    )
+
+
+def _route_missing_metric(
+    ticks: tuple[ControlTickFacts, ...],
+    *,
+    name: str,
+    route_keys: tuple[str, ...],
+    thresholds: tuple[float, float, float],
+) -> EpisodeQualityMetric:
+    denominator = len(ticks)
+    missing_by_route = tuple(
+        sum(key not in tick.route_fact_keys for tick in ticks) for key in route_keys
+    )
+    numerator = max(missing_by_route, default=denominator)
+    return _ratio_metric(
+        name,
+        numerator=numerator,
+        denominator=denominator,
+        thresholds=thresholds,
+    )
+
+
+def evaluate_episode_quality(
+    facts: NormalizedEpisodeFacts,
+    profile: Q54JointProfile,
+    *,
+    gate_config: ReleaseGateConfig = ReleaseGateConfig(),
+    quality_config: EpisodeQualityConfig = EpisodeQualityConfig(),
+) -> tuple[EpisodeQualityMetric, ...]:
+    """Return a deterministic ABCD metric vector without changing integrity."""
+
+    ticks = facts.ticks
+    if not ticks:
+        return ()
+    rate = _rate_hz(ticks)
+    rtf = _real_time_factor(ticks)
+    if rate is None or rtf is None:
+        return ()
+    schedule_misses = sum(tick.missed_control_periods_before_tick for tick in ticks)
+    expected_periods = len(ticks) + schedule_misses
+    maximum_consecutive = max(
+        tick.missed_control_periods_before_tick for tick in ticks
+    )
+    intervals_ms = tuple(
+        (current.tick_time_ns - previous.tick_time_ns) / 1e6
+        for previous, current in zip(ticks, ticks[1:], strict=False)
+    )
+    maximum_interval_ms = max(intervals_ms, default=0.0)
+    selected = _route_missing_metric(
+        ticks,
+        name="selected_missing_fraction_worst_route",
+        route_keys=(
+            "left.tracker.raw_selected",
+            "left.glove.q21_selected",
+            "right.tracker.raw_selected",
+            "right.glove.q21_selected",
+        ),
+        thresholds=quality_config.selected_missing_upper,
+    )
+    active = _route_missing_metric(
+        ticks,
+        name="active_provenance_missing_fraction_worst_route",
+        route_keys=(
+            "left.tracker.raw_active",
+            "left.glove.q21_active",
+            "right.tracker.raw_active",
+            "right.glove.q21_active",
+        ),
+        thresholds=quality_config.active_missing_upper,
+    )
+    q7 = _route_missing_metric(
+        ticks,
+        name="q7_candidate_missing_fraction_worst_arm",
+        route_keys=("left.arm.q7_candidate", "right.arm.q7_candidate"),
+        thresholds=quality_config.q7_candidate_missing_upper,
+    )
+    actionable_keys = {
+        "left.tracker.raw_selected",
+        "left.glove.q21_selected",
+        "left.arm.q7_candidate",
+        "left.hand.q20_intent",
+        "right.tracker.raw_selected",
+        "right.glove.q21_selected",
+        "right.arm.q7_candidate",
+        "right.hand.q20_intent",
+    }
+    actionable_count = sum(
+        tick.route_fact_keys.issuperset(actionable_keys) for tick in ticks
+    )
+    input_ages_by_route: dict[str, list[float]] = {}
+    for tick in ticks:
+        for route, age in tick.comparable_input_age_ms:
+            input_ages_by_route.setdefault(route, []).append(age)
+    worst_p95 = max(
+        (_percentile(values, 0.95) for values in input_ages_by_route.values()),
+        default=0.0,
+    )
+    critical = _gap_motion_contexts(ticks, profile=profile, config=gate_config)
+    critical_count = sum(bool(item["critical_reasons"]) for item in critical)
+    rate_limit_keys = (
+        "left.arm.rate_limited",
+        "left.hand.rate_limited",
+        "right.arm.rate_limited",
+        "right.hand.rate_limited",
+    )
+    clamp_keys = (
+        "left.arm.clamped",
+        "left.hand.clamped",
+        "right.arm.clamped",
+        "right.hand.clamped",
+    )
+    worst_rate_limit = max(
+        (sum(key in tick.route_fact_keys for tick in ticks) for key in rate_limit_keys),
+        default=0,
+    )
+    worst_clamp = max(
+        (sum(key in tick.route_fact_keys for tick in ticks) for key in clamp_keys),
+        default=0,
+    )
+    return (
+        EpisodeQualityMetric(
+            "control_effective_hz",
+            _grade_lower(rate, quality_config.control_hz_lower),
+            rate,
+        ),
+        EpisodeQualityMetric(
+            "physics_real_time_factor",
+            _grade_lower(rtf, quality_config.real_time_factor_lower),
+            rtf,
+        ),
+        _ratio_metric(
+            "scheduler_missed_fraction",
+            numerator=schedule_misses,
+            denominator=expected_periods,
+            thresholds=quality_config.missed_fraction_upper,
+        ),
+        EpisodeQualityMetric(
+            "maximum_consecutive_missed_periods",
+            _grade_upper(float(maximum_consecutive), quality_config.consecutive_misses_upper),
+            float(maximum_consecutive),
+        ),
+        EpisodeQualityMetric(
+            "maximum_control_interval_ms",
+            _grade_upper(maximum_interval_ms, quality_config.maximum_interval_ms_upper),
+            maximum_interval_ms,
+        ),
+        selected,
+        active,
+        q7,
+        _ratio_metric(
+            "four_stream_actionable_fraction",
+            numerator=actionable_count,
+            denominator=len(ticks),
+            thresholds=quality_config.actionable_lower,
+            higher_is_better=True,
+        ),
+        EpisodeQualityMetric(
+            "input_age_p95_ms_worst_route",
+            _grade_upper(worst_p95, quality_config.input_age_p95_ms_upper),
+            worst_p95,
+        ),
+        _ratio_metric(
+            "critical_motion_gap_fraction",
+            numerator=critical_count,
+            denominator=len(ticks),
+            thresholds=quality_config.critical_gap_fraction_upper,
+        ),
+        _ratio_metric(
+            "rate_limit_fraction_worst_route",
+            numerator=worst_rate_limit,
+            denominator=len(ticks),
+            thresholds=quality_config.rate_limit_fraction_upper,
+        ),
+        _ratio_metric(
+            "clamp_fraction_worst_route",
+            numerator=worst_clamp,
+            denominator=len(ticks),
+            thresholds=quality_config.clamp_fraction_upper,
+        ),
+    )
+
+
 def validate_episode_release(
     facts: NormalizedEpisodeFacts,
     profile: Q54JointProfile,
     *,
     config: ReleaseGateConfig = ReleaseGateConfig(),
+    quality_config: EpisodeQualityConfig = EpisodeQualityConfig(),
 ) -> ReleaseDecision:
     """Evaluate every hard gate without converting a failure into an exception."""
 
@@ -877,7 +1268,7 @@ def validate_episode_release(
     same_run = all(row.run_id == facts.run_id for row in transitions)
     complete_ticks = bool(transitions) and all(row.complete for row in transitions)
     route_complete = bool(ticks) and all(
-        tick.route_fact_keys.issuperset(REQUIRED_ROUTE_FACTS) for tick in ticks
+        tick.route_fact_keys.issuperset(REQUIRED_INTEGRITY_ROUTE_FACTS) for tick in ticks
     )
     schedule_misses = sum(tick.missed_control_periods_before_tick for tick in ticks)
     expected_control_periods = len(ticks) + schedule_misses
@@ -908,17 +1299,6 @@ def validate_episode_release(
     critical_gap_contexts = tuple(
         context for context in gap_contexts if context["critical_reasons"]
     )
-    schedule_within_warning_budget = bool(ticks) and (
-        missed_control_fraction is not None
-        and missed_control_fraction <= config.maximum_missed_control_fraction
-        and maximum_consecutive_misses
-        <= config.maximum_consecutive_missed_control_periods
-        and maximum_control_interval_s < config.maximum_control_interval_s
-        and schedule_slot_mask_closed
-        and host_time_monotonic
-        and not critical_gap_contexts
-    )
-    schedule_strict = schedule_misses == 0 and schedule_within_warning_budget
     frame_digests_match = bool(ticks) and all(
         tick.pre_action_frame.payload_digest_sha256 == tick.transition.pre_action_state_digest
         for tick in ticks
@@ -968,12 +1348,6 @@ def validate_episode_release(
     input_ages = tuple(age for tick in ticks for _, age in tick.comparable_input_age_ms)
     input_age_max = max(input_ages) if input_ages else None
     rate = _rate_hz(ticks)
-    rate_passed = rate is not None and math.isclose(
-        rate,
-        config.expected_control_hz,
-        rel_tol=config.control_rate_tolerance_fraction,
-        abs_tol=0.0,
-    )
     rtf = _real_time_factor(ticks)
     source_modes = {item.source_mode for item in facts.boundaries}
     eligible = bool(facts.boundaries) and all(item.dataset_eligible for item in facts.boundaries)
@@ -981,6 +1355,13 @@ def validate_episode_release(
     boundary_final = (
         facts.boundaries[-1].effective_final_control_index if facts.boundaries else None
     )
+    quality_metrics = evaluate_episode_quality(
+        facts,
+        profile,
+        gate_config=config,
+        quality_config=quality_config,
+    )
+    quality_by_name = {item.name: item for item in quality_metrics}
 
     gates = (
         _gate(
@@ -1064,9 +1445,9 @@ def validate_episode_release(
         _gate(
             "route_fact_completeness",
             route_complete,
-            expected=sorted(REQUIRED_ROUTE_FACTS),
+            expected=sorted(REQUIRED_INTEGRITY_ROUTE_FACTS),
             observed="all_ticks_complete" if route_complete else "missing_route_facts",
-            reason="q21_q20_q7_or_q27_fact_missing",
+            reason="applied_q27_fact_missing",
         ),
         _gate(
             "source_epoch_stability",
@@ -1100,20 +1481,11 @@ def validate_episode_release(
             reason="physics_index_or_timestamp_gap",
         ),
         ReleaseGateResult(
-            name="control_schedule_gaps",
-            passed=schedule_strict,
+            name="control_schedule_gap_quality",
+            passed=schedule_misses == 0,
             expected={
                 "strict_missed_periods": 0,
-                "usable_missed_fraction_maximum": (
-                    config.maximum_missed_control_fraction
-                ),
-                "usable_consecutive_missed_maximum": (
-                    config.maximum_consecutive_missed_control_periods
-                ),
-                "control_interval_strictly_below_s": (
-                    config.maximum_control_interval_s
-                ),
-                "critical_motion_gap_count": 0,
+                "release_role": "quality_only",
             },
             observed={
                 "actual_tick_count": len(ticks),
@@ -1122,15 +1494,17 @@ def validate_episode_release(
                 "missed_fraction": missed_control_fraction,
                 "maximum_consecutive_missed_periods": maximum_consecutive_misses,
                 "maximum_control_interval_s": maximum_control_interval_s,
-                "schedule_slot_mask_closed": schedule_slot_mask_closed,
                 "critical_gap_contexts": list(critical_gap_contexts),
             },
-            reason=(
-                "control_schedule_gap_within_warning_budget"
-                if schedule_within_warning_budget
-                else "control_schedule_gap_exceeds_budget_or_hits_critical_motion"
-            ),
-            severity="warning" if schedule_within_warning_budget else "hard",
+            reason="control_schedule_gap_quality_downgrade",
+            severity="warning",
+        ),
+        _gate(
+            "schedule_slot_mask_closure",
+            schedule_slot_mask_closed,
+            expected="slot_delta_equals_one_plus_explicit_missed_periods",
+            observed=schedule_slot_mask_closed,
+            reason="schedule_slot_and_missing_mask_conflict",
         ),
         _gate(
             "host_time_order",
@@ -1144,38 +1518,60 @@ def validate_episode_release(
         ),
         _gate(
             "control_rate",
-            rate_passed,
-            expected=f"{config.expected_control_hz}Hz±{config.control_rate_tolerance_fraction:.1%}",
+            quality_by_name.get("control_effective_hz") is not None
+            and quality_by_name["control_effective_hz"].grade == "A",
+            expected="quality_grade_A_non_blocking",
             observed=rate,
             reason="control_rate_out_of_range",
+            severity="warning",
         ),
         _gate(
             "real_time_factor",
-            rtf is not None and rtf >= config.minimum_real_time_factor,
-            expected=f">={config.minimum_real_time_factor}",
+            quality_by_name.get("physics_real_time_factor") is not None
+            and quality_by_name["physics_real_time_factor"].grade == "A",
+            expected="quality_grade_A_non_blocking",
             observed=rtf,
             reason="real_time_factor_below_limit",
+            severity="warning",
         ),
         _gate(
             "input_age",
-            input_age_max is not None and input_age_max <= config.maximum_input_age_ms,
-            expected=f"<={config.maximum_input_age_ms}ms",
-            observed=input_age_max,
+            quality_by_name.get("input_age_p95_ms_worst_route") is not None
+            and quality_by_name["input_age_p95_ms_worst_route"].grade == "A",
+            expected="worst_route_p95_quality_grade_A_non_blocking",
+            observed={
+                "maximum_ms": input_age_max,
+                "worst_route_p95_ms": (
+                    None
+                    if quality_by_name.get("input_age_p95_ms_worst_route") is None
+                    else quality_by_name["input_age_p95_ms_worst_route"].observed
+                ),
+            },
             reason="input_age_missing_or_above_limit",
+            severity="warning",
         ),
-        _gate(
-            "fixed_fixture_stability",
+        ReleaseGateResult(
+            name="legacy_fixed_fixture_diagnostic",
+            passed=(
             facts.fixture_translation_drift_m <= config.fixture_translation_drift_limit_m
-            and facts.fixture_rotation_drift_rad <= config.fixture_rotation_drift_limit_rad,
+            and facts.fixture_rotation_drift_rad <= config.fixture_rotation_drift_limit_rad
+            ),
             expected={
                 "translation_m": config.fixture_translation_drift_limit_m,
                 "rotation_rad": config.fixture_rotation_drift_limit_rad,
+                "release_role": "advisory_until_task_neutral_static_reference_manifest",
             },
             observed={
                 "translation_m": facts.fixture_translation_drift_m,
                 "rotation_rad": facts.fixture_rotation_drift_rad,
             },
-            reason="fixed_fixture_drift_above_limit",
+            reason=(
+                "passed"
+                if facts.fixture_translation_drift_m <= config.fixture_translation_drift_limit_m
+                and facts.fixture_rotation_drift_rad <= config.fixture_rotation_drift_limit_rad
+                else "legacy_fixed_fixture_drift_above_limit"
+            ),
+            severity="advisory",
         ),
     )
     return ReleaseDecision(
@@ -1184,19 +1580,24 @@ def validate_episode_release(
             not gate.passed and gate.severity == "hard" for gate in gates
         ),
         gates=gates,
+        quality_metrics=quality_metrics,
     )
 
 
 __all__ = [
     "NORMALIZED_EPISODE_FACTS_SCHEMA",
     "RELEASE_DECISION_SCHEMA",
+    "REQUIRED_INTEGRITY_ROUTE_FACTS",
     "REQUIRED_ROUTE_FACTS",
     "ControlTickFacts",
+    "EpisodeQualityConfig",
+    "EpisodeQualityMetric",
     "NormalizedEpisodeFacts",
     "ReleaseDecision",
     "ReleaseGateConfig",
     "ReleaseGateResult",
     "SourceEpochFact",
+    "evaluate_episode_quality",
     "evaluate_rgb_frame_grid",
     "validate_episode_release",
 ]

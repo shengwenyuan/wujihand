@@ -15,8 +15,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from wujihand.dataset import (  # noqa: E402
     ReleaseDecision,
-    ReleaseGateConfig,
     ReleaseGateResult,
+    load_mini_dataset_gate_profile,
     load_mini_dataset_profile,
     load_normalized_episode_artifact,
     validate_episode_release,
@@ -25,12 +25,14 @@ from wujihand.dataset import (  # noqa: E402
 
 
 DEFAULT_PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_triview_q54_mini_dataset_v1.yaml"
+DEFAULT_GATE_PROFILE = ROOT / "configs/profiles/mini_dataset_integrity_quality_gate_v1.yaml"
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--dataset-profile", type=Path, default=DEFAULT_PROFILE)
+    parser.add_argument("--gate-profile", type=Path, default=DEFAULT_GATE_PROFILE)
     return parser
 
 
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run_root = args.run_root.resolve()
         profile = load_mini_dataset_profile(ROOT, args.dataset_profile)
+        gate_profile = load_mini_dataset_gate_profile(ROOT, args.gate_profile)
         normalized = load_normalized_episode_artifact(
             run_root / "derived" / "normalized",
             expected_run_id=run_root.name,
@@ -96,11 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         decision = validate_episode_release(
             normalized.facts,
             profile.q54,
-            config=ReleaseGateConfig(
-                control_rate_tolerance_fraction=(profile.release_control_rate_tolerance_fraction),
-                minimum_real_time_factor=profile.release_minimum_real_time_factor,
-                maximum_input_age_ms=profile.release_maximum_input_age_ms,
-            ),
+            config=gate_profile.integrity,
+            quality_config=gate_profile.quality,
         )
         preview_gate = _live_preview_gate(
             run_root,
@@ -111,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             run_id=decision.run_id,
             passed=decision.passed,
             gates=(*decision.gates, preview_gate),
+            quality_metrics=decision.quality_metrics,
         )
         artifact = write_release_decision_artifact(run_root, decision)
     except (OSError, ValueError) as exc:
@@ -133,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
                 "run_id": decision.run_id,
                 "passed": decision.passed,
                 "grade": decision.grade,
+                "quality_grade": decision.quality_grade,
+                "quality_metrics": [item.to_mapping() for item in decision.quality_metrics],
+                "gate_profile_id": gate_profile.profile_id,
+                "gate_profile_sha256": gate_profile.file_sha256,
                 "rejection_reasons": list(decision.rejection_reasons),
                 "warning_reasons": list(decision.warning_reasons),
                 "advisory_reasons": list(decision.advisory_reasons),

@@ -18,7 +18,13 @@ from .episode import (
     load_episode_annotation,
     write_episode_annotation,
 )
+from .domain_randomization import (
+    VisualDomainVariant,
+    VisualDomainVariantProfile,
+    load_visual_domain_variant_profile,
+)
 from .lifecycle import DatasetEpisodeLifecycle, EpisodeReadiness
+from .gate_profile import MiniDatasetGateProfile, load_mini_dataset_gate_profile
 from .inventory import (
     parse_dataset_truth_inventories,
     validate_q54_runtime_inventory,
@@ -47,10 +53,13 @@ from .rendering import (
 )
 from .release import (
     ControlTickFacts,
+    EpisodeQualityConfig,
+    EpisodeQualityMetric,
     NormalizedEpisodeFacts,
     ReleaseDecision,
     ReleaseGateConfig,
     ReleaseGateResult,
+    evaluate_episode_quality,
     evaluate_rgb_frame_grid,
     validate_episode_release,
 )
@@ -80,6 +89,8 @@ __all__ = [
     "CollectionRegistry",
     "CollectionExportRecord",
     "ControlTickFacts",
+    "EpisodeQualityConfig",
+    "EpisodeQualityMetric",
     "CompletedRgbRender",
     "DatasetCameraRuntimeInventory",
     "DatasetEpisodeAnnotation",
@@ -90,8 +101,11 @@ __all__ = [
     "EpisodeDisposition",
     "EpisodeBundleArtifact",
     "EpisodeRegistryRecord",
+    "VisualDomainVariant",
+    "VisualDomainVariantProfile",
     "FixedStateRgbBackend",
     "MiniDatasetProfile",
+    "MiniDatasetGateProfile",
     "NormalizedEpisodeFacts",
     "NormalizedEpisodeArtifact",
     "PolicyEpisode",
@@ -113,12 +127,15 @@ __all__ = [
     "build_quality_report",
     "encode_rgb8_png",
     "evaluate_rgb_frame_grid",
+    "evaluate_episode_quality",
     "assert_dataset_projection_matches_readback",
     "load_alignment_artifact",
     "load_episode_annotation",
+    "load_visual_domain_variant_profile",
     "load_dataset_camera_projections",
     "load_q54_joint_profile",
     "load_mini_dataset_profile",
+    "load_mini_dataset_gate_profile",
     "load_normalized_episode_artifact",
     "load_vision_artifact",
     "load_policy_episode",

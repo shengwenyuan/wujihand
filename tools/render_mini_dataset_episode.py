@@ -25,6 +25,7 @@ from wujihand.dataset import (
     load_mini_dataset_profile,
     load_normalized_episode_artifact,
     load_release_decision_artifact,
+    load_visual_domain_variant_profile,
     render_exact_triview,
 )
 from wujihand.integrity import sha256_file
@@ -37,6 +38,9 @@ DEFAULT_DEPLOYMENT = (
 )
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv5_ros_v2.yaml"
 ISAAC_RENDERER = "RayTracedLighting"
+DEFAULT_VARIANT_PROFILE = (
+    ROOT / "configs/profiles/isaac_mini_dataset_visual_domain_variants_v1.yaml"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,6 +57,8 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument("--render-variant", default="nominal")
+    parser.add_argument("--variant-profile", type=Path, default=DEFAULT_VARIANT_PROFILE)
     return parser
 
 
@@ -62,7 +68,7 @@ def _mapping(value: object, *, field: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def _preflight_derived(run_root: Path) -> None:
+def _preflight_derived(run_root: Path, *, artifact_name: str) -> None:
     if run_root.is_symlink() or not run_root.is_dir():
         raise ValueError("run root must be a non-symlink directory")
     load_run_artifact(run_root)
@@ -82,7 +88,7 @@ def _preflight_derived(run_root: Path) -> None:
     )
     if not normalized.facts.ticks or not alignment.frames:
         raise ValueError("offline RGB rendering requires non-empty normalized/alignment facts")
-    vision = run_root / "derived" / "vision"
+    vision = run_root / "derived" / artifact_name
     if vision.exists() or vision.is_symlink():
         raise FileExistsError("vision artifact already exists")
 
@@ -129,6 +135,8 @@ def _result(
     output: str | None = None,
     frame_count: int | None = None,
     inventories: list[dict[str, object]] | None = None,
+    render_variant: dict[str, object] | None = None,
+    render_variant_profile_sha256: str | None = None,
     error: str | None = None,
 ) -> str:
     return json.dumps(
@@ -139,6 +147,8 @@ def _result(
             "output": output,
             "frame_count": frame_count,
             "camera_runtime_inventories": inventories,
+            "render_variant": render_variant,
+            "render_variant_profile_sha256": render_variant_profile_sha256,
             "error": error,
         },
         sort_keys=True,
@@ -152,7 +162,12 @@ def main(argv: list[str] | None = None) -> int:
     primary_error: BaseException | None = None
     try:
         run_root = args.run_root.resolve()
-        _preflight_derived(run_root)
+        variant_profile = load_visual_domain_variant_profile(ROOT, args.variant_profile)
+        variant = variant_profile.variant(args.render_variant)
+        artifact_name = (
+            "vision" if variant.variant_id == "nominal" else f"vision_{variant.variant_id}"
+        )
+        _preflight_derived(run_root, artifact_name=artifact_name)
         resolved = RosDeploymentResolver(ROOT).resolve(
             args.deployment,
             local_binding=args.local_runtime_binding,
@@ -231,11 +246,14 @@ def main(argv: list[str] | None = None) -> int:
             # Full Kit updates are allowed only before any recorded state is
             # injected, so all three render products can finish startup warm-up.
             warmup_update_app=simulation_app.update,
+            visual_domain_variant=variant,
+            visual_domain_variant_profile_sha256=variant_profile.file_sha256,
         )
         artifact = render_exact_triview(
             run_root,
             dataset_profile=dataset_profile,
             backend=backend,
+            artifact_name=artifact_name,
         )
         inventories = [item.to_mapping() for item in backend.inventories]
         backend.close()
@@ -247,6 +265,8 @@ def main(argv: list[str] | None = None) -> int:
                 output=str(artifact.root),
                 frame_count=artifact.frame_count,
                 inventories=inventories,
+                render_variant=variant.to_mapping(),
+                render_variant_profile_sha256=variant_profile.file_sha256,
             )
         )
         return 0

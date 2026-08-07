@@ -19,6 +19,8 @@ from wujihand.dataset.episode import (
     write_episode_annotation,
 )
 from wujihand.dataset.policy import load_policy_episode
+from wujihand.dataset.release import ReleaseDecision
+from wujihand.dataset.release_artifact import write_release_decision_artifact
 from wujihand.dataset.vision import (
     CAMERA_IDS,
     VISION_ARTIFACT_SCHEMA,
@@ -163,6 +165,10 @@ def test_policy_episode_closes_annotation_alignment_and_three_camera_payloads(
     tmp_path: Path,
 ) -> None:
     run = _episode(tmp_path)
+    write_release_decision_artifact(
+        run,
+        ReleaseDecision(run_id=run.name, passed=True, gates=()),
+    )
 
     episode = load_policy_episode(run)
 
@@ -171,10 +177,15 @@ def test_policy_episode_closes_annotation_alignment_and_three_camera_payloads(
     assert episode.frames[1].source_control_index == 12
     assert len(episode.frames[0].image_paths) == 3
     assert episode.task.startswith("Move the left hand")
+    assert episode.quality_grade == "A"
 
 
 def test_policy_episode_rejects_non_exact_vision_source_join(tmp_path: Path) -> None:
     run = _episode(tmp_path)
+    write_release_decision_artifact(
+        run,
+        ReleaseDecision(run_id=run.name, passed=True, gates=()),
+    )
     path = run / "derived" / "vision" / "frame_index.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     for row in rows[:3]:

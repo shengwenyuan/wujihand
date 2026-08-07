@@ -9,7 +9,12 @@ from typing import Final
 
 from .alignment import ExactAlignment
 from .artifacts import load_alignment_artifact
+from .domain_randomization import (
+    NOMINAL_VISUAL_DOMAIN_VARIANT,
+    VisualDomainVariant,
+)
 from .episode import DatasetEpisodeAnnotation, load_episode_annotation
+from .release_artifact import load_release_decision_artifact
 from .vision import CAMERA_IDS, VisionArtifact, load_vision_artifact
 
 
@@ -34,6 +39,8 @@ class PolicyFrame:
     temporal_continuity: bool = True
     missing_control_periods_before: int = 0
     temporal_segment_index: int = 0
+    gap_before_row: bool = False
+    transition_valid: bool = False
 
     def __post_init__(self) -> None:
         if type(self.temporal_continuity) is not bool:
@@ -49,16 +56,25 @@ class PolicyFrame:
             self.missing_control_periods_before == 0
         ):
             raise ValueError("policy temporal continuity and missing mask differ")
+        if self.gap_before_row != (self.missing_control_periods_before > 0):
+            raise ValueError("policy gap_before_row and missing mask differ")
+        if type(self.transition_valid) is not bool:
+            raise ValueError("policy transition_valid must be boolean")
 
 
 @dataclass(frozen=True, slots=True)
 class PolicyEpisode:
     run_id: str
+    source_run_id: str
     root: Path
     annotation: DatasetEpisodeAnnotation
     alignment: ExactAlignment
     vision: VisionArtifact
     frames: tuple[PolicyFrame, ...]
+    quality_grade: str
+    release_decision_sha256: str
+    visual_domain_variant: VisualDomainVariant
+    visual_domain_variant_profile_sha256: str
 
     @property
     def task(self) -> str:
@@ -122,13 +138,21 @@ def _validate_exact_vision_join(
                     source.missing_control_periods_before
                 ),
                 temporal_segment_index=source.temporal_segment_index,
+                gap_before_row=source.gap_before_row,
+                transition_valid=source.transition_valid,
                 image_paths=(image_paths[0], image_paths[1], image_paths[2]),
             )
         )
     return tuple(result)
 
 
-def load_policy_episode(run_root: str | Path) -> PolicyEpisode:
+def load_policy_episode(
+    run_root: str | Path,
+    *,
+    vision_artifact_name: str = "vision",
+    visual_domain_variant: VisualDomainVariant = NOMINAL_VISUAL_DOMAIN_VARIANT,
+    visual_domain_variant_profile_sha256: str = "0" * 64,
+) -> PolicyEpisode:
     raw_root = Path(run_root)
     if raw_root.is_symlink():
         raise ValueError("policy episode run root must not be a symbolic link")
@@ -136,23 +160,48 @@ def load_policy_episode(run_root: str | Path) -> PolicyEpisode:
     if not root.is_dir():
         raise ValueError("policy episode run root must be a directory")
     annotation = load_episode_annotation(root, expected_run_id=root.name)
+    release = load_release_decision_artifact(
+        root / "derived" / "release",
+        expected_run_id=root.name,
+    )
+    if not release.decision.passed:
+        raise ValueError("policy episode requires complete control integrity")
     alignment = load_alignment_artifact(
         root / "derived" / "alignment",
         expected_run_id=root.name,
     )
+    expected_artifact_name = (
+        "vision"
+        if visual_domain_variant.variant_id == "nominal"
+        else f"vision_{visual_domain_variant.variant_id}"
+    )
+    if vision_artifact_name != expected_artifact_name:
+        raise ValueError("policy vision artifact name and domain variant differ")
+    if len(visual_domain_variant_profile_sha256) != 64:
+        raise ValueError("policy visual domain variant profile hash differs")
     vision = load_vision_artifact(
-        root / "derived" / "vision",
+        root / "derived" / vision_artifact_name,
         expected_run_id=root.name,
         expected_alignment_digest=alignment.digest_sha256,
     )
     frames = _validate_exact_vision_join(alignment, vision)
+    episode_id = (
+        root.name
+        if visual_domain_variant.variant_id == "nominal"
+        else f"{root.name}-{visual_domain_variant.variant_id}"
+    )
     return PolicyEpisode(
-        run_id=root.name,
+        run_id=episode_id,
+        source_run_id=root.name,
         root=root,
         annotation=annotation,
         alignment=alignment,
         vision=vision,
         frames=frames,
+        quality_grade=release.decision.quality_grade,
+        release_decision_sha256=release.decision_sha256,
+        visual_domain_variant=visual_domain_variant,
+        visual_domain_variant_profile_sha256=visual_domain_variant_profile_sha256,
     )
 
 

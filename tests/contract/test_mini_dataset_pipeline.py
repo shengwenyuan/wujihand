@@ -73,6 +73,8 @@ def test_control_and_renderer_clis_expose_no_camera_or_physical_lens_switch() ->
         "--deployment",
         "--local-runtime-binding",
         "--verify-artifacts",
+        "--render-variant",
+        "--variant-profile",
     }
     assert preview_args == {
         "--deployment",

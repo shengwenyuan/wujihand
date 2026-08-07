@@ -654,6 +654,7 @@ class VisionArtifactBuilder:
         renderer_identity: str,
         provenance: DatasetVisionProvenance,
         camera_runtime_inventories: tuple[DatasetCameraRuntimeInventory, ...],
+        artifact_name: str = "vision",
     ) -> None:
         identifier = validate_run_id(run_id)
         raw_run = Path(run_root)
@@ -684,11 +685,15 @@ class VisionArtifactBuilder:
             {item.camera_id: item.profile_sha256 for item in camera_runtime_inventories}
         )
         self.camera_runtime_inventories = camera_runtime_inventories
+        self.artifact_name = validate_recording_token(
+            artifact_name,
+            field="vision_artifact_name",
+        )
         self.derived = root / "derived"
         self.derived.mkdir(exist_ok=True)
         if self.derived.is_symlink():
             raise ValueError("vision derived root must not be a symbolic link")
-        self.destination = self.derived / "vision"
+        self.destination = self.derived / self.artifact_name
         if self.destination.exists() or self.destination.is_symlink():
             raise FileExistsError("vision artifact already exists")
         self.temporary = Path(tempfile.mkdtemp(prefix=".vision-", dir=self.derived))

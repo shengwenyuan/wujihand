@@ -15,13 +15,15 @@ from wujihand.domain.recording import validate_run_id
 from .alignment import (
     ALIGNMENT_SCHEMA,
     LEGACY_ALIGNMENT_SCHEMA,
+    PREVIOUS_ALIGNMENT_SCHEMA,
     AlignmentFrame,
     ExactAlignment,
     _alignment_digest,
 )
 
 
-ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v2"
+ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v3"
+PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v2"
 LEGACY_ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v1"
 
 
@@ -31,8 +33,17 @@ def _legacy_frame_mapping(frame: AlignmentFrame) -> dict[str, object]:
         "temporal_continuity",
         "missing_control_periods_before",
         "temporal_segment_index",
+        "gap_before_row",
+        "transition_valid",
     ):
         row.pop(key)
+    return row
+
+
+def _previous_frame_mapping(frame: AlignmentFrame) -> dict[str, object]:
+    row = frame.to_mapping()
+    row.pop("gap_before_row")
+    row.pop("transition_valid")
     return row
 
 
@@ -142,10 +153,12 @@ def load_alignment_artifact(
     artifact_schema = manifest.get("schema")
     if frozenset(manifest) != manifest_keys or artifact_schema not in {
         ALIGNMENT_ARTIFACT_SCHEMA,
+        PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA,
         LEGACY_ALIGNMENT_ARTIFACT_SCHEMA,
     }:
         raise ValueError("alignment manifest schema or keys differ")
     legacy = artifact_schema == LEGACY_ALIGNMENT_ARTIFACT_SCHEMA
+    previous = artifact_schema == PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA
     expected_inventory = legacy_expected_files if legacy else current_expected_files
     if actual_files != expected_inventory:
         raise ValueError("alignment artifact inventory does not match its schema")
@@ -219,7 +232,13 @@ def load_alignment_artifact(
         raise ValueError("alignment odd tick sidecar schema or keys differ")
     if (
         odd_value.get("schema")
-        != (LEGACY_ALIGNMENT_SCHEMA if legacy else ALIGNMENT_SCHEMA)
+        != (
+            LEGACY_ALIGNMENT_SCHEMA
+            if legacy
+            else PREVIOUS_ALIGNMENT_SCHEMA
+            if previous
+            else ALIGNMENT_SCHEMA
+        )
         or odd_value.get("run_id") != run_id
         or odd_value.get("purpose") != "unselected_60hz_transition_audit"
     ):
@@ -243,7 +262,8 @@ def load_alignment_artifact(
         }:
             raise ValueError("alignment control gap sidecar schema or keys differ")
         if (
-            gap_value.get("schema") != ALIGNMENT_SCHEMA
+            gap_value.get("schema")
+            != (PREVIOUS_ALIGNMENT_SCHEMA if previous else ALIGNMENT_SCHEMA)
             or gap_value.get("run_id") != run_id
             or gap_value.get("purpose")
             != "missed_control_period_gap_mask"
@@ -296,7 +316,7 @@ def load_alignment_artifact(
     missing_by_index = dict(gap_ticks)
     previous_selected: int | None = None
     expected_segment = 0
-    for frame in frames:
+    for frame_index, frame in enumerate(frames):
         first_covered = (
             frame.source_control_index
             if previous_selected is None
@@ -314,9 +334,25 @@ def load_alignment_artifact(
             or frame.temporal_segment_index != expected_segment
         ):
             raise ValueError("alignment frame gap mask closure differs")
+        if not legacy and not previous:
+            expected_transition_valid = (
+                frame_index + 1 < len(frames)
+                and frames[frame_index + 1].missing_control_periods_before == 0
+            )
+            if (
+                frame.gap_before_row != (missing_before > 0)
+                or frame.transition_valid != expected_transition_valid
+            ):
+                raise ValueError("alignment transition mask closure differs")
         previous_selected = frame.source_control_index
     payload: dict[str, object] = {
-        "schema": LEGACY_ALIGNMENT_SCHEMA if legacy else ALIGNMENT_SCHEMA,
+        "schema": (
+            LEGACY_ALIGNMENT_SCHEMA
+            if legacy
+            else PREVIOUS_ALIGNMENT_SCHEMA
+            if previous
+            else ALIGNMENT_SCHEMA
+        ),
         "run_id": run_id,
         "source_first_control_index": first,
         "source_last_control_index": last,
@@ -324,7 +360,11 @@ def load_alignment_artifact(
         "selection": "relative_even_control_index_no_interpolation_v1",
         "fps": 30,
         "frames": [
-            _legacy_frame_mapping(frame) if legacy else frame.to_mapping()
+            _legacy_frame_mapping(frame)
+            if legacy
+            else _previous_frame_mapping(frame)
+            if previous
+            else frame.to_mapping()
             for frame in frames
         ],
         "odd_control_indices": list(odd_indices),
@@ -453,6 +493,7 @@ def write_alignment_artifact(
 __all__ = [
     "ALIGNMENT_ARTIFACT_SCHEMA",
     "LEGACY_ALIGNMENT_ARTIFACT_SCHEMA",
+    "PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA",
     "load_alignment_artifact",
     "write_alignment_artifact",
 ]

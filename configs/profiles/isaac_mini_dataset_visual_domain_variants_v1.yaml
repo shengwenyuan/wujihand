@@ -1,0 +1,24 @@
+schema: wujihand.isaac_visual_domain_variant_profile.v1
+profile_id: isaac_mini_dataset_visual_domain_variants_v1
+scope: offline_rgb_only_no_geometry_camera_or_physics_changes
+variants:
+  - variant_id: nominal
+    seed: 0
+    lighting_intensity_scale: 1.0
+    exposure_offset: 0.0
+    background_color_rgb: null
+  - variant_id: dr_warm_bright
+    seed: 1101
+    lighting_intensity_scale: 1.15
+    exposure_offset: 0.25
+    background_color_rgb: [0.18, 0.13, 0.08]
+  - variant_id: dr_cool_dim
+    seed: 2202
+    lighting_intensity_scale: 0.80
+    exposure_offset: -0.25
+    background_color_rgb: [0.06, 0.09, 0.15]
+  - variant_id: dr_neutral_highkey
+    seed: 3303
+    lighting_intensity_scale: 1.0
+    exposure_offset: 0.10
+    background_color_rgb: [0.20, 0.20, 0.20]
