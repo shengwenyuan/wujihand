@@ -1,0 +1,24 @@
+interface:
+  display_name: "Wujihand Robotics MCPs"
+  short_description: "区分官方 Wuji MCP 与本地机器人资料索引"
+  default_prompt: "Use $use-wujihand-robotics-mcps to select the right documentation channel and verify each claim against its exact official source."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "wuji-docs"
+      description: "Official Wuji product, SDK, model, simulation and ROS2 documentation"
+      transport: "streamable_http"
+      url: "https://docs.wuji.tech/mcp"
+    - type: "mcp"
+      value: "songling-arm"
+      description: "Local read-only index of Songling and AgileX official-source material"
+    - type: "mcp"
+      value: "orbbec_305-335L_docs"
+      description: "Local read-only index of official-source Orbbec Gemini 305, 305g and 335L material"
+    - type: "mcp"
+      value: "rs-d400"
+      description: "Local read-only index of official-source RealSense D405, D435i and D455 material"
+    - type: "mcp"
+      value: "steamvr-tracker"
+      description: "Local read-only index of official-source Base Station 2.0, VIVE Tracker 3.0 and OpenVR material"

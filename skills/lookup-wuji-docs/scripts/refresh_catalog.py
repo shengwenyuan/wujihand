@@ -27,6 +27,8 @@ DOCSETS = (
     ("software", "Wuji Hand HMI", "/docs/zh/wuji-hand-hmi/latest/"),
     ("software", "Wuji Hand Upgrader", "/docs/zh/wuji-hand-upgrader/latest/"),
     ("software", "Wuji Hand SDK (wujihandpy)", "/docs/zh/wujihandpy/latest/"),
+    ("software", "Wuji CLI", "/docs/zh/wuji-cli/latest/"),
+    ("software", "Wuji Docs MCP", "/docs/zh/mcp/latest/"),
     ("algorithm-simulation", "Wuji Description", "/docs/zh/wuji-description/latest/"),
     ("algorithm-simulation", "Wuji Retargeting", "/docs/zh/wuji-retargeting/latest/"),
     ("algorithm-simulation", "MuJoCo Sim", "/docs/zh/mujoco-sim/latest/"),
@@ -314,7 +316,9 @@ def build_catalog(timeout: float, workers: int) -> dict[str, object]:
                 failures.append(f"{job.url}: {exc}")
 
     if failures:
-        raise RuntimeError("failed to fetch complete page outlines:\n- " + "\n- ".join(sorted(failures)))
+        raise RuntimeError(
+            "failed to fetch complete page outlines:\n- " + "\n- ".join(sorted(failures))
+        )
 
     return {
         "schema_version": 1,
@@ -344,9 +348,7 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(args.output.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    temporary.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     temporary.replace(args.output)
     page_count = sum(len(item["pages"]) for item in catalog["docsets"])
     print(

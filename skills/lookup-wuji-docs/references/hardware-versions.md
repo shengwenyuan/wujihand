@@ -11,7 +11,7 @@
 
 ## 先判定产品
 
-以下状态核对于 2026-07-11。回答当前参数前仍须打开发布记录和目标页面。
+本页只保存代际路由与兼容性警告。回答当前参数前，必须通过官方 `wuji-docs` MCP 打开目标产品页、使用约束和发布记录；不要把本地快照当成当前事实。
 
 | 线索 | 产品 | 文档根 | 典型软件路径 |
 |---|---|---|---|
@@ -19,7 +19,7 @@
 | Hand v1、USB、位控、自锁、wujihandpy | Wuji Hand 第一代 | `wuji-hand/v1/` | `wuji-sdk.WujiHand` 或 legacy `wujihandpy`、ROS2、HMI、Upgrader |
 | Glove、EMF、IMU、触觉、手部追踪 | Wuji Glove | `wuji-glove/latest/` | `wuji-sdk`、Studio、Retargeting |
 
-绝不能把 `https://docs.wuji.tech/docs/zh/wuji-hand/latest/` 理解成第一代的“最新页”；它当前明确是 Hand 2 Beta 1。第一代使用固定 `/v1/` 路径。
+绝不能把 `https://docs.wuji.tech/docs/zh/wuji-hand/latest/` 理解成第一代的“最新页”；它当前是 Hand 2 文档。第一代使用固定 `/v1/` 路径。
 
 ## Wuji Hand 2 Beta 1
 
@@ -29,6 +29,8 @@
 - [使用约束](https://docs.wuji.tech/docs/zh/wuji-hand/latest/usage-constraints/)
 - [SDK 接口](https://docs.wuji.tech/docs/zh/wuji-hand/latest/sdk-reference/)
 - [发布记录](https://docs.wuji.tech/docs/zh/wuji-hand/latest/release-notes/)
+
+> **Beta Gate：** 官方产品页明确说明手册对应 Beta 1 阶段样机，参数与表现不代表最终产品状态。接口、供电、软体、散热、可靠性、负载、零位和力矩透明性仍可能变化。发布记录还包含 Beta 2-only 硬件、固件和触觉能力；必须按实物硬件阶段、序列号和固件分流，不能把 `latest` 下的所有能力合成一台设备。
 
 ### 当前识别特征
 
@@ -48,11 +50,20 @@ Hand 2 固件 + wuji-sdk 版本 + 产品 sdk-reference + 调用代码
 
 新设计应优先从通用 [Wuji SDK](https://docs.wuji.tech/docs/zh/wuji-sdk/latest/) 和产品专属 `sdk-reference/` 组合取证。Studio 用于设备管理、数据可视化和固件升级。
 
+### Description 模型版本边界
+
+| 范围 | 路径与标识 | 结论 |
+|---|---|---|
+| 本仓库固定 `v2026.6.27` | `hand2_beta/body/`、根 `{l,r}_base_link`、`wujihand.usd` | 历史仿真资产；现有配置、q20 映射、数据集和验证只对该 pin 成立 |
+| 官方 `v2026.7.23+` | `hand2/hand2_beta1/body/`、根 `{l,r}_wrist`、`wujihand2.usd` | 新坐标约定和命名基线；碰撞、sites、ROS 包与机械资产也已改变 |
+
+`v2026.7.23` 不是可机械替换的目录改名。即使两边都是 20 DoF，也必须重新核对 joint order/axis、root/attachment、retargeting link map、碰撞过滤、drive gains、指尖 site 和历史数据解释。官方说明当前 Hand 2 USD 的 kp/kv 仍沿用上一平台标定，待 Hand 2 硬件系统辨识后更新，因此不能把任一版本描述成已由真机辨识的高保真动力学模型。
+
 ### 仿真与力觉约束
 
-- 当前有骨骼 URDF、MJCF、USD 与 STEP；模型入口是 Wuji Description 的 `hand2_beta/`。
+- 当前官方模型入口是 `hand2/hand2_beta1/`；本仓库为复现既有结果继续固定历史 `hand2_beta/`。
 - 官方使用约束仍说明未提供 Hand 2 带软体的仿真模型，不要把第一代 `hand/body-with-soft/` 误当作 Hand 2 资产。
-- 当前没有指尖触觉传感器。
+- Beta 1 不提供指尖触觉；发布记录中的 Beta 2 触觉能力要求匹配硬件、固件和 SDK，不能外推到 Beta 1。
 - 关节电流到外部力矩/接触力的链路尚未收敛，不能把电流读数直接作为接触力判据。
 - Beta 1 的散热、耐用性、零位精度和负载数据有明确限制；设计碰撞、长时间满载或力控制方案前必须读 `usage-constraints/`。
 
@@ -153,6 +164,8 @@ sdk-data-reference/
 | 当前 24×31 与历史 24×32 触觉帧 | 不兼容布局变更 |
 | `wuji-sdk` 与 `wujihandpy` | 版本体系、API 和目标范围不同 |
 | Hand 2 骨骼模型与第一代软体模型 | 当前 Hand 2 不提供带软体模型 |
+| Hand 2 Beta 1 与 Beta 2 | 接口、供电、触觉、固件和物理表现可能不同 |
+| `v2026.6.27 hand2_beta` 与 `v2026.7.23+ hand2/hand2_beta1` | 根节点、命名、坐标、碰撞和文件布局不兼容 |
 | `latest` 当前事实与固定版本事实 | 滚动文档会改变 |
 
 ## 仿真与 teleop 的硬件核对顺序
@@ -162,7 +175,7 @@ sdk-data-reference/
 1. 识别产品代际和左右手。
 2. 查产品参数、关节范围与坐标定义。
 3. Hand 2 额外查使用约束。
-4. 在 Wuji Description 选正确的 `hand/`、`hand2_beta/` 或 `glove/` 模型。
+4. 在 Wuji Description 区分第一代 `hand/`、本仓库历史 pin `hand2_beta/`、当前 `hand2/hand2_beta1/` 与 `glove/`。
 5. 查 MuJoCo / Isaac / ROS2 对应集成页和模型 tag/submodule commit。
 
 Teleop：

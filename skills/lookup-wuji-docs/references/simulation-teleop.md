@@ -14,7 +14,7 @@
 
 ## 先选正确入口
 
-以下状态核对于 2026-07-11。仿真和 teleop 分散在多个官方入口，不能把名称相似的项目当成同一条流水线。
+仿真和 teleop 分散在多个官方入口，不能把名称相似的项目当成同一条流水线。当前事实必须由官方 `wuji-docs` MCP 读取目标页和发布记录；本页只保存选路与版本 Gate。
 
 | 目标 | 首选 | 定位 |
 |---|---|---|
@@ -31,27 +31,33 @@
 
 官方仓库：[wuji-description](https://github.com/wuji-technology/wuji-description)。查模型时记录 release/tag 和消费仓库锁定的 submodule commit。
 
-### 产品路径
+### 产品路径与破坏性边界
 
 ```text
-wuji-description/
+wuji-description v2026.7.23+/
 ├── hand/                         第一代 Wuji Hand
 │   ├── body/                     骨骼 URDF/MJCF/USD/mesh/RViz
 │   ├── body-with-soft/           第一代软垫变体
 │   └── attachment/               法兰与机械集成资产
-├── hand2_beta/body/              Wuji Hand 2 Beta 1
+├── hand2/hand2_beta1/body/       Wuji Hand 2 Beta 1
 │   ├── urdf/{left,right}.urdf
 │   ├── urdf/{left,right}-ros.urdf
 │   ├── mjcf/{left,right}.xml
-│   ├── usd/{left,right}/wujihand.usd
+│   ├── usd/{left,right}/wujihand2.usd
 │   ├── meshes/{left,right}/
 │   └── step/
 └── glove/body/                   Wuji Glove 21 DoF 人手骨架
+
+repository pin v2026.6.27/
+└── hand2_beta/body/              historical Hand 2 asset
+    └── usd/{left,right}/wujihand.usd
 ```
 
 ### 选择规则
 
-- `hand/` 是第一代；`hand2_beta/` 才是 Hand 2 Beta 1。
+- `hand/` 是第一代；`hand2_beta/` 是本仓库固定 v2026.6.27 的历史 Hand 2 路径；`hand2/hand2_beta1/` 是 v2026.7.23+ 当前路径。
+- `v2026.7.23` 同时改变 root、link/joint/actuator naming、坐标规则、碰撞、USD layering/filename、fingertip sites、ROS 包和机械资产。禁止只改路径后继续复用旧 mapping、attachment、collision Gate 或 q20 数据解释。
+- Wuji Hand 2 是 beta 产品。模型版本兼容不等于真实硬件兼容；Beta 1/Beta 2、固件、SDK 和实物 revision 必须分别核对。
 - `hand/body-with-soft/` 不是 Hand 2 软体模型。Hand 2 当前使用约束说明带软体仿真模型暂未提供。
 - Glove 模型是 21 DoF 人手骨架；机器人手目标是 20 关节。
 - 普通 URDF 常用相对 mesh 路径，`-ros.urdf` 使用 `package://`。ROS2/RViz 按消费场景选，不要只改文件名。
@@ -174,7 +180,7 @@ python run_sim.py --side left
 
 它默认右手并回放预录轨迹。官方把 Isaac Lab 定位为 GPU 并行/强化学习入口，但公开仓库当前仍是 USD 加载 + `wave.npy` 的最小示例，不等于完整 RL task、奖励函数或数据采集系统。
 
-该最小仓库也不能作为 Hand 2 已适配的证据。为 Hand 2 设计时检查目标 tag 的 `.gitmodules`、`run_sim.py`、实际 USD 路径和 joint names；若仍指向第一代描述/命名，显式改用锁定 commit 的 `hand2_beta/body/usd/...` 并建立 `JointLayout` 映射。
+该最小仓库也不能作为 Hand 2 已适配的证据。为 Hand 2 设计时检查目标 tag 的 `.gitmodules`、`run_sim.py`、实际 USD 路径和 joint names；显式选择目标 Description revision 并建立对应 `JointLayout`。当前项目必须继续使用锁定 v2026.6.27 的 `hand2_beta/body/usd/...`，除非独立 v2026.7.23 迁移 Gate 已完成。
 
 两个示例都通过 submodule 锁定模型。可复现实验记录 submodule commit；不要无条件 `git submodule update --remote` 后仍声称复现原结果。
 
@@ -230,7 +236,7 @@ MediaPipe 21 点只是 canonical observation 的一种来源。Glove、外骨骼
 
 ## 高优先级易错点
 
-1. `hand/`、`hand2_beta/`、`glove/` 分属不同模型和 DoF 语义。
+1. `hand/`、历史 `hand2_beta/`、当前 `hand2/hand2_beta1/` 与 `glove/` 分属不同产品或模型 revision；禁止跨版本复用名字、顺序和碰撞假设。
 2. `wuji-hand-teleop` 是第一代 ROS2 真机整栈，没有物理仿真和明确 Hand 2 output。
 3. MuJoCo/Isaac Lab 单页仓库只做最小回放，不是 teleop 或完整 RL 系统。
 4. 独立 Retargeting 文档与 GitHub README/CHANGELOG/CLI 可能不同步；报告差异和 tag。
@@ -242,6 +248,8 @@ MediaPipe 21 点只是 canonical observation 的一种来源。Glove、外骨骼
 10. `latest/` 会漂移；可复现结果同时记录 docs URL、tag、commit、submodule、SDK 和固件。
 
 ## 本项目的落位规则
+
+当前仓库已经实现真实 Glove + VIVE Tracker 输入到 Isaac Sim 6.0.1 双 NERO + Hand 2 仿真、ROS2 transport、监督、因果录制和数据导出。现有 MuJoCo 能力是独立的 FR3 v2 + Hand 2 桌面场景；未来可增加 NERO + Hand 2 MuJoCo scene/backend，并复用 canonical intent、监督与记录契约。Hand 2 真机尚未到货，不得把仿真 HIL 描述成 Hand 2 真机验证。
 
 本仓库采用 canonical contracts + ports/adapters：
 

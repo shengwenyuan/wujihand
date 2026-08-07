@@ -1,11 +1,13 @@
 ---
 name: lookup-wuji-docs
-description: Locate, verify, and explain authoritative Wuji Technology documentation through the wuji-docs MCP with product-generation and version awareness, using the local catalog as routing and fallback. Use for Chinese or English questions about 舞肌灵巧手、仿真、遥操作、重定向, Wuji Hand 2 Beta 1, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, when designing or modifying this repository's software, simulation, data-recording, testing, and adapter architecture from Wuji docs, or when closing a long-running, major-feature, cross-module, or architecture-level repository delivery that requires the local plans/last_edits.md handoff.
+description: Locate, verify, and explain official Wuji Technology documentation through the first-party wuji-docs MCP with product-generation, beta-stage, and release awareness, using the local catalog only as fallback routing. Use for Wuji Hand 2 Beta 1/Beta 2, first-generation Wuji Hand, Wuji Glove, wuji-sdk, wujihandpy, Studio, ROS2, HMI, Upgrader, URDF/MJCF/USD models, MuJoCo, Isaac Lab, retargeting, teleop, calibration, tactile/EMF/IMU data, APIs, compatibility, troubleshooting, repository design or implementation, and especially any change that may cross the wuji-description v2026.7.23 Hand 2 model boundary.
 ---
 
 # Lookup Wuji Docs
 
-Use the `wuji-docs` MCP as the primary live documentation source. Use the local catalog and references to choose the correct product/version, recover when MCP is unavailable, and detect compatibility conflicts. Verify unstable facts against the live official page or the intended official repository tag before analyzing or designing.
+Use the official online `wuji-docs` MCP as the primary and reliable Wuji documentation source. Use the local catalog and references only to route queries, recover when the MCP is unavailable, and detect compatibility conflicts. Never let a local snapshot override a successfully fetched official page. Verify implementation behavior against the intended official repository tag or commit.
+
+When repository work also depends on NERO/Songling arms, Orbbec or RealSense cameras, or SteamVR tracking hardware, also use the repository's `use-wujihand-robotics-mcps` skill. Keep this skill responsible for Wuji product/API facts; do not transfer facts between vendors or product families.
 
 ## Follow the lookup workflow
 
@@ -15,10 +17,12 @@ Identify these dimensions from the request or surrounding project:
 
 ```text
 product: Hand 2 Beta 1 / Hand v1 / Wuji Glove / unknown
+hardware_stage: Beta 1 / Beta 2 / unknown
 side: left / right / both / irrelevant
 task: hardware / SDK / ROS2 / model / simulation / retargeting / teleop / troubleshooting
 time: current behavior / a named version / historical reproduction
 target: visualization / physical simulation / real hardware
+model_revision: repository pin / v2026.7.23+ / unknown
 ```
 
 Do not ask the user if repository imports, URLs, config names, device transport, or existing files reveal the answer. If the product generation remains unknown and changes the result, present separate branches rather than silently choosing one.
@@ -30,6 +34,7 @@ Qt HMI / WujiHand Qt HMI -> Wuji Hand HMI
 OTA HMI / WujiHand OTA   -> Wuji Hand Upgrader
 Hand latest              -> inspect URL; /wuji-hand/latest is currently Hand 2
 Wuji Hand SDK            -> disambiguate wuji-sdk from wujihandpy
+Hand 2                   -> beta product; determine Beta 1/Beta 2 and exact firmware/model release
 ```
 
 ### 2. Query the wuji-docs MCP first
@@ -50,6 +55,16 @@ Hand 2 SDK control
 ```
 
 Treat a successful search plus page fetch as the functional MCP check. The MCP provides documentation retrieval only; querying it does not require a physical hand, a local device-control server, or an active SDK connection. Real hardware execution still requires the correct device, transport, firmware, and SDK environment.
+
+## Enforce the Hand 2 beta and v2026.7.23 gate
+
+Treat every Wuji Hand 2 as beta hardware until a fetched official product page explicitly says otherwise. The current official manual identifies itself as a Beta 1 sample manual and warns that parameters, connectors, soft materials, thermal behavior, reliability, load capability, zero accuracy, and performance are not final. Product release notes may also introduce Beta 2-only hardware, firmware, tactile sensors, or interfaces. Never transfer a Beta 2 feature to a Beta 1 unit without hardware revision and firmware evidence.
+
+For every Hand 2 task, fetch the current product overview, usage constraints, and product release notes. When a model, joint layout, retargeting config, collision rule, CAD, ROS description, MuJoCo asset, or USD is involved, also fetch Wuji Description release notes and integration guidance.
+
+> **High-risk model boundary:** `wuji-description v2026.7.23` replaced the earlier Hand 2 model revision. It changed the directory, root link, link/joint and actuator naming, coordinate convention, collision semantics, USD filename/layering, fingertip sites, ROS package boundary, and available mechanical assets. Its Isaac gains still await Hand 2 hardware system identification. These changes can invalidate assembly mappings, retargeting, self-collision policy, q20 semantics, tests, and recorded-dataset interpretation even when the DoF count remains 20.
+
+The current `wujihand` runtime is pinned to `wuji-description v2026.6.27` and its historical `hand2_beta/.../wujihand.usd` layout. Do not silently rewrite it to the v2026.7.23+ `hand2/hand2_beta1/.../wujihand2.usd` layout. A future upgrade requires an explicit migration Gate, a new versioned binding/layout identity, comparison of names/order/axes/root/collision/gains/sites, dataset compatibility analysis, and fresh Isaac/MuJoCo/retargeting qualification. Preserve old validation as revision-specific evidence.
 
 If the MCP tools are absent or fail:
 
@@ -112,6 +127,8 @@ Use the target tag's code to settle what that exact artifact accepts, but do not
 
 Known conflict classes to check explicitly:
 
+- Hand 2 product pages remain beta-stage documentation while release notes may describe Beta 2-only hardware or firmware. Preserve the exact hardware stage instead of treating `latest` as one physical revision.
+- `wuji-description v2026.6.27` uses the historical `hand2_beta/` asset layout; v2026.7.23 replaces it with `hand2/hand2_beta1/` and incompatible root/naming/collision semantics.
 - Hand 2's product-specific `sdk-reference` page may still show pre-v2026.7.1 `control_mode`, singular `joint_state`, `joint_command_publisher`, and three-array send signatures while current release notes require resource subscribe/publish APIs.
 - Hand 2 ROS2 support claims versus the current `wujihandros2` guide, dependencies, examples, and tag.
 - Wuji SDK integrated Retargeting versus the independent `wuji-retargeting` repository's maintenance state and broader simulation/config tools.
@@ -139,7 +156,9 @@ Never present a local-reference summary as a citation. Cite the official page or
 ```text
 Hand 2 Beta 1:
   /docs/zh/wuji-hand/latest/
-  Ethernet, MIT/resources, wuji-sdk, Studio, hand2_beta models
+  beta hardware; Ethernet, MIT/resources, wuji-sdk, Studio
+  current v2026.7.23+ models: hand2/hand2_beta1
+  repository v2026.6.27 pin: hand2_beta
 
 Hand v1:
   /docs/zh/wuji-hand/v1/
@@ -181,7 +200,7 @@ RViz                  -> visualization, not physical simulation
 
 For Hand 2 real teleop, prefer the current Wuji SDK/Retargeting Ethernet path unless a newer official ROS2 release explicitly verifies Hand 2. Do not route Hand 2 through a first-generation USB stack by analogy.
 
-For Hand 2 + Vision Pro simulation, verify that the selected AVP config actually points to `hand2_beta` URDF/MJCF and Hand 2 link mappings. A default AVP config may still target the first-generation model.
+For Hand 2 + Vision Pro simulation, verify that the selected AVP config points to the exact pinned Hand 2 model revision and link mapping. A default AVP config may still target the first generation or a different side/revision. Never replace `hand2_beta` with `hand2/hand2_beta1` without the v2026.7.23 migration Gate.
 
 ## Guard analysis and implementation
 
@@ -223,17 +242,20 @@ runtime/      config loading, CLI, dependency composition
 
 Do not let MediaPipe, Isaac, ROS2, or Wuji SDK objects cross an adapter boundary. Record raw observation, joint intent, safety decision, sent command, and backend feedback as separate signals. Store official source/version/commit provenance with models, derived configs, algorithms, and datasets.
 
-Treat future Glove, exoskeleton, MuJoCo, ROS2, and PI folders as reserved extension points until code, contract tests, and component docs exist. Keep local dynamic work in ignored `plans/`; put stable behavior and real code entry points in versioned `docs/`.
+Use repository evidence rather than a fixed capability list. At the current baseline, real Wuji Glove and VIVE Tracker inputs, ROS2 transport, Isaac Sim 6.0.1 dual NERO + Hand 2 simulation, causal recording, replay, GUI qualification, and dataset export are implemented. The FR3 v2 + Hand 2 MuJoCo scene is also implemented, but a NERO + Hand 2 MuJoCo scene with equivalent teleoperation and recording remains future work. Hand 2 real-hardware execution is not implemented or validated because the device has not arrived. Treat exoskeleton, Hand 2 real execution, NERO MuJoCo parity, and other absent adapters as reserved until code, contract tests, and component docs exist.
+
+Keep local dynamic work in ignored `plans/`; put stable behavior and real code entry points in versioned `docs/`.
 
 For the complete placement and validation rules, read `references/project-architecture.md`; for the formal project baseline, consult `docs/000-project-charter-and-architecture.md` from the repository root.
 
-## Close substantial repository deliveries
+## Update `last_edits` only after a long task is deployed
 
-After implementation, relevant formal documentation, and the main validation are complete, but before the final handoff, overwrite `plans/last_edits.md` when the work reaches a meaningful long-running checkpoint or delivers a major feature, cross-module refactor, architecture/contract/schema change, runtime baseline change, or safety/compatibility behavior change. Rewrite the whole file for the just-finished delivery; never append history or create dated copies.
+Treat `plans/last_edits.md` as an optional local deployment handoff, not a routine delivery requirement. Update it only when both conditions hold:
 
-Do not overwrite the last valid snapshot for read-only investigation, planning-only work, minor localized edits, formatting or mechanical updates, or a blocked attempt that produced no usable delivery. A valuable but incomplete checkpoint may update it only when clearly labeled `阶段性交付` with the unfinished scope stated.
+1. the work is judged to be a genuinely long-running task that needs a future-session handoff; and
+2. a usable result has been deployed to its intended target environment, or an equivalent deployment checkpoint has completed.
 
-Keep the snapshot readable in 3–5 minutes. Summarize the delivery result, principal changes, real code/config/test/doc entry points, expected observable effect, checks actually run and their results, and known limits or next step. Do not paste a full diff, long logs, secrets, or the only copy of an authoritative fact. Follow the exact trigger, template, overwrite, and ignore checks in [references/project-architecture.md](references/project-architecture.md#最近一次交付快照). This local ignored snapshot never replaces required component documentation, validation evidence, or ADRs in `docs/`.
+Do not update it for read-only work, planning, docs/skills maintenance, local-only implementation, an undeployed feature, minor fixes, generated refreshes, or blocked attempts. When it does trigger, overwrite the file with a concise deployed-state summary, actual entry points and checks, and remaining limits. Never use it instead of versioned component documentation, validation evidence, or ADRs. See [references/project-architecture.md](references/project-architecture.md#最近一次部署快照).
 
 ## Refresh the catalog when needed
 

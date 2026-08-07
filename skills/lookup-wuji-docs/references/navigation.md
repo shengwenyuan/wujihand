@@ -11,7 +11,7 @@
 
 ## 快照与用法
 
-本导航核对于 2026-07-11。官网中文文档分成“硬件设备、开发工具、算法与仿真”三组，共 13 个站内文档集；另有文档中心首页、全站发布记录和外部官方 Teleop 仓库。`latest/` 会随官网更新而漂移；涉及命令、参数、兼容性或版本时，必须重新打开页面并检查发布记录。
+本导航是本地 fallback 路由，不是当前事实源。优先使用官方在线 `wuji-docs` MCP；只有 MCP 不可用时才使用生成目录定位官方页面。`latest/` 会漂移，涉及命令、参数、兼容性、Beta 硬件或模型版本时，必须重新读取目标页和发布记录。
 
 全局入口：
 
@@ -42,6 +42,8 @@ python scripts/search_catalog.py "查询词" --limit 10
 └── 开发指南
     └── SDK 接口         sdk-reference/
 ```
+
+官方明确将当前手册限定为 Beta 1 阶段样机，参数和表现不代表最终产品。发布记录还可能包含 Beta 2-only 硬件与固件；任何真实设备结论都要先确定硬件阶段。模型工作还必须检查 `wuji-description v2026.7.23` 的破坏性 Hand 2 revision 边界。
 
 ### Wuji Hand（第一代 / v1）
 
@@ -150,6 +152,18 @@ python scripts/search_catalog.py "查询词" --limit 10
 └── 参考：API 参考
 ```
 
+### Wuji CLI
+
+基准：[文档阅读指引](https://docs.wuji.tech/docs/zh/wuji-cli/latest/)
+
+用于查询当前官方 CLI 的安装、命令和版本边界；命令行为仍以目标发布为准。
+
+### Wuji Docs MCP
+
+基准：[文档阅读指引](https://docs.wuji.tech/docs/zh/mcp/latest/)
+
+这是官方 `wuji-docs` MCP 自身的文档入口，用于核对工具能力与接入方式，不代替具体产品页面。
+
 软件产品边界、API 选型与常用入口详见 [software.md](software.md)。
 
 ## 算法与仿真
@@ -204,6 +218,6 @@ python scripts/search_catalog.py "查询词" --limit 10
 
 ## 结构化目录
 
-[official-catalog.json](official-catalog.json) 是机器生成的完整目录，当前包含 13 个站内文档集、91 个页面（含折叠目录子页），另记录全局入口与官方 GitHub Teleop。站内页面含 h1–h4 标题和锚点。其 `generated_at` 是新鲜度依据。用 [search_catalog.py](../scripts/search_catalog.py) 查询，不要默认整份读入上下文。
+[official-catalog.json](official-catalog.json) 是机器生成的 fallback 目录；具体文档集、页面数量和生成时间以文件内 `docsets`、`pages` 与 `generated_at` 为准，不在本页复制易过期计数。站内页面含 h1–h4 标题和锚点。用 [search_catalog.py](../scripts/search_catalog.py) 查询，不要默认整份读入上下文。
 
 用 [refresh_catalog.py](../scripts/refresh_catalog.py) 从官网重建目录。脚本只有在所有文档集和页面都成功解析时才原子替换旧文件；失败时保留旧索引。

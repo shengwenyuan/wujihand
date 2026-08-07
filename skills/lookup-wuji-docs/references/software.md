@@ -13,7 +13,7 @@
 
 ## 快速选型
 
-以下状态核对于 2026-07-11。版本标识只用于定位该快照，回答时应打开各文档集的 `release-notes/`。
+本页保存 API 选路和兼容性 Gate。回答当前行为时，必须通过官方 `wuji-docs` MCP 打开各文档集的 `release-notes/` 和目标接口页。
 
 | 需求 | 文档/组件 | 当前产品边界 |
 |---|---|---|
@@ -25,7 +25,9 @@
 | 第一代 GUI 调试/演示 | [Wuji Hand HMI](https://docs.wuji.tech/docs/zh/wuji-hand-hmi/latest/) | Hand v1 |
 | 第一代 Bootloader/固件升级 | [Wuji Hand Upgrader](https://docs.wuji.tech/docs/zh/wuji-hand-upgrader/latest/) | Hand v1；Hand 2 用 Studio |
 
-当前快照版本族：Wuji SDK/Studio 使用日历版本；ROS2、wujihandpy、HMI、Upgrader 使用 semver。不能按版本号数值跨组件比较兼容性。
+Wuji SDK/Studio 使用日历版本；ROS2、wujihandpy、HMI、Upgrader 使用 semver。不能按版本号数值跨组件比较兼容性。
+
+> **Hand 2 Beta Gate：** 官方当前手册对应 Beta 1 样机，发布记录同时可能出现 Beta 2-only 固件、触觉或接口。任何 SDK、Studio、ROS2 或真机结论都必须记录硬件阶段、固件和 SDK 版本；不得把滚动 `latest` 中的能力自动归给 Beta 1。模型或 retargeting 同时跨越 `wuji-description v2026.7.23` 时，还要执行模型 revision Gate。
 
 ## Wuji Studio
 
@@ -197,6 +199,8 @@ import wujihandpy     -> 第一代独立 SDK，semver，USB
 8. 搜索引擎缓存的旧 `/wuji-hand/latest/...` 页面不能作为产品代际证据。
 9. Retargeting 内置 SDK 入口与独立仓库入口需分别记录版本。
 10. ROS2 对 Hand 2 的支持必须动态核验，不能只引用总览营销句。
+11. Hand 2 始终按 beta 产品处理；Beta 1/Beta 2 的硬件、固件、触觉和接口不能互相外推。
+12. SDK/API 升级与 Description 模型升级是两个独立边界；不能因为 SDK 可连接就认为 v2026.7.23 模型映射兼容。
 
 ## 查阅工作流
 

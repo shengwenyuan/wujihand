@@ -30,7 +30,7 @@ description: Reconstruct and apply the arm-plus-hand teleoperation patterns docu
 - 处理任何 DexJoCo teleop 事实时，读取 [references/dexjoco-system.md](references/dexjoco-system.md)。
 - 设计、实现或评审可迁移系统时，再读取 [references/transfer-blueprint.md](references/transfer-blueprint.md)。
 - 核对原文、源码、版本、许可或上游变化时，用 `rg --files` 和 `rg` 临时搜索当前 workspace，再读取实际找到的资料。不要在 skill 中保存开发机绝对路径或假设固定 workspace 布局。
-- 涉及 Wuji Glove、Wuji Hand、Wuji SDK、模型或实时真机接口时，同时使用仓库中的 `lookup-wuji-docs` skill 查询当前官方页面。不要把本 skill 中的历史或架构描述当作当前产品事实。
+- 涉及 Wuji Glove、Wuji Hand、Wuji SDK、模型或实时真机接口时，同时使用仓库中的 `lookup-wuji-docs` skill 查询当前官方页面。Wuji Hand 2 必须按 beta 产品处理，并在复用任何 joint/link、retargeting、collision 或 backend mapping 前通过 `wuji-description v2026.7.23` revision Gate。涉及 NERO/Songling、Orbbec、RealSense 或 SteamVR/VIVE 时，使用 `use-wujihand-robotics-mcps` 选择对应只读检索通道。不要把本 skill 中的历史或架构描述当作当前产品事实。
 
 ## 区分证据与建议
 

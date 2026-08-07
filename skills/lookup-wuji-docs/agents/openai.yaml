@@ -1,7 +1,7 @@
 interface:
   display_name: "Wuji Docs Lookup"
-  short_description: "通过官方 MCP 核验舞肌硬件、SDK、仿真与版本资料"
-  default_prompt: "Use $lookup-wuji-docs and the wuji-docs MCP to verify current authoritative Wuji documentation before answering or implementing."
+  short_description: "核验舞肌 Beta 硬件、SDK、模型与版本边界"
+  default_prompt: "Use $lookup-wuji-docs and the official wuji-docs MCP to verify the current Wuji beta stage and release boundaries before answering or implementing."
 
 dependencies:
   tools:

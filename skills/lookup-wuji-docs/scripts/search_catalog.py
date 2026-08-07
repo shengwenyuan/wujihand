@@ -21,7 +21,7 @@ ALIASES = (
     {"sdk", "api", "接口", "开发", "python", "c++", "wujihandpy"},
     {"ros", "ros2", "rviz", "topic", "service", "launch"},
     {"glove", "手套", "emf", "imu", "tactile", "触觉", "手部追踪"},
-    {"hand2", "hand 2", "二代", "beta 1", "beta1", "wuji hand 2"},
+    {"hand2", "hand 2", "二代", "beta 1", "beta1", "beta 2", "beta2", "wuji hand 2"},
     {"hand1", "hand v1", "一代", "旧版", "旧代", "wujihandpy"},
     {"install", "installation", "安装", "环境", "依赖"},
     {"connect", "connection", "连接", "发现", "scan"},
@@ -31,6 +31,7 @@ ALIASES = (
     {"record", "recording", "录制", "mcap", "回放", "playback"},
     {"calibration", "calibrate", "标定", "校准", "零位"},
     {"release", "changelog", "version", "版本", "发布记录", "更新"},
+    {"v2026.7.23", "2026.7.23", "2026.07.23", "2026-07-23", "model revision", "模型版本"},
     {"troubleshoot", "troubleshooting", "debug", "故障", "排查", "错误", "异常"},
 )
 
@@ -40,8 +41,19 @@ STOP_TERMS = {"wuji", "hand", "1", "2", "v1", "latest"}
 def known_warning(docset: str, page_url: str) -> str | None:
     if page_url == "https://docs.wuji.tech/docs/zh/wuji-hand/latest/sdk-reference/":
         return (
-            "This product page still showed pre-v2026.7.1 Hand 2 signatures at the "
-            "catalog snapshot. Compare the global/SDK release notes and target wuji-sdk tag."
+            "Hand 2 is beta hardware. This page showed pre-v2026.7.1 signatures at the "
+            "catalog snapshot; compare product/SDK release notes, hardware stage, firmware, "
+            "and the target wuji-sdk tag."
+        )
+    if docset == "Wuji Hand 2 (Beta 1)":
+        return (
+            "The official manual is for Beta 1 samples and does not represent final product "
+            "behavior. Check product release notes for Beta 2-only hardware and firmware."
+        )
+    if docset == "Wuji Description":
+        return (
+            "v2026.7.23 replaced the earlier Hand 2 model revision. Do not mix hand2_beta "
+            "with hand2/hand2_beta1 names, roots, mappings, collision rules, or datasets."
         )
     if docset == "Wuji Hand ROS2":
         return (
@@ -92,7 +104,16 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
     results: list[dict[str, Any]] = []
     asks_hand2 = any(
         alias_in_query(normalize(item), query_norm)
-        for item in ("hand 2", "hand2", "wuji hand 2", "二代", "beta 1", "beta1")
+        for item in (
+            "hand 2",
+            "hand2",
+            "wuji hand 2",
+            "二代",
+            "beta 1",
+            "beta1",
+            "beta 2",
+            "beta2",
+        )
     )
     asks_hand1 = any(
         alias_in_query(normalize(item), query_norm)
@@ -109,6 +130,17 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
     asks_release = any(
         alias_in_query(normalize(item), query_norm)
         for item in ("release", "changelog", "version", "版本", "发布记录", "更新")
+    )
+    asks_hand2_model_revision = any(
+        item in query_norm
+        for item in (
+            "v2026.7.23",
+            "2026.7.23",
+            "2026.07.23",
+            "2026-07-23",
+            "model revision",
+            "模型版本",
+        )
     )
     asks_mediapipe = alias_in_query("mediapipe", query_norm)
     asks_isaac = any(
@@ -207,8 +239,7 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
                     for item in ("teleop", "teleoperation", "遥操作", "远程操作", "遥控")
                 )
                 has_simulation = any(
-                    normalize(item) in page_text
-                    for item in ("sim", "simulation", "仿真", "模拟")
+                    normalize(item) in page_text for item in ("sim", "simulation", "仿真", "模拟")
                 )
                 if has_teleop and has_simulation:
                     score += 25
@@ -224,6 +255,11 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
                     score += 15
                 elif docset["name"] == "Wuji Description" and "/integration/" in page["url"]:
                     score += 15
+            if asks_hand2_model_revision:
+                if docset["name"] == "Wuji Description":
+                    score += 100 if "/release-notes/" in page["url"] else 25
+                elif docset["name"] == hand2_docset and "/release-notes/" in page["url"]:
+                    score += 60
             if score > 0:
                 result = {
                     "score": score,
@@ -250,11 +286,7 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
             "全站" in query_norm or alias_in_query("global", query_norm)
         ):
             score += 120
-        if (
-            source["name"] == "Wuji 全站发布记录"
-            and asks_release
-            and not mentions_specific_product
-        ):
+        if source["name"] == "Wuji 全站发布记录" and asks_release and not mentions_specific_product:
             score += 100
         if score:
             results.append(
@@ -273,7 +305,9 @@ def search(catalog: dict[str, Any], query: str, category: str | None) -> list[di
 
 
 def main() -> int:
-    default_catalog = Path(__file__).resolve().parent.parent / "references" / "official-catalog.json"
+    default_catalog = (
+        Path(__file__).resolve().parent.parent / "references" / "official-catalog.json"
+    )
     parser = argparse.ArgumentParser(description="Search the cached Wuji official-doc catalog.")
     parser.add_argument("query", help="Chinese or English topic, API, tool, or workflow")
     parser.add_argument("--catalog", type=Path, default=default_catalog)
