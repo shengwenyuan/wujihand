@@ -23,10 +23,12 @@ from wujihand.dataset.profile import Q54JointProfile
 
 LEROBOT_COMMIT: Final = "7e241bd630a3719a56157a497ce5d08f244784f1"
 LEROBOT_TAG: Final = "v0.6.1"
-EXPORTER_VERSION: Final = "0.2.0"
+EXPORTER_VERSION: Final = "0.3.0"
 EXPORT_MANIFEST_SCHEMA: Final = "wujihand.lerobot_export_manifest.v1"
 Q54_SIDECAR_SCHEMA: Final = "wujihand.lerobot_q54_sidecar.v1"
-SOURCE_MAP_SCHEMA: Final = "wujihand.lerobot_frame_source.v2"
+SOURCE_MAP_SCHEMA: Final = "wujihand.lerobot_frame_source.v3"
+VALID_TRANSITION_SCHEMA: Final = "wujihand.lerobot_valid_transition.v1"
+LEROBOT_VIDEO_SEEK_TOLERANCE_S: Final = 1e-4
 AUTO_FEATURE_KEYS: Final = frozenset(
     {"timestamp", "frame_index", "episode_index", "index", "task_index"}
 )
@@ -203,7 +205,11 @@ def _default_factory(
             robot_type=robot_type,
             features=features,
             use_videos=True,
-            tolerance_s=1e-6,
+            # LeRobot queries video PTS using float32 tensors.  The ULP grows
+            # with a long concatenated video, so a fixed 1 us tolerance rejects
+            # the exact intended frame after roughly 32 s.  100 us covers that
+            # representation error while remaining far below one 30 Hz frame.
+            tolerance_s=LEROBOT_VIDEO_SEEK_TOLERANCE_S,
             image_writer_processes=0,
             image_writer_threads=0,
             video_backend="pyav",
@@ -224,7 +230,7 @@ def _default_loader(*, repo_id: str, root: Path) -> DatasetHandle:
         LeRobotDataset(
             repo_id=repo_id,
             root=root,
-            tolerance_s=1e-6,
+            tolerance_s=LEROBOT_VIDEO_SEEK_TOLERANCE_S,
             download_videos=True,
             video_backend="pyav",
             return_uint8=True,
@@ -302,12 +308,9 @@ def _validate_round_trip(
             raise ValueError("round-trip episode index differs")
         if int(_scalar(item["frame_index"], field="frame_index")) != frame.frame_index:
             raise ValueError("round-trip frame index differs")
-        if not math.isclose(
-            _scalar(item["timestamp"], field="timestamp"),
-            frame.timestamp_s,
-            rel_tol=0.0,
-            abs_tol=1e-6,
-        ):
+        observed_timestamp = np.float32(_scalar(item["timestamp"], field="timestamp"))
+        expected_timestamp = np.float32(frame.frame_index / 30.0)
+        if observed_timestamp.view(np.uint32) != expected_timestamp.view(np.uint32):
             raise ValueError("round-trip timestamp differs")
         if item.get("task") != episode.task:
             raise ValueError("round-trip task differs")
@@ -361,6 +364,7 @@ def _write_sidecars(
     )
     source_path = meta / "wujihand_frame_source.jsonl"
     source_lines: list[bytes] = []
+    transition_lines: list[bytes] = []
     global_index = 0
     for episode_index, episode in enumerate(episodes):
         for frame in episode.frames:
@@ -374,6 +378,14 @@ def _write_sidecars(
                 "dataset_episode_index": episode_index,
                 "dataset_frame_index": frame.frame_index,
                 "run_id": episode.run_id,
+                "source_run_id": episode.source_run_id,
+                "visual_domain_variant": episode.visual_domain_variant.to_mapping(),
+                "visual_domain_variant_sha256": (
+                    episode.visual_domain_variant.digest_sha256
+                ),
+                "visual_domain_variant_profile_sha256": (
+                    episode.visual_domain_variant_profile_sha256
+                ),
                 "collection_id": episode.vision.provenance.collection_id,
                 "source_control_index": frame.source_control_index,
                 "source_tick_id": frame.source_tick_id,
@@ -381,6 +393,8 @@ def _write_sidecars(
                 "source_state_digest": frame.source_state_digest,
                 "temporal_continuity": frame.temporal_continuity,
                 "transition_from_previous_allowed": frame.temporal_continuity,
+                "gap_before_row": frame.gap_before_row,
+                "transition_valid": frame.transition_valid,
                 "missing_control_periods_before": (
                     frame.missing_control_periods_before
                 ),
@@ -420,8 +434,28 @@ def _write_sidecars(
                 ).encode("utf-8")
                 + b"\n"
             )
+            if frame.transition_valid:
+                transition_lines.append(
+                    json.dumps(
+                        {
+                            "schema": VALID_TRANSITION_SCHEMA,
+                            "dataset_global_index": global_index,
+                            "dataset_episode_index": episode_index,
+                            "dataset_frame_index": frame.frame_index,
+                            "run_id": episode.run_id,
+                            "source_control_index": frame.source_control_index,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        allow_nan=False,
+                    ).encode("utf-8")
+                    + b"\n"
+                )
             global_index += 1
     source_path.write_bytes(b"".join(source_lines))
+    (meta / "wujihand_valid_transitions.jsonl").write_bytes(
+        b"".join(transition_lines)
+    )
     manifest = {
         "schema": EXPORT_MANIFEST_SCHEMA,
         "exporter_version": EXPORTER_VERSION,
@@ -432,6 +466,24 @@ def _write_sidecars(
         "episode_count": len(episodes),
         "frame_count": global_index,
         "episode_order": [episode.run_id for episode in episodes],
+        "source_episode_order": [episode.source_run_id for episode in episodes],
+        "episode_quality_grades": {
+            episode.run_id: episode.quality_grade for episode in episodes
+        },
+        "source_release_decision_sha256": {
+            episode.run_id: episode.release_decision_sha256 for episode in episodes
+        },
+        "visual_domain_variants": {
+            episode.run_id: {
+                "profile_sha256": episode.visual_domain_variant_profile_sha256,
+                "variant": episode.visual_domain_variant.to_mapping(),
+                "variant_sha256": episode.visual_domain_variant.digest_sha256,
+            }
+            for episode in episodes
+        },
+        "valid_transition_count": sum(
+            frame.transition_valid for episode in episodes for frame in episode.frames
+        ),
         "policy_features": features,
         "q54_profile_id": q54_profile.profile_id,
         "q54_profile_sha256": q54_profile.file_sha256,
@@ -454,6 +506,7 @@ def _write_sidecars(
             "crf": 30,
             "preset": 12,
             "encoder_threads": 4,
+            "seek_tolerance_s": LEROBOT_VIDEO_SEEK_TOLERANCE_S,
         },
         "success_semantics": "not_recorded_not_evaluated",
     }
@@ -469,8 +522,10 @@ def _write_sidecars(
         "No reward, success predicate or task-completion label is present. Raw q21, Tracker, "
         "qdot, post-state, object/link/contact and timing facts remain in source sidecars and "
         "are not policy observations. The source sidecar carries explicit missed-period and "
-        "temporal-continuity masks; sequence consumers must never bridge a false continuity "
-        "boundary. NERO real-hardware limits and mappings remain unverified "
+        "temporal-continuity masks. The valid-transition sidecar is the only training transition "
+        "index; sequence consumers must never bridge a false continuity boundary. Episode "
+        "quality grades A/B/C/D are metadata and C/D are not integrity rejection states. "
+        "NERO real-hardware limits and mappings remain unverified "
         "until device readback.\n",
         encoding="utf-8",
     )

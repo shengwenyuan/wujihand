@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 from wujihand.dataset.alignment import AlignmentFrame, ExactAlignment
 from wujihand.dataset.episode import DatasetEpisodeAnnotation
+from wujihand.dataset.domain_randomization import NOMINAL_VISUAL_DOMAIN_VARIANT
 from wujihand.dataset.policy import PolicyEpisode, PolicyFrame
 from wujihand.dataset.profile import load_q54_joint_profile
 from wujihand.dataset.vision import (
@@ -238,6 +239,7 @@ def _episode(tmp_path: Path, run_id: str, *, offset: int) -> PolicyEpisode:
     )
     return PolicyEpisode(
         run_id=run_id,
+        source_run_id=run_id,
         root=root,
         annotation=DatasetEpisodeAnnotation(
             run_id=run_id,
@@ -247,6 +249,10 @@ def _episode(tmp_path: Path, run_id: str, *, offset: int) -> PolicyEpisode:
         alignment=alignment,
         vision=vision,
         frames=(frame,),
+        quality_grade="C",
+        release_decision_sha256="e" * 64,
+        visual_domain_variant=NOMINAL_VISUAL_DOMAIN_VARIANT,
+        visual_domain_variant_profile_sha256="f" * 64,
     )
 
 
@@ -280,6 +286,11 @@ def test_export_collection_finalizes_reopens_and_publishes_sidecars(tmp_path: Pa
         (destination / "meta" / "wujihand_export_manifest.json").read_text()
     )
     assert manifest["episode_order"] == ["episode-001", "episode-002"]
+    assert manifest["episode_quality_grades"] == {
+        "episode-001": "C",
+        "episode-002": "C",
+    }
+    assert manifest["valid_transition_count"] == 0
     assert manifest["success_semantics"] == "not_recorded_not_evaluated"
     source_rows = (
         destination / "meta" / "wujihand_frame_source.jsonl"

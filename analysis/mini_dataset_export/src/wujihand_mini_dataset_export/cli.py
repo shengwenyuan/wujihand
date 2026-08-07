@@ -13,6 +13,7 @@ from wujihand.dataset import (
     load_mini_dataset_profile,
     load_policy_episode,
     load_release_decision_artifact,
+    load_visual_domain_variant_profile,
     validate_episode_bundle,
 )
 from wujihand.domain.recording import validate_recording_token
@@ -20,6 +21,9 @@ from wujihand.domain.recording import validate_recording_token
 from .exporter import export_collection
 
 DEFAULT_PROFILE = "configs/profiles/isaac_nero_hand2_triview_q54_mini_dataset_v1.yaml"
+DEFAULT_VARIANT_PROFILE = (
+    "configs/profiles/isaac_mini_dataset_visual_domain_variants_v1.yaml"
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +32,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--collection-root", type=Path, required=True)
     parser.add_argument("--collection-id", required=True)
     parser.add_argument("--profile", default=DEFAULT_PROFILE)
+    parser.add_argument("--variant-profile", default=DEFAULT_VARIANT_PROFILE)
+    parser.add_argument(
+        "--vision-variants",
+        nargs="+",
+        default=("nominal",),
+    )
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--repo-id", required=True)
     parser.add_argument(
@@ -46,6 +56,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         project_root = args.project_root.resolve()
         profile = load_mini_dataset_profile(project_root, args.profile)
+        variant_profile = load_visual_domain_variant_profile(
+            project_root,
+            args.variant_profile,
+        )
+        variant_ids = tuple(args.vision_variants)
+        if len(set(variant_ids)) != len(variant_ids):
+            raise ValueError("vision variant IDs are duplicated")
+        variants = tuple(variant_profile.variant(item) for item in variant_ids)
         registry = CollectionRegistry(
             project_root,
             args.collection_root,
@@ -60,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("collection contains no accepted episodes")
         if len(records) > profile.retained_episode_hard_limit:
             raise ValueError("accepted episode count exceeds the frozen profile limit")
+        if len(records) * len(variants) > profile.retained_episode_hard_limit:
+            raise ValueError("expanded visual-variant episode count exceeds the frozen limit")
         if any(record.release_decision_sha256 is None for record in records):
             raise ValueError("accepted episode is missing its release decision digest")
         destination = args.destination.resolve()
@@ -91,8 +111,6 @@ def main(argv: list[str] | None = None) -> int:
                 or bundle.manifest.get("dataset_profile_sha256") != profile.file_sha256
             ):
                 raise ValueError("accepted bundle collection/profile identity differs")
-            episode = load_policy_episode(run_root)
-            provenance = episode.vision.provenance
             expected_provenance = {
                 "collection_id": args.collection_id,
                 "dataset_profile_sha256": bundle.manifest.get(
@@ -103,12 +121,30 @@ def main(argv: list[str] | None = None) -> int:
                 "assembly_sha256": bundle.manifest.get("assembly_hash"),
                 "workcell_sha256": bundle.manifest.get("workcell_hash"),
             }
-            if any(
-                getattr(provenance, key) != expected
-                for key, expected in expected_provenance.items()
-            ):
-                raise ValueError("accepted vision and bundle provenance differ")
-            episodes.append(episode)
+            for variant in variants:
+                artifact_name = (
+                    "vision"
+                    if variant.variant_id == "nominal"
+                    else f"vision_{variant.variant_id}"
+                )
+                episode = load_policy_episode(
+                    run_root,
+                    vision_artifact_name=artifact_name,
+                    visual_domain_variant=variant,
+                    visual_domain_variant_profile_sha256=variant_profile.file_sha256,
+                )
+                provenance = episode.vision.provenance
+                if any(
+                    getattr(provenance, key) != expected
+                    for key, expected in expected_provenance.items()
+                ):
+                    raise ValueError("accepted vision and bundle provenance differ")
+                expected_renderer_suffix = (
+                    f"-{variant.variant_id}-{variant.digest_sha256[:12]}"
+                )
+                if not provenance.renderer_identity.endswith(expected_renderer_suffix):
+                    raise ValueError("accepted vision domain-variant provenance differs")
+                episodes.append(episode)
         result = export_collection(
             tuple(episodes),
             profile.q54,
