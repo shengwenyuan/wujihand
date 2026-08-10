@@ -78,7 +78,9 @@ SESSION_RUNTIME = resolve_isaac_hand_runtime(
     ROOT,
     session_path=ARGS.session or ROOT / default_session,
     runtime_roles=(
-        {"teleop_consumer"} if ARGS.command_source == "udp" else {"simulation"}
+        {"teleop_consumer"}
+        if ARGS.command_source == "udp"
+        else {"simulation", "qualification"}
     ),
     asset_override=ARGS.asset,
     profile_override=ARGS.profile,
@@ -105,7 +107,7 @@ simulation_app = SimulationApp(
 )
 
 import numpy as np
-from pxr import UsdPhysics
+from pxr import Usd, UsdPhysics
 
 import omni.kit.renderer_capture
 from omni.kit.viewport.utility import capture_viewport_to_file, get_active_viewport
@@ -117,7 +119,7 @@ from isaacsim.core.version import get_version as get_isaac_sim_version
 from wujihand.adapters.simulation import load_hand2_model_profile
 from wujihand.adapters.transport import UdpJointCommandReceiver
 from wujihand.application.supervision import JointCommandSupervisor
-from wujihand.domain import HAND2_RIGHT_LAYOUT, HAND2_RIGHT_REST
+from wujihand.domain import hand2_layout, hand2_rest
 from wujihand.runtime.isaac_workcell import materialize_isaac_workcell
 
 
@@ -156,7 +158,7 @@ def scripted_target(frame: int) -> np.ndarray:
         dtype=np.float64,
     )
     if frame < 120:
-        return HAND2_RIGHT_REST.copy()
+        return np.zeros(20, dtype=np.float64)
     if frame < 300:
         alpha = min((frame - 120) / 120.0, 1.0)
         return close * alpha
@@ -188,9 +190,9 @@ def main() -> int:
     asset_sha256 = sha256_file(ARGS.asset)
     if asset_sha256 != profile.provenance.get("usd_sha256"):
         raise RuntimeError("Hand 2 USD SHA-256 differs from the pinned profile")
-    if profile.layout != HAND2_RIGHT_LAYOUT:
+    if profile.layout != hand2_layout(profile.side):
         raise RuntimeError("Hand 2 profile differs from the pinned firmware layout")
-    if not np.array_equal(profile.rest_position, HAND2_RIGHT_REST):
+    if not np.array_equal(profile.rest_position, hand2_rest(profile.side)):
         raise RuntimeError("Hand 2 profile differs from the pinned rest position")
 
     world = World(
@@ -208,11 +210,45 @@ def main() -> int:
         raise RuntimeError("materialized Workcell table is not registered")
     add_reference_to_stage(str(ARGS.asset.resolve()), "/World/Hand2")
     stage = world.scene.stage
+    stage_prims = list(Usd.PrimRange.Stage(stage, Usd.TraverseInstanceProxies()))
+
+    collision_paths = sorted(
+        str(prim.GetPath())
+        for prim in stage_prims
+        if str(prim.GetPath()).startswith("/World/Hand2")
+        and prim.HasAPI(UsdPhysics.CollisionAPI)
+    )
+    collision_approximations = {
+        str(prim.GetPath()): UsdPhysics.MeshCollisionAPI(prim).GetApproximationAttr().Get()
+        for prim in stage_prims
+        if str(prim.GetPath()).startswith("/World/Hand2")
+        and prim.HasAPI(UsdPhysics.MeshCollisionAPI)
+    }
+    rigid_body_paths = sorted(
+        str(prim.GetPath())
+        for prim in stage_prims
+        if str(prim.GetPath()).startswith("/World/Hand2")
+        and prim.HasAPI(UsdPhysics.RigidBodyAPI)
+    )
+    fingertip_site_names = {
+        f"{profile.side[0]}_thumb_tip",
+        f"{profile.side[0]}_index_finger_tip",
+        f"{profile.side[0]}_middle_finger_tip",
+        f"{profile.side[0]}_ring_finger_tip",
+        f"{profile.side[0]}_pinky_tip",
+    }
+    fingertip_site_paths = sorted(
+        str(prim.GetPath())
+        for prim in stage_prims
+        if prim.GetName() in fingertip_site_names
+    )
 
     articulation_root = find_articulation_root(stage)
-    hand = world.scene.add(Articulation(articulation_root, name="hand2_right"))
+    hand = world.scene.add(
+        Articulation(articulation_root, name=f"hand2_{profile.side}")
+    )
     world.reset()
-    # Lay the hand above the table: local +X (palm normal) points toward world +Z.
+    # The versioned Workcell mount aligns the physical palm pose above the table.
     hand.set_world_poses(
         positions=np.asarray(
             [WORKCELL_RUNTIME.hand_mount.position_m], dtype=np.float32
@@ -251,6 +287,7 @@ def main() -> int:
     supervisor.arm(time.monotonic_ns() if receiver is not None else 0)
     last_decision = None
     command_log: list[dict[str, object]] | None = [] if validation_output is not None else None
+    initial_feedback_max_abs: float | None = None
     feedback_peak_abs = 0.0
     feedback_within_limits = True
     tracking_ticks = 0
@@ -265,6 +302,8 @@ def main() -> int:
         if frame % COMMAND_DIVISOR == 0:
             feedback_backend = np.asarray(hand.get_joint_positions(), dtype=np.float64)[0]
             feedback_firmware = profile.backend_to_firmware(feedback_backend, backend_names)
+            if initial_feedback_max_abs is None:
+                initial_feedback_max_abs = float(np.abs(feedback_firmware).max())
             feedback_peak_abs = max(feedback_peak_abs, float(np.abs(feedback_firmware).max()))
             feedback_within_limits = feedback_within_limits and bool(
                 np.all(
@@ -348,7 +387,46 @@ def main() -> int:
     omni.kit.renderer_capture.acquire_renderer_capture_interface().wait_async_capture()
     if not captured or not screenshot.is_file():
         raise RuntimeError("Isaac viewport capture did not complete")
+    movement_ok = ARGS.frames < 360 or feedback_peak_abs > 0.20
+    transport_ok = receiver is None or (receiver.accepted > 0 and tracking_ticks > 0)
+    loss_recovery_ok = not ARGS.require_udp_loss_recovery or (
+        receiver is not None
+        and degraded_after_tracking_ticks > 0
+        and last_decision is not None
+        and last_decision.state.value == "degraded"
+        and last_decision.reason == "stale_input_return_to_rest"
+        and np.abs(final_target).max() < 0.02
+    )
+    collision_approximations_ok = bool(collision_approximations) and set(
+        collision_approximations.values()
+    ) == {"convexHull"}
+    failure_reasons = []
+    if not finite:
+        failure_reasons.append("non_finite_feedback")
+    if not feedback_within_limits:
+        failure_reasons.append("feedback_outside_limits")
+    if not movement_ok:
+        failure_reasons.append("movement_not_observed")
+    if not transport_ok:
+        failure_reasons.append("transport_not_observed")
+    if not loss_recovery_ok:
+        failure_reasons.append("udp_loss_recovery_failed")
+    if not collision_paths:
+        failure_reasons.append("collision_inventory_empty")
+    if not collision_approximations_ok:
+        failure_reasons.append("collision_approximation_not_convex_hull")
+    if len(fingertip_site_paths) != 5:
+        failure_reasons.append("fingertip_site_count_mismatch")
+    if len(backend_names) != 20:
+        failure_reasons.append("dof_count_mismatch")
+    if final_error.max() > 0.20:
+        failure_reasons.append("final_tracking_error_above_0_20_rad")
     report = {
+        "schema": "wujihand.isaac_hand2_local_qualification.v1",
+        "passed": not failure_reasons,
+        "failure_reasons": failure_reasons,
+        "simulation_only": True,
+        "hardware_reusable": False,
         "isaac_sim": get_isaac_sim_version()[0],
         "session": SESSION_RUNTIME.resolved.session.session_id,
         "session_hash": SESSION_RUNTIME.resolved.session_hash,
@@ -357,7 +435,17 @@ def main() -> int:
         "asset_sha256": asset_sha256,
         "profile": str(ARGS.profile.resolve()),
         "profile_provenance": profile.provenance,
+        "side": profile.side,
         "articulation_root": articulation_root,
+        "binding_root": SESSION_RUNTIME.resolved.instance("hand").binding.root,
+        "collision_prim_count": len(collision_paths),
+        "collision_prim_paths": collision_paths,
+        "collision_approximations": collision_approximations,
+        "collision_approximations_ok": collision_approximations_ok,
+        "rigid_body_prim_count": len(rigid_body_paths),
+        "rigid_body_prim_paths": rigid_body_paths,
+        "fingertip_site_count": len(fingertip_site_paths),
+        "fingertip_site_paths": fingertip_site_paths,
         "dof_count": len(backend_names),
         "backend_dof_names": backend_names,
         "firmware_order": list(profile.layout.names),
@@ -372,6 +460,7 @@ def main() -> int:
         "udp_packets_rejected": receiver.rejected if receiver is not None else None,
         "actual_finite": finite,
         "feedback_peak_abs_rad": feedback_peak_abs,
+        "initial_feedback_max_abs_rad": initial_feedback_max_abs,
         "feedback_within_limits": feedback_within_limits,
         "feedback_limit_tolerance_rad": FEEDBACK_LIMIT_TOLERANCE_RAD,
         "tracking_ticks": tracking_ticks,
@@ -395,25 +484,7 @@ def main() -> int:
     if receiver is not None:
         receiver.close()
     print(json.dumps(report, indent=2, sort_keys=True))
-    movement_ok = ARGS.frames < 360 or feedback_peak_abs > 0.20
-    transport_ok = receiver is None or (receiver.accepted > 0 and tracking_ticks > 0)
-    loss_recovery_ok = not ARGS.require_udp_loss_recovery or (
-        receiver is not None
-        and degraded_after_tracking_ticks > 0
-        and last_decision is not None
-        and last_decision.state.value == "degraded"
-        and last_decision.reason == "stale_input_return_to_rest"
-        and np.abs(final_target).max() < 0.02
-    )
-    if (
-        not finite
-        or not feedback_within_limits
-        or not movement_ok
-        or not transport_ok
-        or not loss_recovery_ok
-        or len(backend_names) != 20
-        or final_error.max() > 0.20
-    ):
+    if failure_reasons:
         return 1
     return 0
 

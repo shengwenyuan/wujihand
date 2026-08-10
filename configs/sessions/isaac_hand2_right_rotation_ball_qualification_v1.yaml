@@ -3,8 +3,8 @@ session_id: isaac_hand2_right_rotation_ball_qualification_v1
 backend: isaac
 runtime_role: qualification
 assembly:
-  path: configs/assemblies/hand2_right_rotation_mount_v1.yaml
-  expected_id: hand2_right_rotation_mount_v1
+  path: configs/assemblies/hand2_right_rotation_mount_v2026_6_27_v1.yaml
+  expected_id: hand2_right_rotation_mount_v2026_6_27_v1
 workcell:
   path: configs/workcells/isaac_hand2_rotation_ball_v1.yaml
   expected_id: isaac_hand2_rotation_ball_v1
@@ -18,7 +18,7 @@ bindings:
 placements:
   wrist: rotation_flange_mount
 runtime:
-  compatibility_profile: configs/base/hand2_rotation_ball_v1.yaml
+  compatibility_profile: configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml
   transport_contract: null
   control_layouts:
     - instance_id: wrist

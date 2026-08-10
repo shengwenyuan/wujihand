@@ -1,5 +1,5 @@
 schema_version: 1
-name: mujoco_fr3v2_hand2_right_table_v1
+name: mujoco_fr3v2_hand2_right_table_v2026_8_3_v1
 backend: mujoco
 robot:
   arm: franka_fr3_v2
@@ -15,11 +15,11 @@ assets:
   arm_mjcf_sha256: 75e0f526e503614680cad07a6f4b48de00e7783db7440d55e22d6686d96f9877
   arm_asset_dir: third_party/src/mujoco_menagerie/franka_fr3_v2/assets
   arm_asset_tree_sha256: 0ee1f659bb749fb88c1c2cca93215ec42460de9626eab31018bbc7bf1c88d7bf
-  hand_profile: configs/profiles/hand2_right_v2026_6_27.yaml
-  hand_mjcf: third_party/src/wuji-description/hand2_beta/body/mjcf/right.xml
-  hand_mjcf_sha256: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
-  hand_asset_dir: third_party/src/wuji-description/hand2_beta/body/meshes/right
-  hand_asset_tree_sha256: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
+  hand_profile: configs/profiles/hand2_right_v2026_8_3.yaml
+  hand_mjcf: third_party/src/wuji-description/v2026.8.3/hand2/hand2_beta1/body/mjcf/right.xml
+  hand_mjcf_sha256: 1bc53b7ca6f2eb84fc66ac736027984cd1734fa30d27f9c1f640495258d626f9
+  hand_asset_dir: third_party/src/wuji-description/v2026.8.3/hand2/hand2_beta1/body/meshes/right
+  hand_asset_tree_sha256: d100f1eb1ed1d6bb01715f35409a97c2aecb6c85577ca166c86330b8b4195f58
 physics:
   timestep_s: 0.002
   integrator: implicitfast
@@ -35,7 +35,6 @@ floor:
   z_m: 0.0
   color_rgba: [0.16, 0.18, 0.21, 1.0]
 table:
-  # The 1.60 m X dimension makes y_max/y_min the two long sides.
   center_m: [0.0, 0.0, 0.72]
   size_m: [1.60, 1.00, 0.06]
   leg_width_m: 0.06
@@ -43,7 +42,6 @@ table:
   color_rgba: [0.38, 0.23, 0.12, 1.0]
   friction: [1.0, 0.005, 0.0001]
 arm_pedestal:
-  # A four-sided frustum on the far long side, with a 0.02 m floor-footprint gap.
   center_xy_m: [0.0, 0.82]
   height_m: 0.47
   top_size_m: [0.42, 0.42]
@@ -53,17 +51,18 @@ arm_pedestal:
   color_rgba: [0.32, 0.40, 0.48, 1.0]
   friction: [1.0, 0.005, 0.0001]
 arm_mount:
-  # Local +X points from the y_max pedestal toward the table center (world -Y).
   position_m: [0.0, 0.82, 0.47]
   quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
   forward_axis: local_+x
   joint2_clearance_above_table_m: 0.053
 hand_attachment:
   parent_body: fr3v2_link8
-  child_body: r_base_link
-  position_m: [0.0, 0.0, 0.0]
-  quat_wxyz: [1.0, 0.0, 0.0, 0.0]
-  assumption: identity_until_physical_adapter_transform_is_measured
+  child_body: r_wrist
+  # Simulation-only rigid registration preserving the qualified v2026.6.27
+  # right-hand physical mesh pose after the upstream root changed to r_wrist.
+  position_m: [0.00025016, 0.00300004, 0.02849985]
+  quat_wxyz: [0.0, 0.7071067811865476, 0.7071067811865476, 0.0]
+  assumption: preserve_v2026_6_27_pose_via_right_wrist_mesh_registration
 workspace:
   center_m: [0.0, 0.0, 0.755]
 camera:
@@ -73,7 +72,6 @@ camera:
   width_px: 960
   height_px: 720
 observation_light:
-  # One shadow-free directional light; visualization only, never a physics input.
   direction: [-0.35, -0.45, -1.0]
   ambient_rgb: [0.35, 0.35, 0.35]
   diffuse_rgb: [0.70, 0.70, 0.70]
@@ -83,6 +81,7 @@ derived_from:
   arm_repository: https://github.com/google-deepmind/mujoco_menagerie.git
   arm_commit: 71f066ad0be9cd271f7ed58c030243ef157af9f4
   hand_repository: https://github.com/wuji-technology/wuji-description.git
-  hand_tag: v2026.6.27
-  hand_commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
-  docs_lookup_date: 2026-07-13
+  hand_tag: v2026.8.3
+  hand_commit: 8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  hand2_model_revision: v2026.7.23
+  docs_lookup_date: 2026-08-10

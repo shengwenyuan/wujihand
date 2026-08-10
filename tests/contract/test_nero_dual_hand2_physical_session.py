@@ -170,7 +170,7 @@ def test_physical_dual_session_uses_pinned_physical_usd_bindings() -> None:
     assert {record.name for record in resolved.source_records} == {
         "agilex-agx-arm-urdf",
         "agilex-nero-isaac-6-0-1",
-        "wuji-description",
+        "wuji-description-v2026-6-27",
     }
 
 

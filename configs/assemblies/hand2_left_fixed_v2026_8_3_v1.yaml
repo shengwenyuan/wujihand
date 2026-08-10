@@ -1,0 +1,11 @@
+schema: wujihand.assembly_spec.v1
+assembly_id: hand2_left_fixed_v2026_8_3_v1
+instances:
+  - instance_id: hand
+    asset:
+      path: configs/assets/wuji_hand2_beta1_left_v2026_8_3_v1.yaml
+      expected_id: wuji_hand2_beta1_left
+    role: primary_hand
+    namespace: hand2_left
+roots: [hand]
+attachments: []

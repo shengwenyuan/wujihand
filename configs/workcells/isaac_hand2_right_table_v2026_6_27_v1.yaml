@@ -1,0 +1,41 @@
+schema: wujihand.workcell.v1
+workcell_id: isaac_hand2_right_table_v2026_6_27_v1
+world_frame: world
+frames:
+  - frame_id: camera_eye
+    parent: world
+    transform:
+      position_m: [0.42, -0.48, 0.88]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: camera_target
+    parent: world
+    transform:
+      position_m: [-0.04, 0.0, 0.43]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+mounts:
+  - mount_id: hand_fixed_mount
+    frame: world
+    transform:
+      position_m: [-0.10, 0.0, 0.43]
+      quat_wxyz: [0.7071067811865476, 0.0, -0.7071067811865475, 0.0]
+entities:
+  - entity_id: ground
+    frame: world
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: plane
+    mobility: fixed
+    mass_kg: null
+  - entity_id: table
+    frame: world
+    transform:
+      position_m: [0.02, 0.0, 0.35]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.80, 0.60, 0.06]
+    mobility: fixed
+    mass_kg: null
+compatibility_profile: null

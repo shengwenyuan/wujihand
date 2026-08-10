@@ -1,19 +1,19 @@
 schema: wujihand.backend_binding.v1
 binding_id: wuji_hand2_beta1_right_isaac_v2026_6_27_physical
 asset_id: wuji_hand2_beta1_right
-asset_revision: beta1
+asset_revision: beta1_description_v2026_6_27
 asset_side: right
 backend: isaac
 loader: usd
 artifact:
-  source: wuji-description
+  source: wuji-description-v2026-6-27
   source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
   path: hand2_beta/body/usd/right/wujihand.usd
 resource_trees:
-  - source: wuji-description
+  - source: wuji-description-v2026-6-27
     source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
     path: hand2_beta/body/usd/right
-  - source: wuji-description
+  - source: wuji-description-v2026-6-27
     source_revision: commit:aee64892ebcf8e3237bedc30231bb09476cbc71d
     path: hand2_beta/body/meshes/right
 root: r_base_link
@@ -46,4 +46,4 @@ group_bindings:
       - r_pinky_dip
     actuators: []
 builder: null
-compatibility_profile: null
+compatibility_profile: configs/profiles/hand2_right_v2026_6_27.yaml

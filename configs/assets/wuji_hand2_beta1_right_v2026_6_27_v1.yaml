@@ -1,6 +1,6 @@
 schema: wujihand.asset_manifest.v1
 asset_id: wuji_hand2_beta1_right
-revision: beta1
+revision: beta1_description_v2026_6_27
 kind: robot_hand
 product: wuji_hand_2
 side: right
@@ -15,4 +15,4 @@ control_groups:
     dof_count: 20
     command_interface: position
     joint_profile: configs/profiles/hand2_right_v2026_6_27.yaml
-provenance_source: third_party/sources.lock.yaml#wuji-description
+provenance_source: third_party/sources.lock.yaml#wuji-description-v2026-6-27

@@ -1,5 +1,5 @@
 schema: wujihand.assembly_spec.v1
-assembly_id: fr3v2_hand2_right_identity_v1
+assembly_id: fr3v2_hand2_right_identity_v2026_6_27_v1
 instances:
   - instance_id: arm
     asset:
@@ -9,7 +9,7 @@ instances:
     namespace: fr3
   - instance_id: hand
     asset:
-      path: configs/assets/wuji_hand2_beta1_right_v1.yaml
+      path: configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml
       expected_id: wuji_hand2_beta1_right
     role: end_effector
     namespace: hand2_right

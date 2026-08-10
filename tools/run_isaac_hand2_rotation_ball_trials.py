@@ -20,7 +20,7 @@ from wujihand.runtime import load_rotation_ball_config  # noqa: E402
 DEFAULT_ISAAC_PYTHON = Path(
     "/home/yanziwei/software/isaac-sim-standalone-5.1.0-linux-x86_64/python.sh"
 )
-DEFAULT_SCENE_PROFILE = ROOT / "configs/base/hand2_rotation_ball_v1.yaml"
+DEFAULT_SCENE_PROFILE = ROOT / "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
 
 
 def parse_args() -> argparse.Namespace:

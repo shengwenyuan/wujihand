@@ -1,13 +1,13 @@
 schema: wujihand.session.v1
-session_id: isaac_hand2_fixed_preview_v1
+session_id: isaac_hand2_right_fixed_qualification_v2026_6_27_v1
 backend: isaac
 runtime_role: simulation
 assembly:
-  path: configs/assemblies/hand2_right_fixed_v1.yaml
-  expected_id: hand2_right_fixed_v1
+  path: configs/assemblies/hand2_right_fixed_v2026_6_27_v1.yaml
+  expected_id: hand2_right_fixed_v2026_6_27_v1
 workcell:
-  path: configs/workcells/isaac_hand2_table_v1.yaml
-  expected_id: isaac_hand2_table_v1
+  path: configs/workcells/isaac_hand2_right_table_v2026_6_27_v1.yaml
+  expected_id: isaac_hand2_right_table_v2026_6_27_v1
 bindings:
   hand:
     path: configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_v1.yaml

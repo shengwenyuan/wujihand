@@ -1,0 +1,66 @@
+schema: wujihand.backend_binding.v1
+binding_id: wuji_hand2_beta1_right_mujoco_v2026_8_3
+asset_id: wuji_hand2_beta1_right
+asset_revision: beta1_description_v2026_8_3
+asset_side: right
+backend: mujoco
+loader: mjcf
+artifact:
+  source: wuji-description-v2026-8-3
+  source_revision: commit:8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  path: hand2/hand2_beta1/body/mjcf/right.xml
+resource_trees:
+  - source: wuji-description-v2026-8-3
+    source_revision: commit:8271644a78d69ed9a4adcf9165d882c64ad33dfa
+    path: hand2/hand2_beta1/body/meshes/right
+root: r_wrist
+namespace_policy: preserve
+frame_map:
+  hand_base: r_wrist
+  hand2_right_neutral: r_wrist
+group_bindings:
+  - group_id: finger_joints
+    joints:
+      - r_thumb_cmc_flex
+      - r_thumb_cmc_abd
+      - r_thumb_mcp
+      - r_thumb_ip
+      - r_index_finger_mcp_flex
+      - r_index_finger_mcp_abd
+      - r_index_finger_pip
+      - r_index_finger_dip
+      - r_middle_finger_mcp_flex
+      - r_middle_finger_mcp_abd
+      - r_middle_finger_pip
+      - r_middle_finger_dip
+      - r_ring_finger_mcp_flex
+      - r_ring_finger_mcp_abd
+      - r_ring_finger_pip
+      - r_ring_finger_dip
+      - r_pinky_mcp_flex
+      - r_pinky_mcp_abd
+      - r_pinky_pip
+      - r_pinky_dip
+    actuators:
+      - r_THJ0
+      - r_THJ1
+      - r_THJ2
+      - r_THJ3
+      - r_FFJ0
+      - r_FFJ1
+      - r_FFJ2
+      - r_FFJ3
+      - r_MFJ0
+      - r_MFJ1
+      - r_MFJ2
+      - r_MFJ3
+      - r_RFJ0
+      - r_RFJ1
+      - r_RFJ2
+      - r_RFJ3
+      - r_LFJ0
+      - r_LFJ1
+      - r_LFJ2
+      - r_LFJ3
+builder: null
+compatibility_profile: configs/profiles/hand2_right_v2026_8_3.yaml

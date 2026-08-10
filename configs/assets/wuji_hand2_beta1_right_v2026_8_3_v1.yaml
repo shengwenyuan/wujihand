@@ -1,0 +1,18 @@
+schema: wujihand.asset_manifest.v1
+asset_id: wuji_hand2_beta1_right
+revision: beta1_description_v2026_8_3
+kind: robot_hand
+product: wuji_hand_2
+side: right
+canonical_profile: configs/profiles/hand2_right_v2026_8_3.yaml
+frames:
+  base: hand_base
+  pose_command: hand2_right_neutral
+control_groups:
+  - group_id: finger_joints
+    semantic: finger_joint_position
+    layout_id: wuji_hand2_right_firmware_v1
+    dof_count: 20
+    command_interface: position
+    joint_profile: configs/profiles/hand2_right_v2026_8_3.yaml
+provenance_source: third_party/sources.lock.yaml#wuji-description-v2026-8-3

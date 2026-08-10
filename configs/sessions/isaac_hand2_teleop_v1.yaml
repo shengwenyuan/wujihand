@@ -3,8 +3,8 @@ session_id: isaac_hand2_teleop_v1
 backend: isaac
 runtime_role: teleop_consumer
 assembly:
-  path: configs/assemblies/hand2_right_fixed_v1.yaml
-  expected_id: hand2_right_fixed_v1
+  path: configs/assemblies/hand2_right_fixed_v2026_6_27_v1.yaml
+  expected_id: hand2_right_fixed_v2026_6_27_v1
 workcell:
   path: configs/workcells/isaac_hand2_table_v1.yaml
   expected_id: isaac_hand2_table_v1

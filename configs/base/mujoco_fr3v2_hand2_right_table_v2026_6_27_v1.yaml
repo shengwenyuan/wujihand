@@ -1,0 +1,88 @@
+schema_version: 1
+name: mujoco_fr3v2_hand2_right_table_v2026_6_27_v1
+backend: mujoco
+robot:
+  arm: franka_fr3_v2
+  hand_product: wuji_hand_2_beta_1
+  hand_side: right
+units:
+  length: m
+  angle: rad
+  time: s
+assets:
+  arm_profile: configs/profiles/fr3_v2_menagerie_71f066a.yaml
+  arm_mjcf: third_party/src/mujoco_menagerie/franka_fr3_v2/fr3v2.xml
+  arm_mjcf_sha256: 75e0f526e503614680cad07a6f4b48de00e7783db7440d55e22d6686d96f9877
+  arm_asset_dir: third_party/src/mujoco_menagerie/franka_fr3_v2/assets
+  arm_asset_tree_sha256: 0ee1f659bb749fb88c1c2cca93215ec42460de9626eab31018bbc7bf1c88d7bf
+  hand_profile: configs/profiles/hand2_right_v2026_6_27.yaml
+  hand_mjcf: third_party/src/wuji-description/v2026.6.27/hand2_beta/body/mjcf/right.xml
+  hand_mjcf_sha256: d29651a7d68d1a6d5ba813edfa10b46b26748cf99430c9752defe8583c7c1001
+  hand_asset_dir: third_party/src/wuji-description/v2026.6.27/hand2_beta/body/meshes/right
+  hand_asset_tree_sha256: 4f1a7e96cafb13403ed82c5ef2f18d52a40afb49776ce56ee8f2224280ffcc13
+physics:
+  timestep_s: 0.002
+  integrator: implicitfast
+  solver: Newton
+  jacobian: sparse
+  iterations: 100
+  tolerance: 1.0e-8
+  gravity_m_s2: [0.0, 0.0, -9.81]
+control:
+  rate_hz: 100.0
+  physics_substeps: 5
+floor:
+  z_m: 0.0
+  color_rgba: [0.16, 0.18, 0.21, 1.0]
+table:
+  # The 1.60 m X dimension makes y_max/y_min the two long sides.
+  center_m: [0.0, 0.0, 0.72]
+  size_m: [1.60, 1.00, 0.06]
+  leg_width_m: 0.06
+  leg_edge_inset_m: 0.08
+  color_rgba: [0.38, 0.23, 0.12, 1.0]
+  friction: [1.0, 0.005, 0.0001]
+arm_pedestal:
+  # A four-sided frustum on the far long side, with a 0.02 m floor-footprint gap.
+  center_xy_m: [0.0, 0.82]
+  height_m: 0.47
+  top_size_m: [0.42, 0.42]
+  bottom_size_m: [0.60, 0.60]
+  adjacent_table_edge: y_max
+  bottom_edge_gap_m: 0.02
+  color_rgba: [0.32, 0.40, 0.48, 1.0]
+  friction: [1.0, 0.005, 0.0001]
+arm_mount:
+  # Local +X points from the y_max pedestal toward the table center (world -Y).
+  position_m: [0.0, 0.82, 0.47]
+  quat_wxyz: [0.7071067811865476, 0.0, 0.0, -0.7071067811865475]
+  forward_axis: local_+x
+  joint2_clearance_above_table_m: 0.053
+hand_attachment:
+  parent_body: fr3v2_link8
+  child_body: r_base_link
+  position_m: [0.0, 0.0, 0.0]
+  quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  assumption: identity_until_physical_adapter_transform_is_measured
+workspace:
+  center_m: [0.0, 0.0, 0.755]
+camera:
+  eye_m: [2.10, 2.00, 1.65]
+  target_m: [0.0, 0.10, 0.45]
+  fovy_deg: 44.0
+  width_px: 960
+  height_px: 720
+observation_light:
+  # One shadow-free directional light; visualization only, never a physics input.
+  direction: [-0.35, -0.45, -1.0]
+  ambient_rgb: [0.35, 0.35, 0.35]
+  diffuse_rgb: [0.70, 0.70, 0.70]
+  specular_rgb: [0.03, 0.03, 0.03]
+  cast_shadow: false
+derived_from:
+  arm_repository: https://github.com/google-deepmind/mujoco_menagerie.git
+  arm_commit: 71f066ad0be9cd271f7ed58c030243ef157af9f4
+  hand_repository: https://github.com/wuji-technology/wuji-description.git
+  hand_tag: v2026.6.27
+  hand_commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
+  docs_lookup_date: 2026-07-13

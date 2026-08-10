@@ -24,7 +24,7 @@ MUJOCO_TABLE_SESSION = Path(
     "configs/sessions/mujoco_fr3v2_hand2_right_table_v1.yaml"
 )
 ISAAC_FIXED_PREVIEW_SESSION = Path(
-    "configs/sessions/isaac_hand2_fixed_preview_v1.yaml"
+    "configs/sessions/isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
 )
 ISAAC_FIXED_TELEOP_SESSION = Path("configs/sessions/isaac_hand2_teleop_v1.yaml")
 ISAAC_ROTATION_QUALIFICATION_SESSION = Path(
@@ -40,7 +40,9 @@ MEDIAPIPE_HAND_COMMAND_SESSION = Path(
     "configs/sessions/mediapipe_hand2_hand_command_udp_v1.yaml"
 )
 
-_HAND_ASSET_PATH = "configs/assets/wuji_hand2_beta1_right_v1.yaml"
+_HAND_ASSET_PATH = (
+    "configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml"
+)
 _FR3_ASSET_PATH = "configs/assets/franka_fr3_v2_v1.yaml"
 _WRIST_ASSET_PATH = "configs/assets/fixed_xyz_wrist3_v1.yaml"
 _HAND_ISAAC_BINDING_PATH = (
@@ -53,14 +55,31 @@ _FR3_MUJOCO_BINDING_PATH = (
     "configs/bindings/mujoco/franka_fr3_v2_menagerie_71f066a_v1.yaml"
 )
 _WRIST_ISAAC_BINDING_PATH = "configs/bindings/isaac/fixed_xyz_wrist3_d6_v1.yaml"
-_MUJOCO_ASSEMBLY_PATH = "configs/assemblies/fr3v2_hand2_right_identity_v1.yaml"
+_MUJOCO_ASSEMBLY_PATH = (
+    "configs/assemblies/fr3v2_hand2_right_identity_v2026_6_27_v1.yaml"
+)
 _MUJOCO_WORKCELL_PATH = (
     "configs/workcells/mujoco_long_edge_table_pedestal_v1.yaml"
 )
-_FIXED_ASSEMBLY_PATH = "configs/assemblies/hand2_right_fixed_v1.yaml"
-_FIXED_WORKCELL_PATH = "configs/workcells/isaac_hand2_table_v1.yaml"
+_FIXED_ASSEMBLY_PATHS = frozenset(
+    {
+        "configs/assemblies/hand2_left_fixed_v2026_6_27_v1.yaml",
+        "configs/assemblies/hand2_right_fixed_v2026_6_27_v1.yaml",
+        "configs/assemblies/hand2_left_fixed_v2026_8_3_v1.yaml",
+        "configs/assemblies/hand2_right_fixed_v2026_8_3_v1.yaml",
+    }
+)
+_FIXED_WORKCELL_PATHS = frozenset(
+    {
+        "configs/workcells/isaac_hand2_table_v1.yaml",
+        "configs/workcells/isaac_hand2_left_table_v2026_6_27_v1.yaml",
+        "configs/workcells/isaac_hand2_right_table_v2026_6_27_v1.yaml",
+        "configs/workcells/isaac_hand2_left_table_v2026_8_3_v1.yaml",
+        "configs/workcells/isaac_hand2_right_table_v2026_8_3_v1.yaml",
+    }
+)
 _ROTATION_ASSEMBLY_PATH = (
-    "configs/assemblies/hand2_right_rotation_mount_v1.yaml"
+    "configs/assemblies/hand2_right_rotation_mount_v2026_6_27_v1.yaml"
 )
 _ROTATION_WORKCELL_PATH = "configs/workcells/isaac_hand2_rotation_ball_v1.yaml"
 
@@ -203,7 +222,7 @@ def resolve_isaac_hand_runtime(
         overrides["profile"] = profile_override
     resolved = SessionResolver(root).resolve(session_path, overrides=overrides)
     _require_session(resolved, backend="isaac", runtime_roles=runtime_roles)
-    if resolved.assembly_path == _FIXED_ASSEMBLY_PATH:
+    if resolved.assembly_path in _FIXED_ASSEMBLY_PATHS:
         _require_fixed_leaf(resolved)
     elif resolved.assembly_path == _ROTATION_ASSEMBLY_PATH:
         _require_rotation_leaf(resolved)
@@ -232,6 +251,7 @@ def resolve_isaac_hand_runtime(
         group_id="finger_joints",
         profile_path=profile_path,
     )
+    _validate_profile_artifact(hand, profile_path=profile_path)
     return IsaacHandRuntime(
         resolved=resolved,
         asset_path=asset_path,
@@ -362,7 +382,7 @@ def resolve_mediapipe_session(
         backend="isaac",
         runtime_roles={"teleop_producer"},
     )
-    if resolved.assembly_path == _FIXED_ASSEMBLY_PATH:
+    if resolved.assembly_path in _FIXED_ASSEMBLY_PATHS:
         _require_fixed_leaf(resolved)
     elif resolved.assembly_path == _ROTATION_ASSEMBLY_PATH:
         _require_rotation_leaf(resolved)
@@ -424,15 +444,14 @@ def _require_mujoco_leaf(resolved: ResolvedSession) -> None:
 
 
 def _require_fixed_leaf(resolved: ResolvedSession) -> None:
-    _require_leaf_files(
-        resolved,
-        assembly_path=_FIXED_ASSEMBLY_PATH,
-        workcell_path=_FIXED_WORKCELL_PATH,
-        instances={
-            "hand": ("robot_hand", _HAND_ASSET_PATH, _HAND_ISAAC_BINDING_PATH),
-        },
-        roots=("hand",),
-    )
+    if resolved.assembly_path not in _FIXED_ASSEMBLY_PATHS:
+        raise ValueError("fixed-hand compatibility leaf requires a versioned Assembly")
+    if resolved.workcell_path not in _FIXED_WORKCELL_PATHS:
+        raise ValueError("fixed-hand compatibility leaf requires its pinned Workcell")
+    if {instance.instance_id for instance in resolved.instances} != {"hand"}:
+        raise ValueError("fixed-hand compatibility leaf requires exactly one hand instance")
+    if resolved.assembly.roots != ("hand",):
+        raise ValueError("fixed-hand compatibility leaf requires the hand as its only root")
     if resolved.assembly.attachments:
         raise ValueError("fixed-hand compatibility leaf does not support attachments")
     if (
@@ -538,13 +557,15 @@ def _require_leaf_files(
 
 def _require_isaac_hand_binding(hand: ResolvedInstance) -> None:
     group = hand.binding.group_binding("finger_joints")
+    expected_root = hand.binding.backend_frame(hand.asset.frame_name("base"))
     if (
-        hand.binding.loader != "usd"
-        or hand.binding.root != "r_base_link"
+        hand.asset.kind != "robot_hand"
+        or hand.binding.loader != "usd"
+        or hand.binding.root != expected_root
         or group.actuators
     ):
         raise ValueError(
-            "Isaac Hand 2 compatibility leaf requires the pinned USD binding"
+            "Isaac Hand 2 compatibility leaf requires a coherent pinned USD binding"
         )
 
 
@@ -593,6 +614,40 @@ def _profile_joint_names(path: Path) -> tuple[str, ...]:
     if len(set(names)) != len(names):
         raise ValueError(f"model profile joint names must be unique: {path}")
     return tuple(names)
+
+
+def _validate_profile_artifact(
+    instance: ResolvedInstance,
+    *,
+    profile_path: Path,
+) -> None:
+    if instance.artifact is None:
+        raise ValueError("Hand 2 profile validation requires a resolved artifact")
+    value = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    if not isinstance(value, Mapping):
+        raise ValueError(f"model profile must be a mapping: {profile_path}")
+    derived = value.get("derived_from")
+    if not isinstance(derived, Mapping):
+        raise ValueError(f"model profile must declare derived_from: {profile_path}")
+    loader = instance.binding.loader
+    if loader not in {"usd", "mjcf"}:
+        raise ValueError(f"unsupported Hand 2 artifact loader {loader!r}")
+    expected_path = derived.get(loader)
+    expected_hash = derived.get(f"{loader}_sha256")
+    if (
+        expected_path != instance.artifact.relative_path
+        or expected_hash != instance.artifact.expected_sha256
+    ):
+        raise ValueError(
+            f"Hand 2 profile {profile_path} disagrees with the resolved {loader.upper()} artifact"
+        )
+    source_revision = dict(instance.artifact.source.revision)
+    for field in ("tag", "commit"):
+        expected = source_revision.get(field)
+        if expected is not None and derived.get(field) != expected:
+            raise ValueError(
+                f"Hand 2 profile {profile_path} disagrees with source {field} {expected!r}"
+            )
 
 
 def _single_instance_of_kind(

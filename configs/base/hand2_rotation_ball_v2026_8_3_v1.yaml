@@ -1,5 +1,5 @@
 schema_version: 1
-name: hand2_right_rotation_ball_v1
+name: hand2_right_rotation_ball_v2026_8_3_v1
 product: wuji_hand_2_beta_1
 side: right
 units:
@@ -8,26 +8,23 @@ units:
   angular_velocity: rad_s
   mass: kg
 derived_from:
-  model_profile: configs/profiles/hand2_right_v2026_6_27.yaml
+  model_profile: configs/profiles/hand2_right_v2026_8_3.yaml
   repository: https://github.com/wuji-technology/wuji-description.git
-  tag: v2026.6.27
-  commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
-  usd: hand2_beta/body/usd/right/wujihand.usd
-  usd_sha256: 3cb3dcb18b07621a52a47a8daa98ab82794e3c77d36275d068b3b5b0516e5f00
-  docs_lookup_date: 2026-07-13
+  tag: v2026.8.3
+  commit: 8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  usd: hand2/hand2_beta1/body/usd/right/wujihand2.usd
+  usd_sha256: 261fbdf7a1c6c95f9d7c529356618d4cb39af98940014be139018c4d213e3ba7
+  docs_lookup_date: 2026-08-10
 frames:
   world: world_z_up
   table: table_top_origin
-  flange: hand2_r_base_link
+  flange: hand2_r_wrist
   pose_command: hand2_right_neutral
 table:
   position_m: [0.02, 0.0, 0.35]
   size_m: [0.80, 0.60, 0.06]
   color_rgb: [0.34, 0.20, 0.10]
 flange:
-  # Task home: fixed XYZ with +60 degrees of physical pitch about local Y.
-  # MediaPipe/clutch deltas are relative to this pose, so neutral input does
-  # not require the operator to hold a large wrist angle.
   position_m: [0.0, 0.0, 0.454]
   neutral_quat_wxyz: [0.8660254037844386, 0.0, 0.5, 0.0]
 wrist:
@@ -58,8 +55,6 @@ qualification:
   trial_count: 10
   required_successes: 8
 script:
-  # The physical home is pitched 60 degrees.  Only a 16-degree relative delta
-  # is required to reach the established 76-degree pregrasp envelope.
   pregrasp_delta_pitch_rad: 0.2792526803190927
   lifted_delta_pitch_rad: 0.0
   close_q20: [1.00, -0.35, 0.70, 0.25,
@@ -67,8 +62,6 @@ script:
               0.68, 0.05, 1.10, 0.80,
               0.68, -0.20, 1.10, 0.80,
               0.64, -0.30, 1.00, 0.75]
-  # Keep the established force closure while counter-tilting; even millimetric
-  # squeeze changes during lift were observed to eject the free ball in PhysX.
   hold_q20: [1.00, -0.35, 0.70, 0.25,
              0.60, 0.25, 1.00, 0.75,
              0.68, 0.05, 1.10, 0.80,

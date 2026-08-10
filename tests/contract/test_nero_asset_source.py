@@ -293,7 +293,9 @@ def test_nero_generated_source_locks_its_derivation_code_and_versions() -> None:
 
 
 def test_left_hand_asset_is_backend_neutral_and_side_explicit() -> None:
-    asset = ConfigRepository(ROOT).load_asset("configs/assets/wuji_hand2_beta1_left_v1.yaml")
+    asset = ConfigRepository(ROOT).load_asset(
+        "configs/assets/wuji_hand2_beta1_left_v2026_6_27_v1.yaml"
+    )
 
     assert asset.asset_id == "wuji_hand2_beta1_left"
     assert asset.product == "wuji_hand_2"
@@ -306,7 +308,9 @@ def test_left_hand_asset_is_backend_neutral_and_side_explicit() -> None:
 
 
 def test_left_hand_source_is_locked_to_the_existing_right_hand_tag() -> None:
-    source = SourceLock.load(ConfigRepository(ROOT)).record("wuji-description")
+    source = SourceLock.load(ConfigRepository(ROOT)).record(
+        "wuji-description-v2026-6-27"
+    )
 
     assert dict(source.revision) == {
         "commit": "aee64892ebcf8e3237bedc30231bb09476cbc71d",

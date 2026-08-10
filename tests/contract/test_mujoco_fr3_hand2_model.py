@@ -14,9 +14,17 @@ from wujihand.runtime import load_mujoco_table_scene_config
 mujoco = pytest.importorskip("mujoco")
 
 ROOT = Path(__file__).parents[2]
-SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
+NEW_SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_8_3_v1.yaml"
 ARM_MJCF = ROOT / "third_party/src/mujoco_menagerie/franka_fr3_v2/fr3v2.xml"
-HAND_MJCF = ROOT / "third_party/src/wuji-description/hand2_beta/body/mjcf/right.xml"
+HAND_MJCF = (
+    ROOT
+    / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/mjcf/right.xml"
+)
+NEW_HAND_MJCF = (
+    ROOT
+    / "third_party/src/wuji-description/v2026.8.3/hand2/hand2_beta1/body/mjcf/right.xml"
+)
 
 pytestmark = [pytest.mark.requires_mujoco, pytest.mark.requires_upstream_asset]
 
@@ -27,6 +35,35 @@ def environment() -> MujocoFr3Hand2:
         pytest.skip("restore pinned MJCF assets from third_party/sources.lock.yaml")
     config = load_mujoco_table_scene_config(SCENE)
     return MujocoFr3Hand2.from_config(config, project_root=ROOT)
+
+
+@pytest.fixture(scope="module")
+def new_environment() -> MujocoFr3Hand2:
+    if not ARM_MJCF.is_file() or not NEW_HAND_MJCF.is_file():
+        pytest.skip("restore pinned v2026.8.3 MJCF assets from the source lock")
+    config = load_mujoco_table_scene_config(NEW_SCENE)
+    return MujocoFr3Hand2.from_config(config, project_root=ROOT)
+
+
+def test_new_description_root_preserves_the_qualified_zero_pose(
+    environment: MujocoFr3Hand2,
+    new_environment: MujocoFr3Hand2,
+) -> None:
+    old = environment.reset()
+    new = new_environment.reset()
+
+    assert new_environment.config.hand_attachment.child_body == "r_wrist"
+    assert (new_environment.model.nq, new_environment.model.nv, new_environment.model.nu) == (
+        27,
+        27,
+        27,
+    )
+    assert new_environment.model.nexclude == 10
+    fingertip_delta_m = np.linalg.norm(
+        new.fingertip_positions_m - old.fingertip_positions_m,
+        axis=1,
+    )
+    assert np.max(fingertip_delta_m) < 1e-5
 
 
 def test_combined_model_is_strict_arm7_plus_canonical_hand20(

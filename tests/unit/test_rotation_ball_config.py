@@ -14,13 +14,13 @@ from wujihand.runtime import load_rotation_ball_config
 
 
 ROOT = Path(__file__).parents[2]
-PROFILE = ROOT / "configs/base/hand2_rotation_ball_v1.yaml"
+PROFILE = ROOT / "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
 
 
 def test_rotation_ball_profile_loads_with_fixed_flange_and_table_ball() -> None:
     config = load_rotation_ball_config(PROFILE)
 
-    assert config.name == "hand2_right_rotation_ball_v1"
+    assert config.name == "hand2_right_rotation_ball_v2026_6_27_v1"
     assert config.table.top_z_m == pytest.approx(0.38)
     assert config.flange.position_m == (0.0, 0.0, 0.454)
     assert config.flange.neutral_quat_wxyz == pytest.approx(

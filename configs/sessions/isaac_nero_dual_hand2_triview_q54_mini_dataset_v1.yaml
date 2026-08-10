@@ -3,8 +3,8 @@ session_id: isaac_nero_dual_hand2_triview_q54_mini_dataset_v1
 backend: isaac
 runtime_role: teleop_consumer
 assembly:
-  path: configs/assemblies/nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1.yaml
-  expected_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1
+  path: configs/assemblies/nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_6_27_v1.yaml
+  expected_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_6_27_v1
 workcell:
   path: configs/workcells/isaac_robolab_banana_bowl_dual_station_v1.yaml
   expected_id: isaac_robolab_banana_bowl_dual_station_v1

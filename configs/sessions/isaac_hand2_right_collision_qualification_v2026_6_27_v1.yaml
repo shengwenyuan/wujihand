@@ -1,0 +1,23 @@
+schema: wujihand.session.v1
+session_id: isaac_hand2_right_collision_qualification_v2026_6_27_v1
+backend: isaac
+runtime_role: qualification
+assembly:
+  path: configs/assemblies/hand2_right_fixed_v2026_6_27_v1.yaml
+  expected_id: hand2_right_fixed_v2026_6_27_v1
+workcell:
+  path: configs/workcells/isaac_hand2_right_table_v2026_6_27_v1.yaml
+  expected_id: isaac_hand2_right_table_v2026_6_27_v1
+bindings:
+  hand:
+    path: configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_v1.yaml
+    expected_id: wuji_hand2_beta1_right_isaac_v2026_6_27
+placements:
+  hand: hand_fixed_mount
+runtime:
+  compatibility_profile: null
+  transport_contract: null
+  control_layouts:
+    - instance_id: hand
+      group_id: finger_joints
+      layout_id: wuji_hand2_right_firmware_v1

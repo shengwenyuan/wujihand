@@ -62,7 +62,7 @@ def _dual_hand_project(tmp_path: Path, *, namespace_policy: str) -> Path:
     _write_yaml(binding_path, binding)
 
     asset_ref = {
-        "path": "configs/assets/wuji_hand2_beta1_right_v1.yaml",
+        "path": "configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml",
         "expected_id": "wuji_hand2_beta1_right",
     }
     assembly = {
@@ -365,7 +365,7 @@ def test_resolver_rejects_binding_identity_mismatch(
 
     with pytest.raises(ValueError, match=message):
         SessionResolver(root).resolve(
-            "configs/sessions/isaac_hand2_fixed_preview_v1.yaml"
+            "configs/sessions/isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
         )
 
 
@@ -419,7 +419,8 @@ def test_resolver_rejects_incomplete_binding_and_invalid_attachment_frame(
     )
     _write_yaml(session_path, session)
     assembly_path = (
-        root / "configs/assemblies/fr3v2_hand2_right_identity_v1.yaml"
+        root
+        / "configs/assemblies/fr3v2_hand2_right_identity_v2026_6_27_v1.yaml"
     )
     assembly = _load_yaml(assembly_path)
     assembly["attachments"][0]["child"]["frame"] = "missing_frame"
@@ -437,7 +438,10 @@ def test_resolver_rejects_unpinned_source_revision_and_wrong_dof_count(
         / "configs/bindings/isaac/"
         "wuji_hand2_beta1_right_v2026_6_27_v1.yaml"
     )
-    session_path = root / "configs/sessions/isaac_hand2_fixed_preview_v1.yaml"
+    session_path = (
+        root
+        / "configs/sessions/isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
+    )
     original = _load_yaml(binding_path)
 
     wrong_revision = deepcopy(original)
@@ -453,21 +457,20 @@ def test_resolver_rejects_unpinned_source_revision_and_wrong_dof_count(
         SessionResolver(root).resolve(session_path)
 
 
-def test_asset_and_binding_provenance_are_independent_and_both_hashed(
+def test_wuji_hand2_asset_and_binding_must_select_the_same_source(
     tmp_path: Path,
 ) -> None:
     root = _copy_project(tmp_path)
-    session_path = root / "configs/sessions/isaac_hand2_fixed_preview_v1.yaml"
-    baseline = SessionResolver(root).resolve(session_path)
-    asset_path = root / "configs/assets/wuji_hand2_beta1_right_v1.yaml"
+    session_path = (
+        root
+        / "configs/sessions/isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
+    )
+    asset_path = (
+        root / "configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml"
+    )
     asset = _load_yaml(asset_path)
     asset["provenance_source"] = "third_party/sources.lock.yaml#isaaclab"
     _write_yaml(asset_path, asset)
 
-    resolved = SessionResolver(root).resolve(session_path)
-
-    assert {record.name for record in resolved.source_records} == {
-        "isaaclab",
-        "wuji-description",
-    }
-    assert resolved.session_hash != baseline.session_hash
+    with pytest.raises(ValueError, match="disagree with asset provenance"):
+        SessionResolver(root).resolve(session_path)

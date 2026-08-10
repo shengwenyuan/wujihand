@@ -5,11 +5,11 @@
 
 ## 当前边界
 
-截至 2026-08-07，已验证主线是：真实 Wuji Glove + VIVE Tracker 输入，经 ROS2 与
+截至 2026-08-10，已验证主线是：真实 Wuji Glove + VIVE Tracker 输入，经 ROS2 与
 Isaac Sim 6.0.1 驱动仿真 NERO + Wuji Hand 2，并完成遥操作采集、回放和数据导出。
-这里的 HIL 指输入设备接入仿真；Wuji Hand 2 真机尚未到货，没有 Hand 2 真机实验或
-Sim→Real 结论。历史文档中的“物理 Hand 2”若未明确写真机，指保留刚体、碰撞和驱动的
-physics-enabled 仿真资产。
+这里的 HIL 指输入设备接入仿真。左右 Wuji Hand 2 Beta1 真机均已到货，但尚未在本仓库
+完成真机资格验证或形成 Sim→Real 结论。历史文档中的“物理 Hand 2”若未明确写真机，指
+保留刚体、碰撞和驱动的 physics-enabled 仿真资产。
 
 当前仿真固定 `wuji-description v2026.6.27`。官方仍将 Wuji Hand 2 定义为 Beta 阶段
 产品；`v2026.7.23` 又更改了 Hand 2 模型坐标约定、根节点、命名、目录和碰撞语义。
@@ -17,7 +17,8 @@ physics-enabled 仿真资产。
 或验证结果。涉及升级时应先读取
 [Wuji Hand 2 发布记录](https://docs.wuji.tech/docs/zh/wuji-hand/latest/release-notes/)和
 [Wuji Description 发布记录](https://docs.wuji.tech/docs/zh/wuji-description/latest/release-notes/)，
-再建立独立迁移与回归 Gate。
+再建立独立迁移与回归 Gate。当前阶段一方案见
+[013：Wuji Description v2026.8.3 / Hand2 Beta1 隔离升级计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)。
 
 ## 当前主要入口
 
@@ -46,6 +47,7 @@ physics-enabled 仿真资产。
 - [010：确定性 ROS2—Isaac—GUI 端到端 Qualification 计划](010-deterministic-ros-isaac-gui-e2e-qualification-plan.md)
 - [011：Mini 数据集完整性门禁与质量分级更新计划](011-mini-dataset-integrity-vs-quality-gate-update-plan.md)
 - [012：PI05 q54 / H25 Mini 数据集过拟合开发计划](012-pi05-q54-h25-mini-overfit-development-plan.md)
+- [013：Wuji Description v2026.8.3 / Hand2 Beta1 阶段一隔离升级计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)
 
 ## Components
 

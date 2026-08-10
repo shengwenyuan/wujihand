@@ -12,14 +12,15 @@ from wujihand.runtime import load_mujoco_table_scene_config
 
 
 ROOT = Path(__file__).parents[2]
-SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
+NEW_SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_8_3_v1.yaml"
 ARM_PROFILE = ROOT / "configs/profiles/fr3_v2_menagerie_71f066a.yaml"
 
 
 def test_scene_pins_long_side_pedestal_timing_light_and_attachment() -> None:
     config = load_mujoco_table_scene_config(SCENE)
 
-    assert config.name == "mujoco_fr3v2_hand2_right_table_v1"
+    assert config.name == "mujoco_fr3v2_hand2_right_table_v2026_6_27_v1"
     assert config.table.size_m == pytest.approx((1.60, 1.00, 0.06))
     assert config.arm_pedestal.adjacent_table_edge == "y_max"
     assert config.arm_pedestal.center_xy_m[1] == pytest.approx(
@@ -45,6 +46,34 @@ def test_scene_pins_long_side_pedestal_timing_light_and_attachment() -> None:
         config.hand_attachment.assumption
         == "identity_until_physical_adapter_transform_is_measured"
     )
+
+
+def test_new_description_scene_pins_registered_wrist_attachment() -> None:
+    config = load_mujoco_table_scene_config(NEW_SCENE)
+
+    assert config.name == "mujoco_fr3v2_hand2_right_table_v2026_8_3_v1"
+    assert config.hand_attachment.parent_body == "fr3v2_link8"
+    assert config.hand_attachment.child_body == "r_wrist"
+    assert config.hand_attachment.position_m == pytest.approx(
+        (0.00025016, 0.00300004, 0.02849985)
+    )
+    assert config.hand_attachment.quat_wxyz == pytest.approx(
+        (0.0, 2**-0.5, 2**-0.5, 0.0)
+    )
+    assert (
+        config.hand_attachment.assumption
+        == "preserve_v2026_6_27_pose_via_right_wrist_mesh_registration"
+    )
+
+
+def test_new_description_scene_rejects_old_root(tmp_path: Path) -> None:
+    data = yaml.safe_load(NEW_SCENE.read_text(encoding="utf-8"))
+    data["hand_attachment"]["child_body"] = "r_base_link"
+    invalid = tmp_path / "invalid.yaml"
+    invalid.write_text(yaml.safe_dump(data), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="requires fr3v2_link8 -> r_wrist"):
+        load_mujoco_table_scene_config(invalid)
 
 
 def test_scene_rejects_timing_with_fractional_control_tick(tmp_path: Path) -> None:

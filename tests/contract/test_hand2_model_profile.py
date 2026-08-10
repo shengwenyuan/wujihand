@@ -12,9 +12,9 @@ from wujihand.domain import HAND2_LEFT_LAYOUT, HAND2_RIGHT_LAYOUT, JointLayout
 
 ROOT = Path(__file__).parents[2]
 PROFILE = ROOT / "configs/profiles/hand2_right_v2026_6_27.yaml"
-URDF = ROOT / "third_party/src/wuji-description/hand2_beta/body/urdf/right.urdf"
+URDF = ROOT / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/urdf/right.urdf"
 LEFT_PROFILE = ROOT / "configs/profiles/hand2_left_v2026_6_27.yaml"
-LEFT_URDF = ROOT / "third_party/src/wuji-description/hand2_beta/body/urdf/left.urdf"
+LEFT_URDF = ROOT / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/urdf/left.urdf"
 
 
 @pytest.mark.parametrize(

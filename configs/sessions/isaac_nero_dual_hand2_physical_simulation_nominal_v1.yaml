@@ -3,8 +3,8 @@ session_id: isaac_nero_dual_hand2_physical_simulation_nominal_v1
 backend: isaac
 runtime_role: simulation
 assembly:
-  path: configs/assemblies/nero_dual_hand2_physical_simulation_nominal_v1.yaml
-  expected_id: nero_dual_hand2_physical_simulation_nominal_v1
+  path: configs/assemblies/nero_dual_hand2_physical_simulation_nominal_v2026_6_27_v1.yaml
+  expected_id: nero_dual_hand2_physical_simulation_nominal_v2026_6_27_v1
 workcell:
   path: configs/workcells/isaac_nero_dual_hand2_simulation_nominal_v1.yaml
   expected_id: isaac_nero_dual_hand2_simulation_nominal_v1

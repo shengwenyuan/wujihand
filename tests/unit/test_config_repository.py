@@ -16,12 +16,14 @@ ROOT = Path(__file__).parents[2]
 def test_repository_loads_each_layer_and_enforces_expected_id() -> None:
     repository = ConfigRepository(ROOT)
 
-    asset = repository.load_asset("configs/assets/wuji_hand2_beta1_right_v1.yaml")
+    asset = repository.load_asset(
+        "configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml"
+    )
     binding = repository.load_binding(
         "configs/bindings/isaac/wuji_hand2_beta1_right_v2026_6_27_v1.yaml"
     )
     assembly = repository.load_assembly(
-        "configs/assemblies/hand2_right_fixed_v1.yaml"
+        "configs/assemblies/hand2_right_fixed_v2026_6_27_v1.yaml"
     )
     workcell = repository.load_workcell("configs/workcells/isaac_hand2_table_v1.yaml")
     session = repository.load_session(
@@ -32,7 +34,7 @@ def test_repository_loads_each_layer_and_enforces_expected_id() -> None:
     )
 
     assert asset.asset_id == binding.asset_id == "wuji_hand2_beta1_right"
-    assert assembly.assembly_id == "hand2_right_fixed_v1"
+    assert assembly.assembly_id == "hand2_right_fixed_v2026_6_27_v1"
     assert workcell.workcell_id == "isaac_hand2_table_v1"
     assert session.assembly.expected_id == assembly.assembly_id
 
@@ -76,14 +78,14 @@ def test_source_lock_resolves_expected_artifact_without_requiring_checkout() -> 
 
     artifact = source_lock.resolve(
         ArtifactSpec(
-            source="wuji-description",
+            source="wuji-description-v2026-6-27",
             source_revision="commit:aee64892ebcf8e3237bedc30231bb09476cbc71d",
             path="hand2_beta/body/usd/right/wujihand.usd",
         )
     )
     tree = source_lock.resolve(
         ArtifactSpec(
-            source="wuji-description",
+            source="wuji-description-v2026-6-27",
             source_revision="commit:aee64892ebcf8e3237bedc30231bb09476cbc71d",
             path="hand2_beta/body/meshes/right",
         ),
@@ -98,7 +100,7 @@ def test_source_lock_resolves_expected_artifact_without_requiring_checkout() -> 
     )
     assert artifact.absolute_path == (
         ROOT
-        / "third_party/src/wuji-description/hand2_beta/body/usd/right/wujihand.usd"
+        / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/usd/right/wujihand.usd"
     )
 
 
@@ -108,7 +110,7 @@ def test_source_lock_rejects_unlocked_or_escaping_artifact() -> None:
     with pytest.raises(ValueError, match="does not lock artifact"):
         source_lock.resolve(
             ArtifactSpec(
-                source="wuji-description",
+                source="wuji-description-v2026-6-27",
                 source_revision="commit:aee64892ebcf8e3237bedc30231bb09476cbc71d",
                 path="hand2_beta/not_locked.usd",
             )
@@ -124,7 +126,7 @@ def test_source_lock_rejects_unlocked_or_escaping_artifact() -> None:
     with pytest.raises(ValueError, match="does not match pinned revision"):
         source_lock.resolve(
             ArtifactSpec(
-                source="wuji-description",
+                source="wuji-description-v2026-6-27",
                 source_revision="wrong-revision",
                 path="hand2_beta/body/usd/right/wujihand.usd",
             )

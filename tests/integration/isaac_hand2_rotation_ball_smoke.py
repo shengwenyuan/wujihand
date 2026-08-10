@@ -33,7 +33,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--asset",
         type=Path,
-        default=ROOT / "third_party/src/wuji-description/hand2_beta/body/usd/right/wujihand.usd",
+        default=(
+            ROOT
+            / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/usd/right/wujihand.usd"
+        ),
     )
     parser.add_argument("--target-rpy-deg", nargs=3, type=float, default=(10.0, -10.0, 30.0))
     return parser.parse_args()

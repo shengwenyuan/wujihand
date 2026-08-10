@@ -21,7 +21,7 @@ ROOT = Path(__file__).parents[2]
 SESSIONS = ROOT / "configs/sessions"
 
 SESSION_NAMES = (
-    "isaac_hand2_fixed_preview_v1.yaml",
+    "isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml",
     "isaac_hand2_right_rotation_ball_qualification_v1.yaml",
     "isaac_hand2_right_rotation_ball_teleop_v1.yaml",
     "isaac_hand2_teleop_v1.yaml",
@@ -108,7 +108,9 @@ def test_override_fingerprint_preserves_type_and_file_content(
 def test_resolved_snapshot_cannot_be_mutated_behind_its_hash(
     resolver: SessionResolver,
 ) -> None:
-    resolved = resolver.resolve(SESSIONS / "isaac_hand2_fixed_preview_v1.yaml")
+    resolved = resolver.resolve(
+        SESSIONS / "isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
+    )
     exported = resolved.to_mapping()
     session = exported["session"]
     assert isinstance(session, dict)
@@ -116,7 +118,10 @@ def test_resolved_snapshot_cannot_be_mutated_behind_its_hash(
 
     fresh_session = resolved.snapshot["session"]
     assert isinstance(fresh_session, dict)
-    assert fresh_session["session_id"] == "isaac_hand2_fixed_preview_v1"
+    assert (
+        fresh_session["session_id"]
+        == "isaac_hand2_right_fixed_qualification_v2026_6_27_v1"
+    )
     assert resolved.to_mapping()["session_hash"] == resolved.session_hash
 
 
@@ -189,7 +194,11 @@ def test_hand_asset_binding_and_domain_layout_are_exact(
         ROOT / "configs/profiles/hand2_right_v2026_6_27.yaml"
     )
 
-    assert hand.asset.revision == hand.binding.asset_revision == "beta1"
+    assert (
+        hand.asset.revision
+        == hand.binding.asset_revision
+        == "beta1_description_v2026_6_27"
+    )
     assert hand.asset.side == hand.binding.asset_side == "right"
     assert profile.layout == HAND2_RIGHT_LAYOUT
     assert hand.binding.group_binding("finger_joints").joints == profile.layout.names
@@ -207,7 +216,7 @@ def test_mujoco_session_matches_legacy_typed_leaf(
         SESSIONS / "mujoco_fr3v2_hand2_right_table_v1.yaml"
     )
     legacy = load_mujoco_table_scene_config(
-        ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+        ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
     )
     arm = resolved.instance("arm")
     hand = resolved.instance("hand")
@@ -226,7 +235,7 @@ def test_mujoco_session_matches_legacy_typed_leaf(
     assert arm.artifact.expected_sha256 == legacy.assets.arm_mjcf_sha256
     assert hand.artifact.expected_sha256 == legacy.assets.hand_mjcf_sha256
     assert resolved.session.runtime.compatibility_profile == (
-        "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+        "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
     )
     assert attachment.parent.frame == "tool_flange"
     assert attachment.child.frame == "hand_base"
@@ -241,7 +250,7 @@ def test_rotation_ball_session_matches_legacy_typed_leaf(
         SESSIONS / "isaac_hand2_right_rotation_ball_qualification_v1.yaml"
     )
     legacy = load_rotation_ball_config(
-        ROOT / "configs/base/hand2_rotation_ball_v1.yaml"
+        ROOT / "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
     )
     hand = resolved.instance("hand")
 
@@ -249,7 +258,7 @@ def test_rotation_ball_session_matches_legacy_typed_leaf(
     assert hand.artifact.relative_path == legacy.provenance["usd"]
     assert hand.artifact.expected_sha256 == legacy.provenance["usd_sha256"]
     assert resolved.workcell.compatibility_profile == (
-        "configs/base/hand2_rotation_ball_v1.yaml"
+        "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
     )
     assert {instance.instance_id for instance in resolved.instances} == {
         "hand",
@@ -265,7 +274,9 @@ def test_rotation_ball_session_matches_legacy_typed_leaf(
 def test_fixed_isaac_workcell_owns_existing_geometry(
     resolver: SessionResolver,
 ) -> None:
-    resolved = resolver.resolve(SESSIONS / "isaac_hand2_fixed_preview_v1.yaml")
+    resolved = resolver.resolve(
+        SESSIONS / "isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml"
+    )
     table = next(
         entity for entity in resolved.workcell.entities if entity.entity_id == "table"
     )

@@ -3,8 +3,8 @@ session_id: mediapipe_hand2_hand_command_udp_v1
 backend: isaac
 runtime_role: teleop_producer
 assembly:
-  path: configs/assemblies/hand2_right_rotation_mount_v1.yaml
-  expected_id: hand2_right_rotation_mount_v1
+  path: configs/assemblies/hand2_right_rotation_mount_v2026_6_27_v1.yaml
+  expected_id: hand2_right_rotation_mount_v2026_6_27_v1
 workcell:
   path: configs/workcells/isaac_hand2_rotation_ball_v1.yaml
   expected_id: isaac_hand2_rotation_ball_v1

@@ -30,8 +30,10 @@ def test_mujoco_bridge_validates_the_legacy_leaf_against_five_layers() -> None:
     )
 
     assert resolved.session.session_id == "mujoco_fr3v2_hand2_right_table_v1"
-    assert config.name == resolved.session.session_id
-    assert path == ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+    assert config.name == "mujoco_fr3v2_hand2_right_table_v2026_6_27_v1"
+    assert path == (
+        ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
+    )
 
 
 def test_rotation_bridge_validates_pinned_usd_provenance() -> None:
@@ -42,8 +44,8 @@ def test_rotation_bridge_validates_pinned_usd_provenance() -> None:
     )
 
     assert runtime.resolved.session.runtime_role == "qualification"
-    assert scene.name == "hand2_right_rotation_ball_v1"
-    assert path == ROOT / "configs/base/hand2_rotation_ball_v1.yaml"
+    assert scene.name == "hand2_right_rotation_ball_v2026_6_27_v1"
+    assert path == ROOT / "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
 
 
 def test_fixed_workcell_bridge_extracts_runner_values() -> None:

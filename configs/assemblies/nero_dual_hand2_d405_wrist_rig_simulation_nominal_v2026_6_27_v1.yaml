@@ -1,5 +1,5 @@
 schema: wujihand.assembly_spec.v1
-assembly_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v1
+assembly_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_6_27_v1
 instances:
   - instance_id: nero_left
     asset:
@@ -9,7 +9,7 @@ instances:
     namespace: nero_left
   - instance_id: hand_left
     asset:
-      path: configs/assets/wuji_hand2_beta1_left_v1.yaml
+      path: configs/assets/wuji_hand2_beta1_left_v2026_6_27_v1.yaml
       expected_id: wuji_hand2_beta1_left
     role: end_effector
     namespace: hand2_left
@@ -33,7 +33,7 @@ instances:
     namespace: nero_right
   - instance_id: hand_right
     asset:
-      path: configs/assets/wuji_hand2_beta1_right_v1.yaml
+      path: configs/assets/wuji_hand2_beta1_right_v2026_6_27_v1.yaml
       expected_id: wuji_hand2_beta1_right
     role: end_effector
     namespace: hand2_right

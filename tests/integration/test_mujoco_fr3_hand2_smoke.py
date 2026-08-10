@@ -15,9 +15,12 @@ from wujihand.runtime import load_mujoco_table_scene_config
 mujoco = pytest.importorskip("mujoco")
 
 ROOT = Path(__file__).parents[2]
-SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v1.yaml"
+SCENE = ROOT / "configs/base/mujoco_fr3v2_hand2_right_table_v2026_6_27_v1.yaml"
 ARM_MJCF = ROOT / "third_party/src/mujoco_menagerie/franka_fr3_v2/fr3v2.xml"
-HAND_MJCF = ROOT / "third_party/src/wuji-description/hand2_beta/body/mjcf/right.xml"
+HAND_MJCF = (
+    ROOT
+    / "third_party/src/wuji-description/v2026.6.27/hand2_beta/body/mjcf/right.xml"
+)
 
 pytestmark = [pytest.mark.requires_mujoco, pytest.mark.requires_upstream_asset]
 

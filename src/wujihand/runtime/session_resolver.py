@@ -289,6 +289,17 @@ class SessionResolver:
                 )
             )
 
+        hand2_sources = {
+            instance.asset.provenance_source
+            for instance in resolved_instances
+            if instance.asset.product == "wuji_hand_2"
+        }
+        if len(hand2_sources) > 1:
+            raise ValueError(
+                "a Session cannot mix Wuji Hand 2 Description releases: "
+                f"{sorted(hand2_sources)!r}"
+            )
+
         self._validate_backend_symbols(tuple(resolved_instances))
 
         self._validate_attachments(assembly, tuple(resolved_instances))
@@ -446,6 +457,46 @@ class SessionResolver:
             self.source_lock.resolve(binding.collision_artifact)
         for resource in binding.resource_trees:
             self.source_lock.resolve(resource, tree=True)
+        if asset.product == "wuji_hand_2":
+            self._validate_wuji_hand2_source_coherence(asset, binding)
+
+    def _validate_wuji_hand2_source_coherence(
+        self,
+        asset: AssetManifest,
+        binding: BackendBinding,
+    ) -> None:
+        """Reject partial Wuji Description upgrades before a backend is imported."""
+
+        lock_prefix = f"{self.source_lock.lock_path}#"
+        if not asset.provenance_source.startswith(lock_prefix):
+            raise ValueError(
+                f"Wuji Hand 2 asset {asset.asset_id!r} must use source-lock provenance"
+            )
+        expected_source = asset.provenance_source.removeprefix(lock_prefix)
+        content_refs = tuple(
+            ref
+            for ref in (binding.artifact, binding.collision_artifact)
+            if ref is not None
+        ) + binding.resource_trees
+        if not content_refs:
+            raise ValueError(
+                f"Wuji Hand 2 binding {binding.binding_id!r} must pin an upstream artifact"
+            )
+        actual_sources = {ref.source for ref in content_refs}
+        if actual_sources != {expected_source}:
+            raise ValueError(
+                f"Wuji Hand 2 binding {binding.binding_id!r} sources "
+                f"{sorted(actual_sources)!r} disagree with asset provenance "
+                f"{expected_source!r}"
+            )
+        if (
+            asset.canonical_profile is None
+            or binding.compatibility_profile != asset.canonical_profile
+        ):
+            raise ValueError(
+                f"Wuji Hand 2 binding {binding.binding_id!r} must select the asset's "
+                "versioned canonical profile"
+            )
 
     def _validate_asset_provenance(self, asset: AssetManifest) -> str | None:
         lock_prefix = f"{self.source_lock.lock_path}#"

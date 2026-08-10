@@ -24,7 +24,7 @@ thresholds:
   transform_rotation_tolerance: 0.0001
 collision_mesh_contract:
   nero_source: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
-  hand2_source: wuji-description@aee64892ebcf8e3237bedc30231bb09476cbc71d
+  hand2_source: wuji-description-v2026-6-27@aee64892ebcf8e3237bedc30231bb09476cbc71d
   accessory_collision: disabled
 assumptions:
   - self_collision_applies_to_the_merged_nero_hand2_q27_articulation

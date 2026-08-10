@@ -25,6 +25,20 @@ from wujihand.compat.mujoco_table import (
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_HAND_ATTACHMENT_BY_DESCRIPTION_TAG = {
+    "v2026.6.27": {
+        "child_body": "r_base_link",
+        "position_m": (0.0, 0.0, 0.0),
+        "quat_wxyz": (1.0, 0.0, 0.0, 0.0),
+        "assumption": "identity_until_physical_adapter_transform_is_measured",
+    },
+    "v2026.8.3": {
+        "child_body": "r_wrist",
+        "position_m": (0.00025016, 0.00300004, 0.02849985),
+        "quat_wxyz": (0.0, 0.7071067811865476, 0.7071067811865476, 0.0),
+        "assumption": "preserve_v2026_6_27_pose_via_right_wrist_mesh_registration",
+    },
+}
 
 
 def _require_exact_keys(
@@ -351,14 +365,47 @@ def load_mujoco_table_scene_config(path: str | Path) -> MujocoTableSceneConfig:
         ),
         assumption=str(attachment_data["assumption"]),
     )
-    if attachment.parent_body != "fr3v2_link8" or attachment.child_body != "r_base_link":
-        raise ValueError("version one requires fr3v2_link8 -> r_base_link")
-    if attachment.assumption != "identity_until_physical_adapter_transform_is_measured":
-        raise ValueError("attachment transform assumption must remain explicit")
-    if not np.allclose(attachment.position_m, (0.0, 0.0, 0.0), atol=1e-12) or not np.allclose(
-        np.abs(np.asarray(attachment.quat_wxyz)), (1.0, 0.0, 0.0, 0.0), atol=1e-12
+    hand_tag = str(data.get("derived_from", {}).get("hand_tag"))
+    attachment_contract = _HAND_ATTACHMENT_BY_DESCRIPTION_TAG.get(hand_tag)
+    if attachment_contract is None:
+        raise ValueError(f"unsupported Hand 2 Description tag: {hand_tag!r}")
+    expected_child = str(attachment_contract["child_body"])
+    if (
+        attachment.parent_body != "fr3v2_link8"
+        or attachment.child_body != expected_child
     ):
-        raise ValueError("identity attachment assumption requires an identity transform")
+        raise ValueError(
+            f"{hand_tag} requires fr3v2_link8 -> {expected_child}"
+        )
+    expected_assumption = str(attachment_contract["assumption"])
+    if attachment.assumption != expected_assumption:
+        raise ValueError(
+            f"{hand_tag} requires attachment assumption {expected_assumption!r}"
+        )
+    position_matches = np.allclose(
+        attachment.position_m,
+        attachment_contract["position_m"],
+        rtol=0.0,
+        atol=1e-8,
+    )
+    quaternion_alignment = abs(
+        float(
+            np.dot(
+                np.asarray(attachment.quat_wxyz),
+                np.asarray(attachment_contract["quat_wxyz"]),
+            )
+        )
+    )
+    if not position_matches or not np.isclose(
+        quaternion_alignment, 1.0, rtol=0.0, atol=1e-8
+    ):
+        if hand_tag == "v2026.6.27":
+            raise ValueError(
+                "identity attachment assumption requires an identity transform"
+            )
+        raise ValueError(
+            f"{hand_tag} attachment transform differs from the pinned mesh registration"
+        )
 
     workspace_center = cast(
         tuple[float, float, float],

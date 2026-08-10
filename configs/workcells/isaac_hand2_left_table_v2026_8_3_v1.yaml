@@ -1,0 +1,42 @@
+schema: wujihand.workcell.v1
+workcell_id: isaac_hand2_left_table_v2026_8_3_v1
+world_frame: world
+frames:
+  - frame_id: camera_eye
+    parent: world
+    transform:
+      position_m: [0.42, -0.48, 0.88]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: camera_target
+    parent: world
+    transform:
+      position_m: [-0.04, 0.0, 0.43]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+mounts:
+  - mount_id: hand_fixed_mount
+    frame: world
+    # Align the v2026.8.3 wrist mesh to the v2026.6.27 qualification pose.
+    transform:
+      position_m: [-0.1285, -0.0030, 0.43030016]
+      quat_wxyz: [0.5, -0.5, 0.5, -0.5]
+entities:
+  - entity_id: ground
+    frame: world
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: plane
+    mobility: fixed
+    mass_kg: null
+  - entity_id: table
+    frame: world
+    transform:
+      position_m: [0.02, 0.0, 0.35]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.80, 0.60, 0.06]
+    mobility: fixed
+    mass_kg: null
+compatibility_profile: null

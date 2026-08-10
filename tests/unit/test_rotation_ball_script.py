@@ -9,7 +9,9 @@ from wujihand.runtime.rotation_ball_script import scripted_rotation_ball_target
 
 
 def _config():  # type: ignore[no-untyped-def]
-    return load_rotation_ball_config("configs/base/hand2_rotation_ball_v1.yaml")
+    return load_rotation_ball_config(
+        "configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml"
+    )
 
 
 @pytest.mark.parametrize(

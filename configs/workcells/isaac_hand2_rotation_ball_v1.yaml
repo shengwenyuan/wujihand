@@ -16,4 +16,4 @@ mounts:
       position_m: [0.0, 0.0, 0.0]
       quat_wxyz: [1.0, 0.0, 0.0, 0.0]
 entities: []
-compatibility_profile: configs/base/hand2_rotation_ball_v1.yaml
+compatibility_profile: configs/base/hand2_rotation_ball_v2026_6_27_v1.yaml

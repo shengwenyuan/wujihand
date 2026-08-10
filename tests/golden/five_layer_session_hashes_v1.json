@@ -1,13 +1,13 @@
 {
   "schema": "wujihand.session_hash_golden.v1",
   "sessions": {
-    "isaac_hand2_fixed_preview_v1.yaml": "e35f1e385fb92b100320a7fe8b05b79c242d6838d70ef4057b98923a90334e8c",
-    "isaac_hand2_right_rotation_ball_qualification_v1.yaml": "b0cb2cba769a76cd883dbccf263e5d81f98b2b5fd2ae63768efc5f2c504e6f99",
-    "isaac_hand2_right_rotation_ball_teleop_v1.yaml": "5ceef98573f967b9b4c69135c487d1e2ba7ab6907c5d63d30cbb95b636ba583e",
-    "isaac_hand2_teleop_v1.yaml": "ba946e6b8ac786d28cacdd29b01c8ed53a7d955175d574d0e3c60af96fb6bc68",
-    "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml": "46f543efdaa3eff26227ed73150902c20027b90afdc19cb35e9d814098800601",
-    "mediapipe_hand2_hand_command_udp_v1.yaml": "c8721bc75054581f4232a392193eda7cd8f8821ca962ecc32514c567975ced22",
-    "mediapipe_hand2_q20_udp_v1.yaml": "9b063ea55497e12d225fb3aa9922afa5d2fb8026cb352f369973ddb3e874ff5c",
-    "mujoco_fr3v2_hand2_right_table_v1.yaml": "dc92c7689cff92181606ff215407d3eaf86d5baac033ff28fe2a3cc936169059"
+    "isaac_hand2_right_fixed_qualification_v2026_6_27_v1.yaml": "1bfffc5ed976b7d6a2f56612f4a345e568b2058a17e91394ffa1e1c2bee6162f",
+    "isaac_hand2_right_rotation_ball_qualification_v1.yaml": "b0cc40e0ed0581477feb01f0f5df057384535a962c724c1c4ce12ae814e75336",
+    "isaac_hand2_right_rotation_ball_teleop_v1.yaml": "e504588ac6cf758117561fc7c0d6154c02f16a0c613fed75c6955318a6a5698f",
+    "isaac_hand2_teleop_v1.yaml": "6caa3c799181f93583886267fc45b4350163c7d35840cea0ab6242f0a8ee26be",
+    "isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml": "5bb0986d70d030fc326839b8399aadf57d74c10f9f4d0373314678ee483a4aea",
+    "mediapipe_hand2_hand_command_udp_v1.yaml": "b99d439d980f3fbe7c9c9265eda081f0c25ff67c37f98311174c426bf5caa74c",
+    "mediapipe_hand2_q20_udp_v1.yaml": "e9a1d838a5eb10a61e4eca03e4e1421c843e022fe51eb0151cb48513ddf0ace1",
+    "mujoco_fr3v2_hand2_right_table_v1.yaml": "f1d2a585e4877ead42b0a4dad376d2439d75fd1ea73f9d74b5125f4d41d84faf"
   }
 }
