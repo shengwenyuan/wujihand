@@ -27,10 +27,12 @@ from .backend_binding import (
 from .common import ConfigRef, PoseSpec
 from .isaac_workcell import (
     ISAAC_STATIC_USD_WORKCELL_SCHEMA,
+    ISAAC_TASK_SCENE_SCHEMA,
     ContentSpec,
     IsaacDomeLightingSpec,
     IsaacSceneExpectations,
     IsaacStaticUsdWorkcellProfile,
+    IsaacTaskSceneProfile,
     IsaacWorkcellPolicies,
 )
 from .isaac_camera import (
@@ -122,6 +124,7 @@ __all__ = [
     "DUAL_TELEOPERATION_PROFILE_STATUS",
     "LOCAL_DEVICE_BINDING_SCHEMA",
     "ISAAC_STATIC_USD_WORKCELL_SCHEMA",
+    "ISAAC_TASK_SCENE_SCHEMA",
     "ISAAC_CAMERA_PROFILE_SCHEMA",
     "NATIVE_DUAL_TELEOPERATION_PROFILE_ID",
     "NATIVE_DUAL_TELEOPERATION_PROFILE_SCHEMA",
@@ -164,6 +167,7 @@ __all__ = [
     "IsaacCameraScheduleSpec",
     "IsaacSceneExpectations",
     "IsaacStaticUsdWorkcellProfile",
+    "IsaacTaskSceneProfile",
     "IsaacWorkcellPolicies",
     "MountSpec",
     "NativeDualGlovePolicy",

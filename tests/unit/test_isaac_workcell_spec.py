@@ -5,7 +5,10 @@ from typing import Any
 
 import pytest
 
-from wujihand.specs import IsaacStaticUsdWorkcellProfile
+from wujihand.specs import (
+    IsaacStaticUsdWorkcellProfile,
+    IsaacTaskSceneProfile,
+)
 
 
 def _profile() -> dict[str, Any]:
@@ -100,3 +103,60 @@ def test_profile_rejects_unpinned_or_conflicting_policy() -> None:
     ]
     with pytest.raises(ValueError, match="relative USD prim path"):
         IsaacStaticUsdWorkcellProfile.from_mapping(invalid_fixed_path)
+
+
+def _task_scene_profile() -> dict[str, Any]:
+    return {
+        "schema": "wujihand.isaac_task_scene.v1",
+        "profile_id": "demo_task_scene_v1",
+        "import_id": "demo_task",
+        "scene": _profile()["scene"],
+        "composition": "reference",
+        "frame": "world",
+        "transform": {
+            "position_m": [0.0, 0.5, 0.2],
+            "quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+        },
+        "excluded_prim_paths": ["GroundPlane", "robot_table"],
+        "fixed_rigid_body_paths": ["bowl"],
+        "entities": [
+            {
+                "entity_id": "task_table",
+                "frame": "world",
+                "transform": {
+                    "position_m": [0.0, 0.5, 0.18],
+                    "quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+                },
+                "primitive": {
+                    "kind": "box",
+                    "size_m": [0.7, 1.0, 0.04],
+                },
+                "mobility": "fixed",
+                "mass_kg": None,
+            }
+        ],
+        "expectations": _profile()["expectations"],
+    }
+
+
+def test_task_scene_round_trips_as_an_independent_overlay() -> None:
+    mapping = _task_scene_profile()
+
+    profile = IsaacTaskSceneProfile.from_mapping(mapping)
+
+    assert profile.profile_id == "demo_task_scene_v1"
+    assert profile.excluded_prim_paths == (
+        "GroundPlane",
+        "robot_table",
+    )
+    assert profile.fixed_rigid_body_paths == ("bowl",)
+    assert profile.entities[0].entity_id == "task_table"
+    assert profile.to_mapping() == mapping
+
+
+def test_task_scene_rejects_absolute_prim_paths() -> None:
+    mapping = _task_scene_profile()
+    mapping["excluded_prim_paths"] = ["/world/table"]
+
+    with pytest.raises(ValueError, match="relative USD prim path"):
+        IsaacTaskSceneProfile.from_mapping(mapping)

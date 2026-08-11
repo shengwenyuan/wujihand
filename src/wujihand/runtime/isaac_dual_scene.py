@@ -61,7 +61,10 @@ from .isaac_workcell import (
     IsaacWorkcellMaterialization,
     materialize_isaac_workcell,
 )
-from .isaac_workcell_plan import resolve_isaac_workcell_plan
+from .isaac_workcell_plan import (
+    ResolvedIsaacWorkcellPlan,
+    resolve_isaac_workcell_plan,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -371,6 +374,7 @@ class DualNeroHand2IsaacScene:
         self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
         wrist_rig_collision_mode: WristRigCollisionMode = "none",
         visual_replay_only: bool = False,
+        workcell_plan: ResolvedIsaacWorkcellPlan | None = None,
     ) -> None:
         from isaacsim.core.api import World  # type: ignore[import-not-found]
         from isaacsim.core.prims import (  # type: ignore[import-not-found]
@@ -406,11 +410,16 @@ class DualNeroHand2IsaacScene:
             device="cpu",
         )
         self.stage = self.world.scene.stage
-        workcell_plan = resolve_isaac_workcell_plan(
-            project_root,
-            resolved.workcell,
-            verify_content=True,
-        )
+        if workcell_plan is None:
+            workcell_plan = resolve_isaac_workcell_plan(
+                project_root,
+                resolved.workcell,
+                verify_content=True,
+            )
+        elif workcell_plan.workcell_id != resolved.workcell.workcell_id:
+            raise ValueError(
+                "resolved Workcell plan does not match the Session Workcell"
+            )
         self.workcell_materialization: IsaacWorkcellMaterialization = materialize_isaac_workcell(
             self.world, workcell_plan
         )

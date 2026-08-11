@@ -17,9 +17,11 @@ from .common import (
     require_string,
     validate_identifier,
 )
+from .workcell import EntitySpec
 
 
 ISAAC_STATIC_USD_WORKCELL_SCHEMA = "wujihand.isaac_static_usd_workcell.v1"
+ISAAC_TASK_SCENE_SCHEMA = "wujihand.isaac_task_scene.v1"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GROUND_POLICIES = frozenset({"preserve", "project", "none"})
 _PHYSICS_SCENE_POLICIES = frozenset({"preserve", "project"})
@@ -436,11 +438,132 @@ class IsaacStaticUsdWorkcellProfile:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class IsaacTaskSceneProfile:
+    """One independently selectable task scene layered over a Workcell."""
+
+    schema: str
+    profile_id: str
+    import_id: str
+    scene: ContentSpec
+    composition: str
+    frame: str
+    transform: PoseSpec
+    excluded_prim_paths: tuple[str, ...]
+    fixed_rigid_body_paths: tuple[str, ...]
+    entities: tuple[EntitySpec, ...]
+    expectations: IsaacSceneExpectations
+
+    @classmethod
+    def from_mapping(
+        cls,
+        value: object,
+        *,
+        field: str = "Isaac task scene profile",
+    ) -> Self:
+        data = require_exact_mapping(
+            value,
+            expected=frozenset(
+                {
+                    "schema",
+                    "profile_id",
+                    "import_id",
+                    "scene",
+                    "composition",
+                    "frame",
+                    "transform",
+                    "excluded_prim_paths",
+                    "fixed_rigid_body_paths",
+                    "entities",
+                    "expectations",
+                }
+            ),
+            field=field,
+        )
+        schema = require_string(data["schema"], field=f"{field}.schema")
+        if schema != ISAAC_TASK_SCENE_SCHEMA:
+            raise ValueError(
+                f"{field}.schema must be {ISAAC_TASK_SCENE_SCHEMA!r}"
+            )
+        composition = require_string(
+            data["composition"],
+            field=f"{field}.composition",
+        )
+        if composition != "reference":
+            raise ValueError(f"{field}.composition must be 'reference'")
+        entities = tuple(
+            EntitySpec.from_mapping(
+                item,
+                field=f"{field}.entities[{index}]",
+            )
+            for index, item in enumerate(
+                require_sequence(data["entities"], field=f"{field}.entities")
+            )
+        )
+        entity_ids = tuple(entity.entity_id for entity in entities)
+        if len(set(entity_ids)) != len(entity_ids):
+            raise ValueError(f"{field}.entities entity_id values must be unique")
+        return cls(
+            schema=schema,
+            profile_id=validate_identifier(
+                data["profile_id"],
+                field=f"{field}.profile_id",
+            ),
+            import_id=validate_identifier(
+                data["import_id"],
+                field=f"{field}.import_id",
+            ),
+            scene=ContentSpec.from_mapping(
+                data["scene"],
+                field=f"{field}.scene",
+            ),
+            composition=composition,
+            frame=validate_identifier(
+                data["frame"],
+                field=f"{field}.frame",
+            ),
+            transform=PoseSpec.from_mapping(
+                data["transform"],
+                field=f"{field}.transform",
+            ),
+            excluded_prim_paths=_relative_prim_paths(
+                data["excluded_prim_paths"],
+                field=f"{field}.excluded_prim_paths",
+            ),
+            fixed_rigid_body_paths=_relative_prim_paths(
+                data["fixed_rigid_body_paths"],
+                field=f"{field}.fixed_rigid_body_paths",
+            ),
+            entities=entities,
+            expectations=IsaacSceneExpectations.from_mapping(
+                data["expectations"],
+                field=f"{field}.expectations",
+            ),
+        )
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "schema": self.schema,
+            "profile_id": self.profile_id,
+            "import_id": self.import_id,
+            "scene": self.scene.to_mapping(),
+            "composition": self.composition,
+            "frame": self.frame,
+            "transform": self.transform.to_mapping(),
+            "excluded_prim_paths": list(self.excluded_prim_paths),
+            "fixed_rigid_body_paths": list(self.fixed_rigid_body_paths),
+            "entities": [entity.to_mapping() for entity in self.entities],
+            "expectations": self.expectations.to_mapping(),
+        }
+
+
 __all__ = [
     "ISAAC_STATIC_USD_WORKCELL_SCHEMA",
+    "ISAAC_TASK_SCENE_SCHEMA",
     "ContentSpec",
     "IsaacDomeLightingSpec",
     "IsaacSceneExpectations",
     "IsaacStaticUsdWorkcellProfile",
+    "IsaacTaskSceneProfile",
     "IsaacWorkcellPolicies",
 ]

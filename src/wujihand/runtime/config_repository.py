@@ -19,6 +19,7 @@ from wujihand.specs import (
     DeploymentSpec,
     DualTeleoperationProfile,
     IsaacCameraProfile,
+    IsaacTaskSceneProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
     RosDeploymentSpec,
@@ -41,6 +42,7 @@ SpecT = TypeVar(
     DeploymentSpec,
     DualTeleoperationProfile,
     IsaacCameraProfile,
+    IsaacTaskSceneProfile,
     LocalDeviceBindingSpec,
     NativeDualTeleoperationProfile,
     RosDeploymentSpec,
@@ -214,6 +216,17 @@ class ConfigRepository:
             reference,
             field="Isaac camera profile",
             spec_type=IsaacCameraProfile,
+            id_attribute="profile_id",
+        )
+
+    def load_isaac_task_scene_profile(
+        self,
+        reference: ConfigRef | str | Path,
+    ) -> IsaacTaskSceneProfile:
+        return self._load(
+            reference,
+            field="Isaac task scene profile",
+            spec_type=IsaacTaskSceneProfile,
             id_attribute="profile_id",
         )
 

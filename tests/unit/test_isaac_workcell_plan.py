@@ -75,6 +75,74 @@ def test_robolab_workcell_compiles_to_content_identity_and_hybrid_ops() -> None:
     assert "local_runtime_path" not in encoded
 
 
+def test_tframe_composes_the_banana_task_scene_without_changing_session() -> None:
+    repository = ConfigRepository(ROOT)
+    workcell = repository.load_workcell(
+        "configs/workcells/isaac_dual_nero_tframe_candidate_20260811_v1.yaml"
+    )
+    task_scene = (
+        "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml"
+    )
+
+    base_plan = resolve_isaac_workcell_plan(ROOT, workcell)
+    task_plan = resolve_isaac_workcell_plan(
+        ROOT,
+        workcell,
+        task_scene=task_scene,
+    )
+
+    assert base_plan.task_scene_profile_id is None
+    assert len(base_plan.imports) == 1
+    assert task_plan.workcell_id == base_plan.workcell_id
+    assert task_plan.profile_id == base_plan.profile_id
+    assert task_plan.task_scene_profile_id == (
+        "isaac_robolab_banana_bowl_low_table_v1"
+    )
+    assert task_plan.task_scene_profile_path == task_scene
+    assert tuple(operation.import_id for operation in task_plan.imports) == (
+        "dual_nero_tframe",
+        "robolab_banana_bowl_task",
+    )
+    task_import = task_plan.imports[1]
+    assert task_import.pose.position_m == pytest.approx(
+        (-0.0000582, 0.0028054, 0.1970015)
+    )
+    assert task_import.excluded_prim_paths == (
+        "GroundPlane",
+        "franka_table",
+        "table",
+    )
+    assert task_plan.fixed_rigid_body_paths == (
+        "/World/Environment/robolab_banana_bowl_task/bowl",
+    )
+    task_entities = {
+        operation.entity_id: operation
+        for operation in task_plan.primitives
+        if operation.entity_id != "ground"
+    }
+    assert set(task_entities) == {
+        "banana_task_table_top",
+        "banana_task_table_near_left_leg",
+        "banana_task_table_near_right_leg",
+        "banana_task_table_far_left_leg",
+        "banana_task_table_far_right_leg",
+    }
+    assert task_entities["banana_task_table_top"].pose.position_m == (
+        0.0,
+        0.55,
+        0.18,
+    )
+    for entity_id, operation in task_entities.items():
+        if not entity_id.endswith("_leg"):
+            continue
+        assert operation.pose.position_m[2] == pytest.approx(0.09)
+        assert operation.entity.primitive.size_m is not None
+        assert (
+            operation.pose.position_m[2]
+            - operation.entity.primitive.size_m[2] / 2.0
+        ) == pytest.approx(0.0)
+
+
 def test_each_robolab_layout_is_a_distinct_resolved_session() -> None:
     resolver = SessionResolver(ROOT)
     paths = (

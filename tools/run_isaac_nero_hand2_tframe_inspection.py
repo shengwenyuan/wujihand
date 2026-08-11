@@ -22,7 +22,7 @@ from wujihand.adapters.simulation.nero_startup import (
     load_nero_dual_simulation_startup_profile,
 )
 from wujihand.integrity import sha256_file
-from wujihand.runtime import SessionResolver
+from wujihand.runtime import SessionResolver, resolve_isaac_workcell_plan
 from wujihand.runtime.isaac_dual_scene import (
     resolve_dual_side_runtimes,
     workcell_frame_position,
@@ -41,6 +41,11 @@ INITIALIZATION_FRAMES = 240
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--session", type=Path, default=DEFAULT_SESSION)
+    parser.add_argument(
+        "--task-scene",
+        type=Path,
+        help="Layer an independently selected task scene over the T-frame Workcell.",
+    )
     parser.add_argument("--gui", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument(
         "--frames",
@@ -76,6 +81,17 @@ if (ARGS.screenshot is not None or ARGS.wrist_screenshot_dir is not None) and no
 RESOLVED = SessionResolver(ROOT).resolve(
     ARGS.session,
     verify_artifacts=ARGS.verify_artifacts,
+    overrides=(
+        None
+        if ARGS.task_scene is None
+        else {"task_scene": ARGS.task_scene}
+    ),
+)
+WORKCELL_PLAN = resolve_isaac_workcell_plan(
+    ROOT,
+    RESOLVED.workcell,
+    task_scene=ARGS.task_scene,
+    verify_content=ARGS.verify_artifacts,
 )
 startup_path = RESOLVED.session.runtime.compatibility_profile
 if startup_path is None:
@@ -154,6 +170,7 @@ def main() -> int:
         physics_hz=120,
         self_collision_sides=frozenset(),
         wrist_rig_collision_mode="all",
+        workcell_plan=WORKCELL_PLAN,
     )
     set_camera_view(
         eye=np.asarray(workcell_frame_position(RESOLVED, CAMERA_EYE_FRAME)),
@@ -193,6 +210,11 @@ def main() -> int:
     summary = {
         "session_id": RESOLVED.session.session_id,
         "workcell_id": RESOLVED.workcell.workcell_id,
+        "task_scene_profile_id": WORKCELL_PLAN.task_scene_profile_id,
+        "task_scene_profile_path": WORKCELL_PLAN.task_scene_profile_path,
+        "environment_imports": [
+            operation.import_id for operation in WORKCELL_PLAN.imports
+        ],
         "startup_profile_id": STARTUP.profile_id,
         "status": STARTUP.status,
         "hardware_access": False,

@@ -13,6 +13,7 @@ from wujihand.specs import (
     EntitySpec,
     IsaacSceneExpectations,
     IsaacStaticUsdWorkcellProfile,
+    IsaacTaskSceneProfile,
     IsaacWorkcellPolicies,
     PoseSpec,
     WorkcellSpec,
@@ -32,6 +33,9 @@ class ResolvedIsaacUsdImport:
     content: ResolvedContentRef
     composition: str
     pose: PoseSpec
+    excluded_prim_paths: tuple[str, ...]
+    fixed_rigid_body_paths: tuple[str, ...]
+    expectations: IsaacSceneExpectations
 
     @property
     def prim_path(self) -> str:
@@ -44,6 +48,11 @@ class ResolvedIsaacUsdImport:
             "content": self.content.identity_mapping(),
             "composition": self.composition,
             "pose": self.pose.to_mapping(),
+            "excluded_prim_paths": list(self.excluded_prim_paths),
+            "fixed_rigid_body_paths": list(
+                self.fixed_rigid_body_paths
+            ),
+            "expectations": self.expectations.to_mapping(),
         }
 
 
@@ -100,6 +109,8 @@ class ResolvedIsaacWorkcellPlan:
     workcell_id: str
     profile_id: str | None
     profile_path: str | None
+    task_scene_profile_id: str | None
+    task_scene_profile_path: str | None
     imports: tuple[ResolvedIsaacUsdImport, ...]
     primitives: tuple[ResolvedIsaacPrimitive, ...]
     fixed_rigid_body_paths: tuple[str, ...]
@@ -116,6 +127,8 @@ class ResolvedIsaacWorkcellPlan:
             "workcell_id": self.workcell_id,
             "profile_id": self.profile_id,
             "profile_path": self.profile_path,
+            "task_scene_profile_id": self.task_scene_profile_id,
+            "task_scene_profile_path": self.task_scene_profile_path,
             "imports": [operation.to_mapping() for operation in self.imports],
             "primitives": [
                 operation.to_mapping() for operation in self.primitives
@@ -142,6 +155,7 @@ def resolve_isaac_workcell_plan(
     project_root: str | Path,
     workcell: WorkcellSpec,
     *,
+    task_scene: str | Path | None = None,
     verify_content: bool = False,
 ) -> ResolvedIsaacWorkcellPlan:
     """Compile a Workcell without importing Isaac Sim or pxr."""
@@ -150,14 +164,14 @@ def resolve_isaac_workcell_plan(
     source_lock = SourceLock.load(repository)
     profile, profile_path = _load_typed_profile(repository, workcell)
     frame_poses = _frame_poses(workcell)
-    primitives = tuple(
+    primitives = [
         ResolvedIsaacPrimitive(
             entity_id=entity.entity_id,
             pose=_compose(frame_poses[entity.frame], entity.transform),
             entity=entity,
         )
         for entity in workcell.entities
-    )
+    ]
 
     if profile is None:
         policies = IsaacWorkcellPolicies(
@@ -174,7 +188,7 @@ def resolve_isaac_workcell_plan(
             collision="preserve",
             fixed_rigid_body_paths=(),
         )
-        imports: tuple[ResolvedIsaacUsdImport, ...] = ()
+        imports: list[ResolvedIsaacUsdImport] = []
         lighting = ResolvedIsaacLighting(
             mode="project",
             content=None,
@@ -195,7 +209,7 @@ def resolve_isaac_workcell_plan(
             expected_sha256=profile.scene.expected_sha256,
             verify=verify_content,
         )
-        imports = (
+        imports = [
             ResolvedIsaacUsdImport(
                 import_id=profile.import_id,
                 content=scene,
@@ -204,8 +218,13 @@ def resolve_isaac_workcell_plan(
                     frame_poses[profile.frame],
                     profile.transform,
                 ),
+                excluded_prim_paths=(),
+                fixed_rigid_body_paths=(
+                    profile.policies.fixed_rigid_body_paths
+                ),
+                expectations=profile.expectations,
             ),
-        )
+        ]
         lighting_content = (
             None
             if profile.lighting.content is None
@@ -231,10 +250,76 @@ def resolve_isaac_workcell_plan(
         expectations = profile.expectations
         profile_id = profile.profile_id
 
+    task_scene_profile_id: str | None = None
+    task_scene_profile_path: str | None = None
+    if task_scene is not None:
+        task_profile, task_scene_profile_path = _load_task_scene_profile(
+            repository,
+            task_scene,
+        )
+        if task_profile.frame not in frame_poses:
+            raise ValueError(
+                "Isaac task scene references unknown frame "
+                f"{task_profile.frame!r}"
+            )
+        if any(
+            operation.import_id == task_profile.import_id
+            for operation in imports
+        ):
+            raise ValueError(
+                f"duplicate Isaac import_id {task_profile.import_id!r}"
+            )
+        task_content = source_lock.resolve_content(
+            task_profile.scene.artifact,
+            expected_sha256=task_profile.scene.expected_sha256,
+            verify=verify_content,
+        )
+        imports.append(
+            ResolvedIsaacUsdImport(
+                import_id=task_profile.import_id,
+                content=task_content,
+                composition=task_profile.composition,
+                pose=_compose(
+                    frame_poses[task_profile.frame],
+                    task_profile.transform,
+                ),
+                excluded_prim_paths=task_profile.excluded_prim_paths,
+                fixed_rigid_body_paths=(
+                    task_profile.fixed_rigid_body_paths
+                ),
+                expectations=task_profile.expectations,
+            )
+        )
+        known_entity_ids = {
+            operation.entity_id for operation in primitives
+        }
+        for entity in task_profile.entities:
+            if entity.frame not in frame_poses:
+                raise ValueError(
+                    "Isaac task scene entity references unknown frame "
+                    f"{entity.frame!r}"
+                )
+            if entity.entity_id in known_entity_ids:
+                raise ValueError(
+                    f"duplicate Isaac entity_id {entity.entity_id!r}"
+                )
+            primitives.append(
+                ResolvedIsaacPrimitive(
+                    entity_id=entity.entity_id,
+                    pose=_compose(
+                        frame_poses[entity.frame],
+                        entity.transform,
+                    ),
+                    entity=entity,
+                )
+            )
+            known_entity_ids.add(entity.entity_id)
+        task_scene_profile_id = task_profile.profile_id
+
     fixed_rigid_body_paths = tuple(
         f"{operation.prim_path}/{relative_path}"
         for operation in imports
-        for relative_path in policies.fixed_rigid_body_paths
+        for relative_path in operation.fixed_rigid_body_paths
     )
 
     return ResolvedIsaacWorkcellPlan(
@@ -242,8 +327,10 @@ def resolve_isaac_workcell_plan(
         workcell_id=workcell.workcell_id,
         profile_id=profile_id,
         profile_path=profile_path,
-        imports=imports,
-        primitives=primitives,
+        task_scene_profile_id=task_scene_profile_id,
+        task_scene_profile_path=task_scene_profile_path,
+        imports=tuple(imports),
+        primitives=tuple(primitives),
         fixed_rigid_body_paths=fixed_rigid_body_paths,
         policies=policies,
         lighting=lighting,
@@ -253,7 +340,24 @@ def resolve_isaac_workcell_plan(
             *(frame.frame_id for frame in workcell.frames),
         ),
         mount_ids=tuple(mount.mount_id for mount in workcell.mounts),
-        entity_ids=tuple(entity.entity_id for entity in workcell.entities),
+        entity_ids=tuple(operation.entity_id for operation in primitives),
+    )
+
+
+def _load_task_scene_profile(
+    repository: ConfigRepository,
+    reference: str | Path,
+) -> tuple[IsaacTaskSceneProfile, str]:
+    path = repository.resolve_project_path(
+        reference,
+        field="Isaac task scene profile",
+    )
+    return (
+        repository.load_isaac_task_scene_profile(path),
+        repository.project_relative(
+            path,
+            field="Isaac task scene profile",
+        ),
     )
 
 

@@ -94,7 +94,7 @@ def materialize_isaac_workcell(
                 "could not open USD scene: "
                 f"{import_operation.content.absolute_path}"
             )
-        _validate_source_stage(source, import_operation, plan)
+        _validate_source_stage(source, import_operation)
         layers, assets, unresolved = UsdUtils.ComputeAllDependencies(
             str(import_operation.content.absolute_path)
         )
@@ -129,6 +129,14 @@ def materialize_isaac_workcell(
             Gf,
             UsdGeom,
         )
+        for relative_path in import_operation.excluded_prim_paths:
+            excluded_path = f"{import_operation.prim_path}/{relative_path}"
+            excluded_prim = stage.GetPrimAtPath(excluded_path)
+            if not excluded_prim.IsValid():
+                raise RuntimeError(
+                    f"excluded USD prim did not resolve: {excluded_path}"
+                )
+            excluded_prim.SetActive(False)
 
     imported_prefixes = tuple(
         import_operation.prim_path
@@ -269,20 +277,17 @@ def materialize_isaac_workcell(
             )
         )
     )
-    if (
-        plan.expectations is not None
-        and len(
-            tuple(
-                path
-                for path in colliders
-                if _below_any(path, imported_prefixes)
+    for operation in plan.imports:
+        collider_count = sum(
+            _below_any(path, (operation.prim_path,))
+            for path in colliders
+        )
+        if collider_count < operation.expectations.min_colliders:
+            raise RuntimeError(
+                f"{operation.import_id} collider count is below the profile "
+                f"expectation: {collider_count} < "
+                f"{operation.expectations.min_colliders}"
             )
-        )
-        < plan.expectations.min_colliders
-    ):
-        raise RuntimeError(
-            "imported collider count is below the profile expectation"
-        )
     rigid_bodies = tuple(
         sorted(
             str(prim.GetPath())
@@ -353,13 +358,10 @@ def materialize_isaac_workcell(
 def _validate_source_stage(
     source: Any,
     operation: ResolvedIsaacUsdImport,
-    plan: ResolvedIsaacWorkcellPlan,
 ) -> None:
     from pxr import UsdGeom
 
-    expectations = plan.expectations
-    if expectations is None:
-        return
+    expectations = operation.expectations
     default_prim = source.GetDefaultPrim()
     if not default_prim.IsValid() or default_prim.GetName() != expectations.default_prim:
         raise RuntimeError(
