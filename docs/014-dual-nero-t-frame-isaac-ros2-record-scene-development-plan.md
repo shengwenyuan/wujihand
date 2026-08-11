@@ -1,7 +1,7 @@
 # 014：Dual NERO T 型架 Isaac + ROS2 Record 并列场景开发计划
 
-- 状态：正式初版；STEP→USD candidate 已完成，场景 mount、startup、ROS2 record 与 GUI
-  qualification 待实施
+- 状态：实施中；场景 mount/startup、ROS2 record 并列入口与 GUI 背景已实现，device-free
+  功能闭环已完成；时序复验与 live Tracker/Glove qualification 待完成
 - 日期：2026-08-11
 - 目标平台：Workstation2 / Isaac Sim 6.0.1 / ROS2 Jazzy
 - 机器人组合：双 NERO + 双 Wuji Hand 2 Beta1 v2026.8.3 + 双腕 D405 仿真组件
@@ -50,6 +50,31 @@ operator GUI 改动只发生在独立 20 Hz preview 进程：先把纯色背景�
 进程关闭阴影和环境遮蔽，同时保留柔和环境光。不得修改共享 Workcell 灯光、主 Isaac 进程、
 D405 capture 或离线三视角 renderer。
 
+### 0.1 2026-08-11 实施状态
+
+已完成：
+
+- scene-neutral NERO startup 已从 tabletop geometry 拆出；旧 tabletop profile 通过兼容 adapter
+  保持原入口行为；
+- 新增 T-frame Session、ROS2 Deployment、record-chain qualification policy 和独立
+  Tracker→T-frame candidate mapping；
+- banana+bowl 作为独立 task scene 与 T-frame Workcell 组合，不进入机器人 Assembly；
+- 主 consumer 与独立 preview 复用同一 preflight scene receipt；preview 仅在自身进程覆盖
+  `[0.30, 0.30, 0.30]`，未修改共享 Workcell 灯光，也未关闭 shadow/AO；
+- fixed A→B→A 穿戴设备输入桩已闭合四路 ROS source、双臂双手 q54、task scene、MCAP、checksum、
+  replay、preview 四组件运动和有序关闭；首轮仍强制 `dataset_eligible=false`。
+
+当前未通过的是时序资格，不是功能闭环。`tframe-fixture-20260811-b` 仅失败
+`main_60hz_zero_miss`（50 missed periods）；同一时段重跑已验收 tabletop 基线
+`hand2-83-baseline-control-20260811-e` 也仅失败该门（33 missed periods）。因此暂不放宽 60 Hz/0 miss
+硬门，也不把本次结果归因为 T-frame。空闲状态复验 `tframe-fixture-20260811-final-f` 将 control
+miss 降到 14，preview 为 20.020 Hz/0 miss，但一次 78.77 ms render 超过 50 ms 门，仍不接受。
+14-collider candidate 的视觉与 inventory identity 不变，但当前受热态/调度状态影响的单次运行不能
+作为性能改善证据。
+
+下一停止点是 live qualification：先由操作者确认站在 `AGILE X` 一侧、面向 T-frame，再用小幅单轴
+动作闭合 Tracker→T-frame 的方向和左右身份；确认前 mapping 保持 candidate，数据不得提升资格。
+
 ## 1. 已冻结的上游与资产基线
 
 ### 1.1 Hand2 与 record 上游
@@ -93,7 +118,7 @@ Workstation2 已生成 candidate：
 
 ```text
 artifacts/derived/isaac/6.0.1/dual-nero-tframe/v1/
-  candidate-20260811-v1-a/
+  candidate-20260811-v1-b/
 ```
 
 三份运行相关 USD 为：
@@ -102,21 +127,22 @@ artifacts/derived/isaac/6.0.1/dual-nero-tframe/v1/
 |---|---|---|
 | `tframe.usda` | `0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af` | `/TFrame` wrapper，使用相对引用组合 visual/collision |
 | `tframe_visual.usdc` | `ed6eade87adc2d42a4b45d2c75a64df1c67b5c07276add84966f71b6c844cda8` | 双面 visual mesh |
-| `tframe_collision.usdc` | `7008af6c8f9155a6c6863a08fa86f86adbfd8c842d3fd0aa6fb5fa894dc65525` | 静态碰撞代理 |
+| `tframe_collision.usdc` | `b4c45479da14bd6b3d0ea124be5e9243bd22f4c0dd64006fb046b01db6a155e8` | 静态碰撞代理 |
 
 已通过的 candidate 事实：
 
 - Z-up、`metersPerUnit=1.0`、default prim `/TFrame`；
 - 只保留 7 个承力 `M-BIMA` occurrence，不含两台 STEP 内置 NERO、电源、线缆和紧固件；
-- 42 个静态 collider：34 个 convex hull + 8 个 static triangle mesh；
+- 14 个静态 collider：6 个 convex hull + 8 个 static triangle mesh；小于 `500 mm³` 的
+  螺钉/细节实体仅从 collision 层排除，visual 不变；
 - 0 个 rigid body，未把整架压成单一凸包；
 - wrapper 无绝对资产路径，OpenUSD 25.11 / Isaac Sim 6.0.1 可打开；
 - inventory identity 为
   `6640a895f8306afa0ca29635bbe54abae31f43055f55fb22e3868dc1402ce359`；
 - semantic identity 为
-  `2a639aad11d8e22bf3395d9573fcd69dbd8d2ab2a4d9aec09a4e6d17ff2232d9`；
-- 两次独立构建的 inventory/semantic identity 相同；六个 canonical USD/manifest/preview 输出字节
-  相同；cleaned STEP 因 writer header/timestamp 不要求字节相同。
+  `d88b8ae269b236f768df7dfa67696fc4329f4cf2f289c0dac7402014eaffbdef`；
+- 相比 `v1-a`，wrapper、visual 和 inventory identity 不变，仅 collision recipe、collision USD
+  与 semantic identity 更新；cleaned STEP 因 writer header/timestamp 不要求字节相同。
 
 candidate 当前状态仍是 `generated_unqualified_simulation_only`。以下四项均未完成，不能绕过：
 

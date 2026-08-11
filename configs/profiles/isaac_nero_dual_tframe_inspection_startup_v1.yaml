@@ -13,9 +13,12 @@ initial_arm_positions:
 arm_drive_gains:
   stiffness: 6500.0
   damping: 220.79402165819616
+initial_q7_max_error_rad: 0.08
+teleport_to_initial_position: true
 assumptions:
   - q7_is_a_pinned_urdf_fk_inspection_pose_not_a_hardware_safe_pose
   - base_local_plus_z_points_outward_from_each_tframe_shoulder
   - shoulder_clocking_is_owner_confirmed_without_reinterpreting_mesh_protrusions
   - upper_arms_hang_down_and_forearms_and_fingers_point_to_owner_confirmed_asset_plus_y_front
   - drive_gains_are_isaac_only_and_inherited_from_the_qualified_simulation_baseline
+  - teleport_avoids_a_nonphysical_zero_to_hanging_l_startup_sweep_before_control

@@ -97,8 +97,12 @@ from wujihand.runtime.isaac_dual_teleoperation import (
     build_dual_teleoperation_application,
 )
 from wujihand.adapters.simulation import (
-    load_nero_dual_tabletop_qualification_profile,
+    load_nero_dual_simulation_startup_profile,
     load_nero_link_geometry_alignment,
+)
+from wujihand.runtime.wuji_hand2_record_chain import (
+    load_record_chain_preflight_receipt,
+    resolve_record_chain_workcell_plan,
 )
 
 DEFAULT_DEPLOYMENT = ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"
@@ -499,27 +503,18 @@ if REQUIRES_MATCHED_CHAIN != (ARGS.chain_preflight is not None):
         "Description 8.3 requires --chain-preflight and historical entries forbid it"
     )
 CHAIN_PREFLIGHT: Mapping[str, object] | None = None
+WORKCELL_PLAN = None
 if ARGS.chain_preflight is not None:
     try:
-        document = json.loads(ARGS.chain_preflight.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"record-chain preflight receipt is unreadable: {exc}") from exc
-    if not isinstance(document, Mapping):
-        raise SystemExit("record-chain preflight receipt must contain a JSON object")
-    deployment_receipt = document.get("deployment")
-    if (
-        document.get("schema") != "wujihand.wuji_hand2_record_chain_preflight.v1"
-        or document.get("passed") is not True
-        or document.get("device_access_attempted") is not False
-        or document.get("isaac_started") is not False
-        or not isinstance(deployment_receipt, Mapping)
-        or deployment_receipt.get("deployment_id") != RESOLVED.deployment.deployment_id
-        or deployment_receipt.get("session_id") != RESOLVED.session.session.session_id
-        or deployment_receipt.get("assembly_id")
-        != RESOLVED.session.assembly.assembly_id
-    ):
-        raise SystemExit("record-chain preflight receipt does not close this runtime")
-    CHAIN_PREFLIGHT = document
+        CHAIN_PREFLIGHT = load_record_chain_preflight_receipt(ARGS.chain_preflight)
+        WORKCELL_PLAN = resolve_record_chain_workcell_plan(
+            ROOT,
+            RESOLVED,
+            CHAIN_PREFLIGHT,
+            verify_content=ARGS.verify_artifacts,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"record-chain runtime preflight failed: {exc}") from exc
 
 DATASET_PROFILE: MiniDatasetProfile | None = None
 dataset_profile_ref = RESOLVED.session.session.dataset_profile
@@ -586,7 +581,7 @@ ALIGNMENT_PATH = ROOT / str(next(iter(alignment_references)))
 ALIGNMENT = load_nero_link_geometry_alignment(ALIGNMENT_PATH)
 NERO_LULA_URDF = (ROOT / ALIGNMENT.source_urdf_path).resolve()
 QUALIFICATION_PATH = ROOT / RESOLVED.control_profile.base_qualification.path
-QUALIFICATION = load_nero_dual_tabletop_qualification_profile(QUALIFICATION_PATH)
+QUALIFICATION = load_nero_dual_simulation_startup_profile(QUALIFICATION_PATH)
 if not NERO_LULA_DESCRIPTION.is_file():
     raise SystemExit(f"NERO Lula descriptor not found: {NERO_LULA_DESCRIPTION}")
 if sha256_file(NERO_LULA_URDF) != ALIGNMENT.source_urdf_sha256:
@@ -676,6 +671,8 @@ def _node_binding_name() -> str:
 
 def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
     policy = ROS_TELEOP_Q27_SETTLING_POLICY
+    if QUALIFICATION.teleport_to_initial_position:
+        scene.teleport_to_targets()
     scene.apply_targets()
     previous: dict[str, list[float]] | None = None
     deltas: list[float] = []
@@ -708,7 +705,7 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
                 window >= policy.minimum_windows
                 and delta <= policy.max_window_delta_rad
                 and max(target_errors_rad.values())
-                <= QUALIFICATION.thresholds.initial_q7_max_error_rad
+                <= QUALIFICATION.initial_q7_max_error_rad
             ):
                 return {
                     "converged": True,
@@ -718,7 +715,7 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
                     "final_max_delta_rad": delta,
                     "arm_target_errors_rad": target_errors_rad,
                     "arm_target_error_limit_rad": (
-                        QUALIFICATION.thresholds.initial_q7_max_error_rad
+                        QUALIFICATION.initial_q7_max_error_rad
                     ),
                 }
         previous = current
@@ -729,7 +726,7 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
         f"window_limit_rad={policy.max_window_delta_rad:.9f}, "
         f"arm_target_errors_rad={target_errors_rad}, "
         "arm_target_error_limit_rad="
-        f"{QUALIFICATION.thresholds.initial_q7_max_error_rad:.9f}"
+        f"{QUALIFICATION.initial_q7_max_error_rad:.9f}"
     )
 
 
@@ -984,6 +981,7 @@ def main() -> int:
         physics_hz=RESOLVED.control_profile.physics_hz,
         self_collision_sides=frozenset(),
         wrist_rig_collision_mode="all",
+        workcell_plan=WORKCELL_PLAN,
     )
     scene.world.set_block_on_render(GUI_BLOCK_ON_RENDER)
     if bool(scene.world.get_block_on_render()) is not GUI_BLOCK_ON_RENDER:
@@ -2639,8 +2637,10 @@ def _chain_preflight_manifest() -> dict[str, object] | None:
         raise RuntimeError("record-chain preflight receipt must stay inside the run root") from exc
     return {
         "path": relative.as_posix(),
+        "sha256": sha256_file(receipt_path),
         "qualification_id": CHAIN_PREFLIGHT.get("qualification_id"),
         "input_mode": CHAIN_PREFLIGHT.get("input_mode"),
+        "task_scene": CHAIN_PREFLIGHT.get("task_scene"),
     }
 
 

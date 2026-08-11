@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SESSION = ROOT / "configs/sessions/isaac_nero_dual_hand2_tframe_inspection_v2026_8_3_v1.yaml"
 STARTUP = ROOT / "configs/profiles/isaac_nero_dual_tframe_inspection_startup_v1.yaml"
 NERO_PROFILE = ROOT / "configs/profiles/agilex_nero_q7_provisional_v1.yaml"
+TABLETOP_STARTUP = ROOT / "configs/profiles/isaac_nero_dual_tabletop_qualification_v1.yaml"
 
 
 def test_tframe_inspection_applies_only_the_confirmed_left_flange_clocking() -> None:
@@ -96,7 +97,7 @@ def test_tframe_inspection_applies_only_the_confirmed_left_flange_clocking() -> 
         "0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af"
     )
     assert plan.expectations is not None
-    assert plan.expectations.min_colliders == 42
+    assert plan.expectations.min_colliders == 14
 
 
 def test_tframe_startup_is_the_mirrored_hanging_l_inspection_pose() -> None:
@@ -112,6 +113,14 @@ def test_tframe_startup_is_the_mirrored_hanging_l_inspection_pose() -> None:
         assert tuple(position) == expected[side]
         np.testing.assert_array_equal(nero.layout.validate_vector(position), position)
     assert profile.status == "provisional_inspection_only"
+    assert profile.teleport_to_initial_position is True
+
+
+def test_tabletop_startup_compatibility_preserves_drive_from_reset() -> None:
+    profile = load_nero_dual_simulation_startup_profile(TABLETOP_STARTUP)
+
+    assert profile.teleport_to_initial_position is False
+    assert profile.initial_q7_max_error_rad == 0.08
 
 
 def test_tframe_usd_wrapper_is_locked_with_both_dependencies() -> None:
@@ -119,6 +128,6 @@ def test_tframe_usd_wrapper_is_locked_with_both_dependencies() -> None:
 
     assert dict(source.artifacts) == {
         "tframe.usda": "0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af",
-        "tframe_collision.usdc": "7008af6c8f9155a6c6863a08fa86f86adbfd8c842d3fd0aa6fb5fa894dc65525",
+        "tframe_collision.usdc": "b4c45479da14bd6b3d0ea124be5e9243bd22f4c0dd64006fb046b01db6a155e8",
         "tframe_visual.usdc": "ed6eade87adc2d42a4b45d2c75a64df1c67b5c07276add84966f71b6c844cda8",
     }

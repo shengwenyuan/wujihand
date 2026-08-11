@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 import gc
 import hashlib
 import json
@@ -25,7 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "ros2/wujihand_ros2"))
 
 from wujihand.adapters.simulation import (
-    load_nero_dual_tabletop_qualification_profile,
+    load_nero_dual_simulation_startup_profile,
     load_nero_link_geometry_alignment,
 )
 from wujihand.dataset import load_mini_dataset_profile
@@ -44,6 +45,10 @@ from wujihand.runtime.isaac_dual_scene import (
     workcell_frame_position,
     resolve_dual_side_runtimes,
 )
+from wujihand.runtime.wuji_hand2_record_chain import (
+    load_record_chain_preflight_receipt,
+    resolve_record_chain_workcell_plan,
+)
 
 
 DEFAULT_DEPLOYMENT = (
@@ -58,11 +63,14 @@ PREVIEW_HEIGHT = 300
 PREVIEW_RENDERER = "MinimalRendering"
 PREVIEW_MINIMAL_SHADING_MODE = 3
 PREVIEW_THREAD_LIMIT_CAP = 32
+PREVIEW_CONSUMER_WAIT_TIMEOUT_S = 180.0
 PREVIEW_SHUTDOWN_GRACE_S = 8.0
 PREVIEW_WARMUP_MIN_RENDERS = 30
 PREVIEW_WARMUP_MAX_RENDERS = 120
 PREVIEW_WARMUP_STABLE_RENDERS = 10
 PREVIEW_WARMUP_RENDER_BUDGET_NS = 40_000_000
+PREVIEW_RENDER_BUDGET_NS = 50_000_000
+PREVIEW_BACKGROUND_COLOR_RGB = (0.30, 0.30, 0.30)
 STATE_CLOSURE_LIMIT = 2e-5
 OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"
 PREVIEW_TRANSFORM_SYNC = "full_link_truth_to_official_episode_replay_usd_v3"
@@ -100,12 +108,46 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--cpu-affinity")
+    parser.add_argument("--chain-preflight", type=Path)
+    parser.add_argument("--wait-for-node")
     parser.add_argument(
         "--verify-artifacts",
         action=argparse.BooleanOptionalAction,
         default=True,
     )
     return parser
+
+
+def _wait_for_ros_node(node_path: str, *, timeout_s: float) -> None:
+    if not node_path.startswith("/") or node_path.endswith("/"):
+        raise ValueError("ROS node path must be absolute")
+
+    import rclpy  # type: ignore[import-not-found]
+    from rclpy.context import Context  # type: ignore[import-not-found]
+    from rclpy.executors import SingleThreadedExecutor  # type: ignore[import-not-found]
+    from rclpy.node import Node  # type: ignore[import-not-found]
+
+    context = Context()
+    rclpy.init(context=context)
+    node = Node("dataset_preview_startup_gate", context=context)
+    executor = SingleThreadedExecutor(context=context)
+    executor.add_node(node)
+    deadline = time.monotonic() + timeout_s
+    try:
+        while time.monotonic() < deadline:
+            names = {
+                f"{namespace.rstrip('/')}/{name}"
+                for name, namespace in node.get_node_names_and_namespaces()
+            }
+            if node_path in names:
+                return
+            executor.spin_once(timeout_sec=0.1)
+    finally:
+        executor.remove_node(node)
+        executor.shutdown()
+        node.destroy_node()
+        context.shutdown()
+    raise RuntimeError(f"ROS startup node did not appear: {node_path}")
 
 
 def _maximum_abs_error(left: object, right: object) -> float:
@@ -545,6 +587,31 @@ def main(argv: list[str] | None = None) -> int:
         local_binding=args.local_runtime_binding,
         verify_artifacts=args.verify_artifacts,
     )
+    hand_revisions = {
+        instance.asset.revision
+        for instance in resolved.session.instances
+        if instance.asset.product == "wuji_hand_2"
+    }
+    requires_matched_chain = hand_revisions == {"beta1_description_v2026_8_3"}
+    if requires_matched_chain != (args.chain_preflight is not None):
+        raise SystemExit(
+            "Description 8.3 preview requires --chain-preflight and historical entries forbid it"
+        )
+    chain_preflight: Mapping[str, object] | None = None
+    workcell_plan = None
+    if args.chain_preflight is not None:
+        try:
+            chain_preflight = load_record_chain_preflight_receipt(
+                args.chain_preflight
+            )
+            workcell_plan = resolve_record_chain_workcell_plan(
+                ROOT,
+                resolved,
+                chain_preflight,
+                verify_content=args.verify_artifacts,
+            )
+        except (FileNotFoundError, ValueError) as exc:
+            raise SystemExit(f"record-chain preview preflight failed: {exc}") from exc
     profile_ref = resolved.session.session.dataset_profile
     if profile_ref is None:
         raise SystemExit("live preview requires a dataset Session")
@@ -592,9 +659,23 @@ def main(argv: list[str] | None = None) -> int:
     source_urdf = (ROOT / alignment.source_urdf_path).resolve()
     if sha256_file(source_urdf) != alignment.source_urdf_sha256:
         raise SystemExit("live preview source-locked NERO URDF hash drifted")
-    qualification = load_nero_dual_tabletop_qualification_profile(
+    qualification = load_nero_dual_simulation_startup_profile(
         ROOT / resolved.control_profile.base_qualification.path
     )
+
+    if args.wait_for_node:
+        print(
+            f"DATASET LIVE PREVIEW WAITING: node={args.wait_for_node}",
+            flush=True,
+        )
+        _wait_for_ros_node(
+            args.wait_for_node,
+            timeout_s=PREVIEW_CONSUMER_WAIT_TIMEOUT_S,
+        )
+        print(
+            f"DATASET LIVE PREVIEW RELEASED: node={args.wait_for_node}",
+            flush=True,
+        )
 
     from isaacsim import SimulationApp  # type: ignore[import-not-found]
 
@@ -766,6 +847,7 @@ def main(argv: list[str] | None = None) -> int:
     multi_tick_rendering_enabled = carb.settings.get_settings().get_as_bool(
         "/rtx/hydra/supportMultiTickRate"
     )
+    background_color_readback: tuple[float, float, float] | None = None
     passed = False
     acceptance_failures: list[str] = []
 
@@ -791,7 +873,24 @@ def main(argv: list[str] | None = None) -> int:
             self_collision_sides=frozenset(),
             wrist_rig_collision_mode="all",
             visual_replay_only=True,
+            workcell_plan=workcell_plan,
         )
+        preview_settings = carb.settings.get_settings()
+        preview_settings.set_float_array(
+            "/rtx/background/source/color",
+            list(PREVIEW_BACKGROUND_COLOR_RGB),
+        )
+        background_color_readback = tuple(
+            float(value)
+            for value in preview_settings.get("/rtx/background/source/color")
+        )
+        if not np.allclose(
+            background_color_readback,
+            PREVIEW_BACKGROUND_COLOR_RGB,
+            rtol=0.0,
+            atol=1e-6,
+        ):
+            raise RuntimeError("operator preview background override was not applied")
         if not scene.visual_replay_only or scene.articulations:
             raise RuntimeError("live preview materialized an active articulation runtime")
         simulation_manager_physics_view_active = (
@@ -1404,6 +1503,7 @@ def main(argv: list[str] | None = None) -> int:
             "source_state_applied": source_frames_applied > 0,
             "active_frames_rendered": rendered_active_frames >= 2,
             "render_schedule_closed": missed_render_periods == 0,
+            "render_under_50_ms": render_max_ns < PREVIEW_RENDER_BUDGET_NS,
             "effective_render_rate": (abs(render_effective_hz - PREVIEW_HZ) / PREVIEW_HZ <= 0.05),
             "complete_link_inventory": source_kinematic_link_count > 14,
             "visual_only_scene": (
@@ -1499,6 +1599,24 @@ def main(argv: list[str] | None = None) -> int:
             "role": "passive_external_gui_preview",
             "control_authority": False,
             "recorded_to_mcap": False,
+            "record_chain_task_scene": (
+                None
+                if chain_preflight is None
+                else chain_preflight.get("task_scene")
+            ),
+            "scene": (
+                None
+                if scene is None
+                else scene.workcell_materialization.to_mapping()
+            ),
+            "background_color_rgb_requested": list(
+                PREVIEW_BACKGROUND_COLOR_RGB
+            ),
+            "background_color_rgb_readback": (
+                None
+                if background_color_readback is None
+                else list(background_color_readback)
+            ),
             "transform_sync": PREVIEW_TRANSFORM_SYNC,
             "pose_replay_backend": PREVIEW_POSE_REPLAY_BACKEND,
             "pose_write_backend": PREVIEW_POSE_BACKEND,
@@ -1546,6 +1664,7 @@ def main(argv: list[str] | None = None) -> int:
                 else None
             ),
             "render_max_ms": render_max_ns / 1_000_000,
+            "render_budget_ms": PREVIEW_RENDER_BUDGET_NS / 1_000_000,
             "slow_render_events": slow_render_events,
             "pose_apply_mean_ms": (
                 pose_apply_total_ns / source_frames_applied / 1_000_000

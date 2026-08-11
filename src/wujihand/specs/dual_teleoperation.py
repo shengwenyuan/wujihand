@@ -255,7 +255,7 @@ class DualTeleoperationProfile:
     hand_supervision: DualSupervisorPolicy
 
     expected_schema: ClassVar[str] = DUAL_TELEOPERATION_PROFILE_SCHEMA
-    expected_profile_id: ClassVar[str] = DUAL_TELEOPERATION_PROFILE_ID
+    expected_profile_id: ClassVar[str | None] = None
     expected_status: ClassVar[str] = DUAL_TELEOPERATION_PROFILE_STATUS
     expected_transport_contract: ClassVar[str] = DUAL_TELEOPERATION_CONTRACT
 
@@ -294,7 +294,7 @@ class DualTeleoperationProfile:
             data["profile_id"],
             field=f"{field}.profile_id",
         )
-        if profile_id != cls.expected_profile_id:
+        if cls.expected_profile_id is not None and profile_id != cls.expected_profile_id:
             raise ValueError(
                 f"{field}.profile_id must be {cls.expected_profile_id!r}"
             )

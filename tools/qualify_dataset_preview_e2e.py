@@ -7,10 +7,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -18,13 +17,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from wujihand.runtime import new_run_id
 
-from tools.validate_dataset_preview_fixture_qualification import validate
-
-
 DEFAULT_DEPLOYMENT = (
     "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml"
 )
 DEFAULT_LOCAL_BINDING = "configs/local/workstation2_nv5_ros_v2.yaml"
+PREVIEW_VALIDATOR = ROOT / "tools/validate_dataset_preview_fixture_qualification.py"
 
 
 def main() -> int:
@@ -35,6 +32,10 @@ def main() -> int:
     parser.add_argument(
         "--matched-chain-binding",
         help="Required by the explicit Description 8.3 deployment.",
+    )
+    parser.add_argument(
+        "--record-chain-qualification",
+        help="Versioned record-chain policy for the selected deployment.",
     )
     args = parser.parse_args()
     run_id = args.run_id or new_run_id(prefix="dataset-preview-qual")
@@ -57,6 +58,11 @@ def main() -> int:
     ]
     if args.matched_chain_binding:
         command.append(f"matched_chain_binding:={args.matched_chain_binding}")
+    if args.record_chain_qualification:
+        command.append(
+            "record_chain_qualification:="
+            f"{args.record_chain_qualification}"
+        )
     environment = os.environ.copy()
     python_paths = (
         str(ROOT),
@@ -68,30 +74,37 @@ def main() -> int:
         (*python_paths, *(() if not inherited_python_path else (inherited_python_path,)))
     )
     launch = subprocess.run(command, cwd=ROOT, check=False, env=environment)
+    validation = subprocess.run(
+        ["python3", str(PREVIEW_VALIDATOR), "--run-root", str(run_root)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+    destination = run_root / "qualification/receipt.json"
     try:
-        result = validate(run_root)
-    except BaseException as exc:
+        result = json.loads(destination.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
         print(
             f"DATASET PREVIEW QUALIFICATION FAILED: run_id={run_id} "
             f"error={type(exc).__name__}:{exc}",
             flush=True,
         )
         return 2
-    destination = run_root / "qualification/receipt.json"
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(".json.tmp")
-    temporary.write_text(
-        json.dumps(result, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(destination)
     print(
         "DATASET PREVIEW QUALIFICATION "
         f"{'PASSED' if result['passed'] else 'FAILED'}: "
         f"run_id={run_id} failures={result['failures']} root={run_root}",
         flush=True,
     )
-    return 0 if launch.returncode == 0 and result["passed"] else 2
+    return (
+        0
+        if launch.returncode == 0
+        and validation.returncode == 0
+        and result["passed"]
+        else 2
+    )
 
 
 if __name__ == "__main__":

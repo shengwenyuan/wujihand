@@ -36,6 +36,8 @@ class NeroDualSimulationStartupProfile:
     status: str
     initial_arm_positions: tuple[NeroSimulationInitialArmPosition, ...]
     arm_drive_gains: NeroSimulationArmDriveGains
+    initial_q7_max_error_rad: float
+    teleport_to_initial_position: bool
     assumptions: tuple[str, ...]
 
     def initial_position(
@@ -54,9 +56,50 @@ class NeroDualSimulationStartupProfile:
 def load_nero_dual_simulation_startup_profile(
     path: str | Path,
 ) -> NeroDualSimulationStartupProfile:
-    raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(raw, Mapping) or raw.get("schema") != SCHEMA:
-        raise ValueError(f"NERO startup profile schema must be {SCHEMA!r}")
+    profile_path = Path(path)
+    raw = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, Mapping):
+        raise ValueError("NERO startup profile must be a mapping")
+    if raw.get("schema") != SCHEMA:
+        from .nero_tabletop import (
+            NERO_DUAL_TABLETOP_QUALIFICATION_SCHEMA,
+            load_nero_dual_tabletop_qualification_profile,
+        )
+
+        if raw.get("schema") != NERO_DUAL_TABLETOP_QUALIFICATION_SCHEMA:
+            raise ValueError(f"NERO startup profile schema must be {SCHEMA!r}")
+        tabletop = load_nero_dual_tabletop_qualification_profile(profile_path)
+        return NeroDualSimulationStartupProfile(
+            profile_id=tabletop.profile_id,
+            status=tabletop.status,
+            initial_arm_positions=tuple(
+                NeroSimulationInitialArmPosition(
+                    instance_id=item.instance_id,
+                    group_id=item.group_id,
+                    layout_id=item.layout_id,
+                    q7_rad=item.q7_rad,
+                )
+                for item in tabletop.initial_arm_positions
+            ),
+            arm_drive_gains=NeroSimulationArmDriveGains(
+                stiffness=tabletop.arm_drive_gains.stiffness,
+                damping=tabletop.arm_drive_gains.damping,
+            ),
+            initial_q7_max_error_rad=(
+                tabletop.thresholds.initial_q7_max_error_rad
+            ),
+            teleport_to_initial_position=False,
+            assumptions=tabletop.assumptions,
+        )
+
+    initial_q7_max_error_rad = float(
+        cast(Any, raw["initial_q7_max_error_rad"])
+    )
+    if not 0.0 < initial_q7_max_error_rad <= np.pi:
+        raise ValueError("NERO startup initial q7 error limit must be in (0, pi]")
+    teleport_to_initial_position = raw["teleport_to_initial_position"]
+    if type(teleport_to_initial_position) is not bool:
+        raise ValueError("NERO startup teleport policy must be a bool")
 
     positions = tuple(_position(item) for item in raw["initial_arm_positions"])
     routes = {
@@ -83,6 +126,8 @@ def load_nero_dual_simulation_startup_profile(
             stiffness=stiffness,
             damping=damping,
         ),
+        initial_q7_max_error_rad=initial_q7_max_error_rad,
+        teleport_to_initial_position=teleport_to_initial_position,
         assumptions=tuple(str(item) for item in raw["assumptions"]),
     )
 

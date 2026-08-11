@@ -3,7 +3,7 @@ profile_id: isaac_dual_nero_tframe_candidate_20260811_v1
 import_id: dual_nero_tframe
 scene:
   source: dual-nero-tframe-isaac-6-0-1-v1
-  source_revision: sha256:2a639aad11d8e22bf3395d9573fcd69dbd8d2ab2a4d9aec09a4e6d17ff2232d9
+  source_revision: sha256:d88b8ae269b236f768df7dfa67696fc4329f4cf2f289c0dac7402014eaffbdef
   path: tframe.usda
   expected_sha256: 0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af
 composition: reference
@@ -32,4 +32,4 @@ expectations:
   default_prim: TFrame
   meters_per_unit: 1.0
   up_axis: Z
-  min_colliders: 42
+  min_colliders: 14

@@ -46,7 +46,7 @@ collision:
   qhull_joggle: false
   convex_hull_max_volume_ratio: 2.0
   concave_fallback: static_triangle_mesh
-  minimum_source_solid_volume_mm3: 0.001
+  minimum_source_solid_volume_mm3: 500.0
 brep_acceptance:
   included_shape_policy: allow_invalid_aggregate_only_when_solids_and_shells_are_valid
   allowed_non_solid_statuses:
@@ -70,6 +70,7 @@ toolchain:
 assumptions:
   - generated_asset_is_static_workcell_geometry_not_a_robot_assembly
   - no_nero_hand2_camera_power_cable_connector_or_fastener_geometry_is_emitted
+  - collision_omits_sub_500_mm3_detail_solids_while_visual_retains_them
   - provisional_mount_witness_frames_are_report_only_and_not_accepted_workcell_mounts
   - left_right_assignment_requires_physical_installation_evidence
   - pinned_nero_urdf_usd_kinematics_and_limits_are_not_modified

@@ -44,6 +44,16 @@ def _mapping(value: object, *, field: str) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
+def _contains_fields(
+    value: object,
+    expected: dict[str, object] | None,
+) -> bool:
+    return expected is None or (
+        isinstance(value, dict)
+        and all(value.get(key) == item for key, item in expected.items())
+    )
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     return _mapping(json.loads(path.read_text(encoding="utf-8")), field=str(path))
 
@@ -71,6 +81,14 @@ def _expected_preview_component_source_counts(
             (
                 "configs/assemblies/"
                 "nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_8_3_v1.yaml"
+            ),
+        ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
+        (
+            "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1",
+            "isaac_nero_dual_hand2_tframe_triview_q54_v2026_8_3_v1",
+            (
+                "configs/assemblies/"
+                "nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1.yaml"
             ),
         ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
     }
@@ -291,6 +309,36 @@ def validate(run_root: Path) -> dict[str, Any]:
         preview.get("component_renderable_motion_passed"),
         field="preview component renderable motion passed",
     )
+    expected_task_scene = (
+        {
+            "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
+            "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+        }
+        if deployment_manifest.get("deployment_id")
+        == "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1"
+        else None
+    )
+    resolved_control = _mapping(
+        manifest.get("resolved_control_artifacts"),
+        field="manifest resolved control artifacts",
+    )
+    raw_record_chain = resolved_control.get("record_chain_preflight")
+    record_chain = (
+        {}
+        if raw_record_chain is None
+        else _mapping(
+            raw_record_chain,
+            field="manifest record-chain preflight",
+        )
+    )
+    main_scene_plan = _mapping(
+        _mapping(manifest.get("scene"), field="manifest scene").get("plan"),
+        field="manifest scene plan",
+    )
+    preview_scene_plan = _mapping(
+        _mapping(preview.get("scene"), field="preview scene").get("plan"),
+        field="preview scene plan",
+    )
     acceptance = {
         "fixture_profile": (
             fixture.get("passed") is True
@@ -333,6 +381,26 @@ def validate(run_root: Path) -> dict[str, Any]:
             preview.get("passed") is True
             and int(preview.get("missed_render_periods", -1)) == 0
             and abs(float(preview.get("effective_render_hz", 0.0)) - 20.0) / 20.0 <= 0.05
+        ),
+        "task_scene_and_preview_visual_policy": (
+            _contains_fields(record_chain.get("task_scene"), expected_task_scene)
+            and (
+                expected_task_scene is None
+                or preview.get("record_chain_task_scene")
+                == record_chain.get("task_scene")
+            )
+            and (
+                expected_task_scene is None
+                or main_scene_plan.get("task_scene_profile_id")
+                == expected_task_scene["profile_id"]
+            )
+            and (
+                expected_task_scene is None
+                or preview_scene_plan.get("task_scene_profile_id")
+                == expected_task_scene["profile_id"]
+            )
+            and preview.get("background_color_rgb_readback") == [0.3, 0.3, 0.3]
+            and float(preview.get("render_max_ms", math.inf)) < 50.0
         ),
         "preview_q54_four_group_motion": all(
             float(preview_groups.get(group, 0.0)) >= MIN_GROUP_DELTA_RAD for group in q54_ranges

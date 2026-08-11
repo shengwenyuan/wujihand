@@ -50,6 +50,12 @@ from .nero_tabletop import (
     NeroTabletopThresholds,
     load_nero_dual_tabletop_qualification_profile,
 )
+from .nero_startup import (
+    NeroDualSimulationStartupProfile,
+    NeroSimulationArmDriveGains,
+    NeroSimulationInitialArmPosition,
+    load_nero_dual_simulation_startup_profile,
+)
 from .q27_execution import IsaacQ27ExecutionAdapter, Q27Articulation
 from .hand2_rotation_mount import (
     Hand2RotationMountConfig,
@@ -91,6 +97,9 @@ __all__ = [
     "NeroLinkGeometryAlignment",
     "NeroLinkGeometryAlignmentHandles",
     "NeroDualTabletopQualificationProfile",
+    "NeroDualSimulationStartupProfile",
+    "NeroSimulationArmDriveGains",
+    "NeroSimulationInitialArmPosition",
     "NeroTabletopArmDriveGains",
     "NeroTabletopGeometryContract",
     "NeroTabletopInitialArmPosition",
@@ -109,6 +118,7 @@ __all__ = [
     "load_fr3_model_profile",
     "load_hand2_model_profile",
     "load_nero_dual_tabletop_qualification_profile",
+    "load_nero_dual_simulation_startup_profile",
     "load_nero_link_geometry_alignment",
     "principal_axes_joint_frame_quaternion",
     "quaternion_wxyz_to_d6_rpy_degrees",

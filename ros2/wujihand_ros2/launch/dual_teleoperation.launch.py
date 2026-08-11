@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -17,6 +17,7 @@ from launch.actions import (
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
+from wujihand_ros2.recording import recording_topics, source_topics
 
 from wujihand.runtime import (
     RosDeploymentResolver,
@@ -24,7 +25,6 @@ from wujihand.runtime import (
     parse_cpu_affinity,
     run_root,
 )
-from wujihand_ros2.recording import recording_topics, source_topics
 
 
 DATASET_PREVIEW_CPU_AFFINITY = "16-27"
@@ -229,6 +229,11 @@ def _processes(context: object) -> list[object]:
             )
         )
     consumer = resolved.local_binding.process("isaac_consumer")
+    consumer_node_name = next(
+        binding.node_name
+        for binding in resolved.deployment.node_bindings
+        if binding.process_id == "isaac_consumer"
+    )
     consumer_command = [
         consumer.executable,
         str(project_root / "tools/run_isaac_nero_hand2_ros.py"),
@@ -271,22 +276,29 @@ def _processes(context: object) -> list[object]:
     if split_dataset_preview:
         # Dataset RGB remains offline.  This second Isaac process is a passive
         # latest-state operator view, isolated from the 120/60 Hz owner.
+        preview_command = [
+            consumer.executable,
+            str(project_root / "tools/run_isaac_dataset_live_preview.py"),
+            "--deployment",
+            deployment_path,
+            "--local-runtime-binding",
+            local_path,
+            "--run-id",
+            current_run_id,
+            "--run-root",
+            str(current_run_root),
+            "--cpu-affinity",
+            DATASET_PREVIEW_CPU_AFFINITY,
+            "--wait-for-node",
+            f"{namespace}/{consumer_node_name}",
+        ]
+        if chain_preflight_path is not None:
+            preview_command.extend(
+                ["--chain-preflight", str(chain_preflight_path)]
+            )
         actions.append(
             ExecuteProcess(
-                cmd=[
-                    consumer.executable,
-                    str(project_root / "tools/run_isaac_dataset_live_preview.py"),
-                    "--deployment",
-                    deployment_path,
-                    "--local-runtime-binding",
-                    local_path,
-                    "--run-id",
-                    current_run_id,
-                    "--run-root",
-                    str(current_run_root),
-                    "--cpu-affinity",
-                    DATASET_PREVIEW_CPU_AFFINITY,
-                ],
+                cmd=preview_command,
                 name="dataset_live_preview",
                 output="screen",
                 sigterm_timeout="12",

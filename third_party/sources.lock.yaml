@@ -110,23 +110,23 @@ sources:
       dual_nero_Tframe.STEP: 3cf8f2388649de17470e67db920077c8b6cd778cf80c2536d42f3ccacd0a7dc5
   - name: dual-nero-tframe-isaac-6-0-1-v1
     kind: generated
-    sha256: 2a639aad11d8e22bf3395d9573fcd69dbd8d2ab2a4d9aec09a4e6d17ff2232d9
+    sha256: d88b8ae269b236f768df7dfa67696fc4329f4cf2f289c0dac7402014eaffbdef
     generated_at: 2026-08-11
     generated_by: tools/import_dual_nero_tframe_step_to_usd.py
     generator_sha256: 454e4e445922c44263accf7fde3c4b7cd2686e1229cfeefe5df27e879c0b33e9
     generator_recipe: configs/profiles/dual_nero_tframe_isaac_6_0_1_import_v1.yaml
-    generator_recipe_sha256: e57f5650c8161ac03f2fc628a78387cfed27509a9b83fc4928ba0e1240583344
+    generator_recipe_sha256: 42e95dab0947b5122f29d1ec4689c58c12399b3cbbb4caebf07633ee5105dc3b
     selection_manifest: configs/profiles/dual_nero_tframe_step_selection_v1.yaml
     selection_manifest_sha256: a32da5d822452938d74e5e686eb88c7dc5cb0726da0a9d9e1bdfa200f6aef179
     inventory_identity_sha256: 6640a895f8306afa0ca29635bbe54abae31f43055f55fb22e3868dc1402ce359
-    semantic_identity_sha256: 2a639aad11d8e22bf3395d9573fcd69dbd8d2ab2a4d9aec09a4e6d17ff2232d9
+    semantic_identity_sha256: d88b8ae269b236f768df7dfa67696fc4329f4cf2f289c0dac7402014eaffbdef
     derived_from: dual-nero-tframe-step-2026-08-07@3cf8f2388649de17470e67db920077c8b6cd778cf80c2536d42f3ccacd0a7dc5
     redistribution: prohibited_from_normal_git_by_project_policy
-    local_runtime_path: artifacts/derived/isaac/6.0.1/dual-nero-tframe/v1/candidate-20260811-v1-a
+    local_runtime_path: artifacts/derived/isaac/6.0.1/dual-nero-tframe/v1/candidate-20260811-v1-b
     artifacts:
       tframe.usda: 0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af
       tframe_visual.usdc: ed6eade87adc2d42a4b45d2c75a64df1c67b5c07276add84966f71b6c844cda8
-      tframe_collision.usdc: 7008af6c8f9155a6c6863a08fa86f86adbfd8c842d3fd0aa6fb5fa894dc65525
+      tframe_collision.usdc: b4c45479da14bd6b3d0ea124be5e9243bd22f4c0dd64006fb046b01db6a155e8
   - name: wuji-description-v2026-6-27
     kind: git
     url: https://github.com/wuji-technology/wuji-description.git

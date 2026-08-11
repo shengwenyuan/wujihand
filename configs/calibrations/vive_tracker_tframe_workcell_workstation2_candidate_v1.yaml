@@ -1,0 +1,17 @@
+schema: wujihand.tracker_workcell_mapping.v1
+mapping_id: vive_tracker_tframe_workcell_workstation2_candidate_v1
+tracking_frame: vive_tracking
+workcell_frame: world
+# Candidate for fixture qualification only: operator right = Tracker -Z,
+# T-frame front (+Y, AGILE X side) = Tracker -X, up = Tracker +Y.
+tracker_to_workcell:
+  - [0.0, 0.0, -1.0]
+  - [-1.0, 0.0, 0.0]
+  - [0.0, 1.0, 0.0]
+translation_scale: 1.0
+max_translation_delta_m: 0.4
+rotation_scale: 1.0
+max_rotation_delta_deg: 15.0
+relative_rotation_semantics: workcell_spatial_delta
+scope: simulation_only
+provenance: workstation2_tframe_front_plus_y_candidate_2026_08_11

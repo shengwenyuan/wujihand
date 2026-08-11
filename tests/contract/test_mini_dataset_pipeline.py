@@ -82,6 +82,8 @@ def test_control_and_renderer_clis_expose_no_camera_or_physical_lens_switch() ->
         "--run-id",
         "--run-root",
         "--cpu-affinity",
+        "--chain-preflight",
+        "--wait-for-node",
         "--verify-artifacts",
     }
 
@@ -104,6 +106,7 @@ def test_008_runner_and_launch_select_dataset_facts_without_online_rgb() -> None
     assert "--external-preview-required" in launch
     assert "run_isaac_dataset_live_preview.py" in launch
     assert 'DATASET_PREVIEW_CPU_AFFINITY = "16-27"' in launch
+    assert '"--wait-for-node"' in launch
     assert 'DATASET_AUXILIARY_CPU_AFFINITY = "28-31"' in launch
     assert 'return ["/usr/bin/taskset", "--cpu-list", cpu_affinity, *command]' in launch
     assert 'OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"' in runner

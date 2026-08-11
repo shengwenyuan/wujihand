@@ -1,0 +1,29 @@
+schema: wujihand.dual_teleoperation_profile.v1
+profile_id: isaac_nero_hand2_dual_teleoperation_tframe_v1
+status: simulation_live_pending_ros_hil
+base_qualification:
+  path: configs/profiles/isaac_nero_dual_tframe_inspection_startup_v1.yaml
+  expected_id: isaac_nero_dual_tframe_inspection_startup_v1
+transport_contract: wujihand.dual_teleoperation.v1
+physics_hz: 120
+tracker:
+  stable_after_s: 0.25
+  max_sample_gap_s: 0.25
+  stale_after_s: 0.25
+  minimum_quality: 0.5
+  max_consecutive_ik_failures: 5
+kinematics:
+  adapter_id: isaac_lula_q7_v1
+  end_effector_frame: link7
+  position_tolerance_m: 0.002
+  orientation_tolerance_rad: 0.02
+arm_supervision:
+  stale_after_s: 0.25
+  velocity_scale: 0.20
+glove:
+  max_observation_age_s: 0.25
+  minimum_landmark_confidence: 0.0
+  success_landmark_confidence: 0.60
+hand_supervision:
+  stale_after_s: 0.25
+  velocity_scale: 1.0

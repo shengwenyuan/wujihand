@@ -18,6 +18,11 @@ from wujihand.specs.common import (
     validate_project_reference,
 )
 
+from .config_repository import ConfigRepository
+from .isaac_workcell_plan import (
+    ResolvedIsaacWorkcellPlan,
+    resolve_isaac_workcell_plan,
+)
 from .ros_deployment_resolver import ResolvedRosDeployment, RosDeploymentResolver
 from .source_lock import sha256_file
 from .wuji_hand2_matched_chain import (
@@ -122,12 +127,19 @@ class RecordChainNeroPolicy:
     attachment: PoseSpec
     parent_frame: str
     child_frame: str
+    assembly_attachment_quaternions: tuple[
+        tuple[HandSide, tuple[float, float, float, float]], ...
+    ] | None
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str) -> Self:
+        optional_key = "assembly_attachment_quat_wxyz_by_side"
         data = require_exact_mapping(
             value,
-            expected=frozenset({"asset_id", "binding_id", "profile_id", "attachment"}),
+            expected=frozenset(
+                {"asset_id", "binding_id", "profile_id", "attachment"}
+                | ({optional_key} if isinstance(value, Mapping) and optional_key in value else set())
+            ),
             field=field,
         )
         attachment = require_exact_mapping(
@@ -136,6 +148,15 @@ class RecordChainNeroPolicy:
                 {"parent_frame", "child_frame", "position_m", "quat_wxyz"}
             ),
             field=f"{field}.attachment",
+        )
+        raw_quaternions = (
+            None
+            if optional_key not in data
+            else require_exact_mapping(
+                data[optional_key],
+                expected=frozenset({"left", "right"}),
+                field=f"{field}.{optional_key}",
+            )
         )
         return cls(
             asset_id=validate_identifier(data["asset_id"], field=f"{field}.asset_id"),
@@ -158,7 +179,34 @@ class RecordChainNeroPolicy:
             child_frame=validate_identifier(
                 attachment["child_frame"], field=f"{field}.attachment.child_frame"
             ),
+            assembly_attachment_quaternions=(
+                None
+                if raw_quaternions is None
+                else tuple(
+                    (
+                        side,
+                        PoseSpec.from_mapping(
+                            {
+                                "position_m": [0.0, 0.0, 0.0],
+                                "quat_wxyz": raw_quaternions[side.value],
+                            },
+                            field=f"{field}.{optional_key}.{side.value}",
+                        ).quat_wxyz,
+                    )
+                    for side in HandSide
+                )
+            ),
         )
+
+    def assembly_attachment_quaternion(
+        self, side: HandSide
+    ) -> tuple[float, float, float, float] | None:
+        if self.assembly_attachment_quaternions is None:
+            return None
+        for candidate, quaternion in self.assembly_attachment_quaternions:
+            if candidate is side:
+                return quaternion
+        raise KeyError(side)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,12 +215,14 @@ class RecordChainQualificationPolicy:
     matched_chain: ConfigRef
     deployment: ConfigRef
     assembly: ConfigRef
+    task_scene: ConfigRef | None
     description: RecordChainDescriptionPolicy
     nero: RecordChainNeroPolicy
     required_sdk_processes: tuple[str, ...]
 
     @classmethod
     def from_mapping(cls, value: object) -> Self:
+        optional_key = "task_scene"
         data = require_exact_mapping(
             value,
             expected=frozenset(
@@ -186,6 +236,7 @@ class RecordChainQualificationPolicy:
                     "nero",
                     "required_sdk_processes",
                 }
+                | ({optional_key} if isinstance(value, Mapping) and optional_key in value else set())
             ),
             field="record_chain_qualification",
         )
@@ -222,6 +273,14 @@ class RecordChainQualificationPolicy:
             assembly=ConfigRef.from_mapping(
                 data["assembly"], field="record_chain_qualification.assembly"
             ),
+            task_scene=(
+                None
+                if optional_key not in data
+                else ConfigRef.from_mapping(
+                    data[optional_key],
+                    field="record_chain_qualification.task_scene",
+                )
+            ),
             description=RecordChainDescriptionPolicy.from_mapping(
                 data["description"], field="record_chain_qualification.description"
             ),
@@ -253,6 +312,20 @@ class RecordChainProcessReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class RecordChainTaskSceneReceipt:
+    path: str
+    profile_id: str
+    sha256: str
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            "path": self.path,
+            "profile_id": self.profile_id,
+            "sha256": self.sha256,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class RecordChainPreflightReceipt:
     qualification_id: str
     input_mode: str
@@ -265,6 +338,7 @@ class RecordChainPreflightReceipt:
     assembly_path: str
     assembly_id: str
     assembly_sha256: str
+    task_scene: RecordChainTaskSceneReceipt | None
     dataset_profile_id: str
     q54_profile_id: str
     dataset_source_mode: str
@@ -294,6 +368,9 @@ class RecordChainPreflightReceipt:
                 "assembly_id": self.assembly_id,
                 "assembly_sha256": self.assembly_sha256,
             },
+            "task_scene": (
+                None if self.task_scene is None else self.task_scene.to_mapping()
+            ),
             "dataset": {
                 "profile_id": self.dataset_profile_id,
                 "q54_profile_id": self.q54_profile_id,
@@ -427,6 +504,7 @@ def preflight_wuji_hand2_record_chain(
     )
     _validate_local_glove_bindings(resolved, side_receipts)
     _validate_description_and_nero(root, policy, resolved)
+    task_scene = _resolve_task_scene_identity(root, policy, resolved)
 
     return RecordChainPreflightReceipt(
         qualification_id=policy.qualification_id,
@@ -440,6 +518,7 @@ def preflight_wuji_hand2_record_chain(
         assembly_path=resolved.session.assembly_path,
         assembly_id=resolved.session.assembly.assembly_id,
         assembly_sha256=sha256_file(root / resolved.session.assembly_path),
+        task_scene=task_scene,
         dataset_profile_id=dataset_profile.profile_id,
         q54_profile_id=dataset_profile.q54.profile_id,
         dataset_source_mode=(
@@ -526,10 +605,12 @@ def _validate_description_and_nero(
         if len(attachments) != 1:
             raise RuntimeError(f"{side.value} NERO-to-Hand2 attachment is not unique")
         attachment = attachments[0]
-        expected_quaternion = _quaternion_product(
-            policy.nero.attachment.quat_wxyz,
-            policy.description.root_orientation_compensation(side),
-        )
+        expected_quaternion = policy.nero.assembly_attachment_quaternion(side)
+        if expected_quaternion is None:
+            expected_quaternion = _quaternion_product(
+                policy.nero.attachment.quat_wxyz,
+                policy.description.root_orientation_compensation(side),
+            )
         if (
             attachment.parent.frame != policy.nero.parent_frame
             or attachment.child.frame != policy.nero.child_frame
@@ -540,6 +621,106 @@ def _validate_description_and_nero(
             )
         ):
             raise RuntimeError(f"{side.value} NERO-to-Hand2 attachment differs")
+
+
+def _resolve_task_scene_identity(
+    root: Path,
+    policy: RecordChainQualificationPolicy,
+    resolved: ResolvedRosDeployment,
+) -> RecordChainTaskSceneReceipt | None:
+    if policy.task_scene is None:
+        return None
+    repository = ConfigRepository(root)
+    path = repository.resolve_project_path(
+        policy.task_scene.path,
+        field="record chain task scene",
+    )
+    profile = repository.load_isaac_task_scene_profile(path)
+    if profile.profile_id != policy.task_scene.expected_id:
+        raise RuntimeError("record chain task-scene identity differs")
+    plan = resolve_isaac_workcell_plan(
+        root,
+        resolved.session.workcell,
+        task_scene=policy.task_scene.path,
+        verify_content=False,
+    )
+    if plan.task_scene_profile_id != profile.profile_id:
+        raise RuntimeError("record chain task scene does not compose with the Workcell")
+    return RecordChainTaskSceneReceipt(
+        path=policy.task_scene.path,
+        profile_id=profile.profile_id,
+        sha256=sha256_file(path),
+    )
+
+
+def load_record_chain_preflight_receipt(path: str | Path) -> Mapping[str, object]:
+    import json
+
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"record-chain preflight receipt is unreadable: {exc}") from exc
+    dataset = document.get("dataset") if isinstance(document, Mapping) else None
+    if (
+        not isinstance(document, Mapping)
+        or document.get("schema") != PREFLIGHT_RECEIPT_SCHEMA
+        or document.get("passed") is not True
+        or document.get("device_access_attempted") is not False
+        or document.get("isaac_started") is not False
+        or not isinstance(dataset, Mapping)
+        or dataset.get("qualification_only") is not True
+        or dataset.get("dataset_eligible") is not False
+    ):
+        raise ValueError("record-chain preflight receipt is not a passed offline receipt")
+    return document
+
+
+def resolve_record_chain_workcell_plan(
+    project_root: str | Path,
+    resolved: ResolvedRosDeployment,
+    receipt: Mapping[str, object],
+    *,
+    verify_content: bool,
+) -> ResolvedIsaacWorkcellPlan | None:
+    deployment = receipt.get("deployment")
+    if (
+        not isinstance(deployment, Mapping)
+        or deployment.get("deployment_id") != resolved.deployment.deployment_id
+        or deployment.get("deployment_hash") != resolved.deployment_hash
+        or deployment.get("local_binding_hash") != resolved.local_binding_hash
+        or deployment.get("session_id") != resolved.session.session.session_id
+        or deployment.get("session_hash") != resolved.session.session_hash
+        or deployment.get("assembly_id") != resolved.session.assembly.assembly_id
+    ):
+        raise ValueError("record-chain preflight receipt does not close this runtime")
+    raw_task_scene = receipt.get("task_scene")
+    if raw_task_scene is None:
+        return None
+    task_scene = require_exact_mapping(
+        raw_task_scene,
+        expected=frozenset({"path", "profile_id", "sha256"}),
+        field="record-chain preflight task_scene",
+    )
+    path = validate_project_reference(
+        task_scene["path"],
+        field="record-chain preflight task_scene.path",
+    )
+    profile_id = validate_identifier(
+        task_scene["profile_id"],
+        field="record-chain preflight task_scene.profile_id",
+    )
+    scene_path = Path(project_root).resolve() / path
+    if sha256_file(scene_path) != task_scene["sha256"]:
+        raise ValueError("record-chain task-scene configuration changed after preflight")
+    plan = resolve_isaac_workcell_plan(
+        project_root,
+        resolved.session.workcell,
+        task_scene=path,
+        verify_content=verify_content,
+    )
+    if plan.task_scene_profile_id != profile_id or plan.task_scene_profile_path != path:
+        raise ValueError("record-chain task-scene identity differs from the resolved plan")
+    return plan
 
 
 def _quaternion_product(
@@ -574,6 +755,9 @@ __all__ = [
     "QUALIFICATION_SCHEMA",
     "RecordChainPreflightReceipt",
     "RecordChainQualificationPolicy",
+    "RecordChainTaskSceneReceipt",
+    "load_record_chain_preflight_receipt",
     "load_record_chain_qualification_policy",
     "preflight_wuji_hand2_record_chain",
+    "resolve_record_chain_workcell_plan",
 ]

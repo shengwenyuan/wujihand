@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from wujihand.domain import HAND2_LAYOUT_IDS, HandSide
 from wujihand.runtime.wuji_hand2_matched_chain import (
     MatchedChainPreflightReceipt,
@@ -22,6 +24,16 @@ DEPLOYMENT = (
     ROOT
     / "configs/deployments/"
     "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
+)
+TFRAME_POLICY = (
+    ROOT
+    / "configs/qualifications/"
+    "isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
+)
+TFRAME_DEPLOYMENT = (
+    ROOT
+    / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
 )
 
 
@@ -159,9 +171,26 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
     assert policy.required_sdk_processes == ("glove_source", "isaac_consumer")
 
 
+@pytest.mark.parametrize(
+    ("policy_path", "deployment_path", "expected_task_scene"),
+    (
+        (POLICY, DEPLOYMENT, None),
+        (
+            TFRAME_POLICY,
+            TFRAME_DEPLOYMENT,
+            {
+                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
+                "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+            },
+        ),
+    ),
+)
 def test_record_chain_preflight_closes_both_hands_and_sdk_processes(
     tmp_path: Path,
     monkeypatch: object,
+    policy_path: Path,
+    deployment_path: Path,
+    expected_task_scene: dict[str, str] | None,
 ) -> None:
     interpreter = tmp_path / "isaac-python"
     overlay = tmp_path / "overlay"
@@ -206,8 +235,8 @@ hands:
     )
     receipt = preflight_wuji_hand2_record_chain(
         ROOT,
-        qualification_path=POLICY,
-        deployment_path=DEPLOYMENT,
+        qualification_path=policy_path,
+        deployment_path=deployment_path,
         local_runtime_binding_path=_runtime_binding(interpreter),
         matched_chain_binding_path=matched_local,
         input_mode="stub",
@@ -222,6 +251,12 @@ hands:
         "isaac_consumer",
     )
     mapping = receipt.to_mapping()
+    if expected_task_scene is None:
+        assert mapping["task_scene"] is None
+    else:
+        assert mapping["task_scene"]["path"] == expected_task_scene["path"]
+        assert mapping["task_scene"]["profile_id"] == expected_task_scene["profile_id"]
+        assert len(mapping["task_scene"]["sha256"]) == 64
     assert set(mapping["hands"]) == {"left", "right"}
     assert mapping["dataset"] == {
         "profile_id": "isaac_nero_hand2_triview_q54_mini_dataset_v1",
