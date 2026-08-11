@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import subprocess
 
 from launch import LaunchDescription
 from launch.actions import (
@@ -43,9 +45,16 @@ def _processes(context: object) -> list[object]:
     gui = LaunchConfiguration("gui").perform(context).lower() == "true"
     frames = int(LaunchConfiguration("frames").perform(context))
     record = LaunchConfiguration("record").perform(context).lower() == "true"
+    record_qualification = (
+        LaunchConfiguration("record_qualification").perform(context).lower() == "true"
+    )
     qualification_fixture = (
         LaunchConfiguration("qualification_fixture").perform(context).lower() == "true"
     )
+    matched_chain_path = LaunchConfiguration("matched_chain_binding").perform(context).strip()
+    record_chain_qualification_path = LaunchConfiguration(
+        "record_chain_qualification"
+    ).perform(context)
     isaac_cpu_affinity = (
         LaunchConfiguration("isaac_cpu_affinity", default="").perform(context).strip()
     )
@@ -67,6 +76,27 @@ def _processes(context: object) -> list[object]:
         verify_artifacts=False,
     )
     dataset_mode = resolved.session.session.dataset_profile is not None
+    hand_revisions = {
+        instance.asset.revision
+        for instance in resolved.session.instances
+        if instance.asset.product == "wuji_hand_2"
+    }
+    requires_matched_chain = hand_revisions == {"beta1_description_v2026_8_3"}
+    if requires_matched_chain and not matched_chain_path:
+        raise ValueError("Description 8.3 launch requires matched_chain_binding")
+    if matched_chain_path and not requires_matched_chain:
+        raise ValueError("matched_chain_binding is valid only for the Description 8.3 entry")
+    if record_qualification and (not record or qualification_fixture):
+        raise ValueError(
+            "record_qualification requires live record:=true without qualification_fixture"
+        )
+    if requires_matched_chain and record and not (
+        record_qualification or qualification_fixture
+    ):
+        raise ValueError(
+            "the Description 8.3 entry remains qualification-only; "
+            "set record_qualification:=true"
+        )
     split_dataset_preview = bool(record and dataset_mode and gui)
     if qualification_fixture and not split_dataset_preview:
         raise ValueError(
@@ -98,6 +128,52 @@ def _processes(context: object) -> list[object]:
     )
     if record and current_run_root.exists():
         raise FileExistsError(f"recording run directory already exists: {current_run_root}")
+    chain_preflight_path = None
+    sdk_runtime_environment = runtime_environment
+    if requires_matched_chain:
+        from wujihand.runtime.wuji_hand2_matched_chain import (
+            load_matched_chain_local_binding,
+        )
+
+        matched_local = load_matched_chain_local_binding(matched_chain_path)
+        inherited_pythonpath = os.environ.get("PYTHONPATH", "")
+        sdk_pythonpath = str(matched_local.sdk_module_root)
+        if inherited_pythonpath:
+            sdk_pythonpath = f"{sdk_pythonpath}:{inherited_pythonpath}"
+        sdk_runtime_environment = {
+            **runtime_environment,
+            "PYTHONPATH": sdk_pythonpath,
+        }
+        chain_preflight_path = (
+            current_run_root / "preflight" / "wuji_hand2_record_chain.json"
+        )
+        preflight_command = [
+            str(matched_local.interpreter),
+            str(project_root / "tools/preflight_wuji_hand2_record_chain.py"),
+            "--qualification",
+            record_chain_qualification_path,
+            "--deployment",
+            deployment_path,
+            "--local-runtime-binding",
+            local_path,
+            "--matched-chain-binding",
+            matched_chain_path,
+            "--input",
+            "stub" if qualification_fixture else "glove",
+            "--output",
+            str(chain_preflight_path),
+        ]
+        completed = subprocess.run(
+            preflight_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={**os.environ, **sdk_runtime_environment},
+        )
+        if completed.returncode != 0:
+            detail = (completed.stdout + completed.stderr).strip()
+            raise RuntimeError(f"Hand2 8.3 record-chain preflight failed: {detail}")
+        print(completed.stdout, end="", flush=True)
     common_ros_args = [
         "--ros-args",
         "-r",
@@ -145,7 +221,11 @@ def _processes(context: object) -> list[object]:
                 name=process_id,
                 output="screen",
                 sigterm_timeout="10",
-                additional_env=runtime_environment,
+                additional_env=(
+                    sdk_runtime_environment
+                    if process_id == "glove_source"
+                    else runtime_environment
+                ),
             )
         )
     consumer = resolved.local_binding.process("isaac_consumer")
@@ -176,12 +256,16 @@ def _processes(context: object) -> list[object]:
             consumer_command.append("--external-preview-required")
         if qualification_fixture:
             consumer_command.extend(["--dataset-source-mode", "synthetic_fixture"])
+        elif record_qualification:
+            consumer_command.extend(["--dataset-source-mode", "live_qualification"])
+    if chain_preflight_path is not None:
+        consumer_command.extend(["--chain-preflight", str(chain_preflight_path)])
     consumer_action = ExecuteProcess(
         cmd=consumer_command,
         name="isaac_consumer",
         output="screen",
         sigterm_timeout="20",
-        additional_env=runtime_environment,
+        additional_env=sdk_runtime_environment,
     )
     actions.append(consumer_action)
     if split_dataset_preview:
@@ -341,9 +425,18 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("gui", default_value="true"),
             DeclareLaunchArgument("frames", default_value="0"),
             DeclareLaunchArgument("record", default_value="false"),
+            DeclareLaunchArgument("record_qualification", default_value="false"),
             DeclareLaunchArgument("run_id", default_value=""),
             DeclareLaunchArgument("isaac_cpu_affinity", default_value=""),
             DeclareLaunchArgument("qualification_fixture", default_value="false"),
+            DeclareLaunchArgument("matched_chain_binding", default_value=""),
+            DeclareLaunchArgument(
+                "record_chain_qualification",
+                default_value=(
+                    "configs/qualifications/"
+                    "isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
+                ),
+            ),
             OpaqueFunction(function=_processes),
         ]
     )

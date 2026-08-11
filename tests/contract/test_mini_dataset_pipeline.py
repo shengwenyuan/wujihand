@@ -149,6 +149,9 @@ def test_device_free_preview_qualification_is_explicit_and_dataset_ineligible() 
         ROOT / "src/wujihand/application/qualification/dataset_preview_fixture.py"
     ).read_text(encoding="utf-8")
     assert "fixture_profile_sha256()" in fixture
+    assert "gc.freeze()" in fixture
+    assert fixture.index("gc.freeze()") < fixture.index("scheduler = FixedRateScheduler(")
+    assert '"python_gc_frozen_during_run": python_gc_frozen_during_run' in fixture
     assert '"viewport_static_repeat": viewport_static_repeat_passed' in preview
 
 

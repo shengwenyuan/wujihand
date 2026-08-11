@@ -48,6 +48,40 @@ def _load_json(path: Path) -> dict[str, Any]:
     return _mapping(json.loads(path.read_text(encoding="utf-8")), field=str(path))
 
 
+def _expected_preview_component_source_counts(
+    deployment: dict[str, Any],
+) -> dict[str, int]:
+    identity = (
+        deployment.get("deployment_id"),
+        deployment.get("session_id"),
+        deployment.get("assembly_path"),
+    )
+    known = {
+        (
+            "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3",
+            "isaac_nero_dual_hand2_triview_q54_mini_dataset_v1",
+            (
+                "configs/assemblies/"
+                "nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_6_27_v1.yaml"
+            ),
+        ): {"left_arm": 8, "left_hand": 27, "right_arm": 8, "right_hand": 27},
+        (
+            "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1",
+            "isaac_nero_dual_hand2_triview_q54_mini_dataset_v2026_8_3_v1",
+            (
+                "configs/assemblies/"
+                "nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_8_3_v1.yaml"
+            ),
+        ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
+    }
+    try:
+        return known[identity]
+    except KeyError as exc:
+        raise ValueError(
+            f"preview component inventory is not qualified for deployment identity {identity!r}"
+        ) from exc
+
+
 def _plateau(sequence: int) -> str | None:
     margin = 120
     if REFERENCE_FRAMES - margin <= sequence < REFERENCE_FRAMES:
@@ -189,6 +223,12 @@ def validate(run_root: Path) -> dict[str, Any]:
     preview = _load_json(root / "derived/live_preview/receipt.json")
     recorder = _load_json(root / "recorder.json")
     dataset_manifest = _mapping(manifest.get("dataset"), field="manifest.dataset")
+    deployment_manifest = _mapping(
+        manifest.get("deployment"), field="manifest.deployment"
+    )
+    expected_preview_component_source_counts = (
+        _expected_preview_component_source_counts(deployment_manifest)
+    )
     profile = load_mini_dataset_profile(ROOT, dataset_manifest["profile_path"])
     bag = Ros2BagReader().read(root / "raw/rosbag2", expected_run_id=run_id)
 
@@ -260,6 +300,8 @@ def validate(run_root: Path) -> dict[str, Any]:
             and fixture.get("profile_sha256") == fixture_profile_sha256()
             and int(fixture.get("completed_frames", 0)) >= REQUIRED_FRAMES
             and int(fixture.get("missed_periods", -1)) == 0
+            and fixture.get("python_gc_frozen_during_run") is True
+            and int(fixture.get("python_gc_frozen_object_count", 0)) > 0
         ),
         "synthetic_isolation": (
             dataset_manifest.get("source_mode") == "synthetic_fixture"
@@ -326,7 +368,7 @@ def validate(run_root: Path) -> dict[str, Any]:
             and int(preview.get("replay_pose_prim_count", 0))
             == int(preview.get("renderable_geometry_count", -1))
             and preview_component_source_counts
-            == {"left_arm": 8, "left_hand": 27, "right_arm": 8, "right_hand": 27}
+            == expected_preview_component_source_counts
             and all(
                 int(preview_component_replay_counts.get(component, -1))
                 == int(preview_component_source_counts.get(component, -2))

@@ -22,6 +22,11 @@ SESSION = (
     / "configs/sessions/"
     "isaac_nero_dual_hand2_d405_wrist_rig_physical_simulation_nominal_v1.yaml"
 )
+SESSION_83 = (
+    ROOT
+    / "configs/sessions/"
+    "isaac_nero_dual_hand2_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
+)
 
 
 def test_d405_session_resolves_two_complete_passive_wrist_rigs() -> None:
@@ -37,6 +42,10 @@ def test_d405_session_resolves_two_complete_passive_wrist_rigs() -> None:
     assert all(rig.camera_profile.optics.horizontal_fov_deg == 140.0 for rig in rigs)
     assert all(rig.camera_profile.simulation_only for rig in rigs)
     assert all("not a physical RealSense D405" in rig.simulation_warning for rig in rigs)
+    assert tuple(rig.hand_base_backend_frame for rig in rigs) == (
+        "l_base_link",
+        "r_base_link",
+    )
     assert tuple(
         side.hand_instance_id
         for side in resolve_dual_side_runtimes(ROOT, resolved)
@@ -50,6 +59,13 @@ def test_d405_session_resolves_two_complete_passive_wrist_rigs() -> None:
     assert rigs[0].optical_in_hand.translation_m[1] == pytest.approx(
         -rigs[1].optical_in_hand.translation_m[1]
     )
+
+
+def test_d405_wrist_rig_uses_versioned_hand_base_backend_frames() -> None:
+    resolved = SessionResolver(ROOT).resolve(SESSION_83)
+    rigs = resolve_d405_wrist_rig_runtimes(ROOT, resolved)
+
+    assert tuple(rig.hand_base_backend_frame for rig in rigs) == ("l_wrist", "r_wrist")
 
 
 def test_mount_proxy_retains_boxes_capsules_and_no_d405_box_in_c2() -> None:

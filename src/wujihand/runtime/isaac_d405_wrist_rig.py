@@ -72,6 +72,7 @@ class D405WristRigRuntime:
     mount_instance_id: str
     camera_instance_id: str
     hand_prim_path: str
+    hand_base_backend_frame: str
     mount_visual_path: Path
     mount_visual_sha256: str
     mount_collision_path: Path
@@ -446,6 +447,9 @@ def resolve_d405_wrist_rig_runtimes(
                 mount_instance_id=mount.instance_id,
                 camera_instance_id=camera.instance_id,
                 hand_prim_path=f"/World/Robots/Hand2{side.capitalize()}",
+                hand_base_backend_frame=hand.binding.backend_frame(
+                    hand.asset.frame_name("base")
+                ),
                 mount_visual_path=mount_visual.absolute_path,
                 mount_visual_sha256=mount_visual.expected_sha256,
                 mount_collision_path=mount_collision.absolute_path,
@@ -797,9 +801,10 @@ def materialize_isaac_d405_wrist_rigs(
     result: list[D405WristRigHandles] = []
     for runtime in runtimes:
         hand_base_path = hand_base_paths.get(runtime.side)
-        if hand_base_path is None or hand_base_path != runtime.hand_prim_path + (
-            "/l_base_link" if runtime.side == "left" else "/r_base_link"
-        ):
+        expected_hand_base_path = (
+            f"{runtime.hand_prim_path}/{runtime.hand_base_backend_frame}"
+        )
+        if hand_base_path is None or hand_base_path != expected_hand_base_path:
             raise RuntimeError(f"{runtime.side} Hand 2 base path differs from wrist-rig plan")
         hand_base = stage.GetPrimAtPath(hand_base_path)
         if not hand_base.IsValid() or hand_base.IsInstance() or hand_base.IsInstanceProxy():

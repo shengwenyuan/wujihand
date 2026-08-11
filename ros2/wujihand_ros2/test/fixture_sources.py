@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 from pathlib import Path
 import signal
@@ -263,7 +264,7 @@ def main() -> int:
         ).source.source_id
         for side in ("left", "right")
     )
-    started_ns = time.monotonic_ns()
+    lifecycle_started_ns = time.monotonic_ns()
     lifecycle_publisher.publish(
         lifecycle_event_to_message(
             CanonicalLifecycleEvent(
@@ -275,20 +276,18 @@ def main() -> int:
                 sequence=lifecycle_sequence,
                 old_transport_epoch=None,
                 new_transport_epoch=epoch,
-                host_time_ns=started_ns,
+                host_time_ns=lifecycle_started_ns,
             )
         )
     )
     lifecycle_sequence += 1
-    scheduler = FixedRateScheduler(
-        rate_hz=resolved.control_profile.physics_hz,
-        start_ns=time.monotonic_ns(),
-        maximum_catch_up_ticks=0,
-    )
+    started_ns = 0
     completed_frames = 0
     missed_periods = 0
     phase_counts = {"a_reference": 0, "b_motion": 0, "a_return": 0}
     requested_signal: int | None = None
+    python_gc_frozen_during_run = False
+    python_gc_frozen_object_count = 0
 
     def request_stop(signum: int, frame: object) -> None:
         del frame
@@ -300,6 +299,16 @@ def main() -> int:
         current: signal.signal(current, request_stop) for current in (signal.SIGINT, signal.SIGTERM)
     }
     try:
+        gc.collect()
+        gc.freeze()
+        python_gc_frozen_during_run = True
+        python_gc_frozen_object_count = gc.get_freeze_count()
+        started_ns = time.monotonic_ns()
+        scheduler = FixedRateScheduler(
+            rate_hz=resolved.control_profile.physics_hz,
+            start_ns=started_ns,
+            maximum_catch_up_ticks=0,
+        )
         for sequence in range(args.frames):
             if requested_signal is not None:
                 break
@@ -381,6 +390,8 @@ def main() -> int:
                 phase_counts[phase_for_sequence(sequence)] += 1
             scheduler.complete(completed_ns=time.monotonic_ns())
     finally:
+        if python_gc_frozen_during_run:
+            gc.unfreeze()
         lifecycle_publisher.publish(
             lifecycle_event_to_message(
                 CanonicalLifecycleEvent(
@@ -432,11 +443,13 @@ def main() -> int:
                 "completed_frames": completed_frames,
                 "phase_counts": phase_counts,
                 "missed_periods": missed_periods,
+                "python_gc_frozen_during_run": python_gc_frozen_during_run,
+                "python_gc_frozen_object_count": python_gc_frozen_object_count,
                 "started_monotonic_ns": started_ns,
                 "stopped_monotonic_ns": stopped_ns,
                 "effective_hz": (
                     (completed_frames - 1) / ((stopped_ns - started_ns) / 1_000_000_000)
-                    if completed_frames >= 2
+                    if completed_frames >= 2 and stopped_ns > started_ns
                     else 0.0
                 ),
                 "requested_signal": requested_signal,

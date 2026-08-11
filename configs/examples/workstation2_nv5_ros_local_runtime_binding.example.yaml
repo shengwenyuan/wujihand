@@ -1,5 +1,7 @@
 # Copy into ignored configs/local/ and replace each REPLACE_* token.
 # Device identities remain local; committed configs only refer to binding keys.
+# For the v2026.8.3 entry, copy calibration_id exactly from the matched-chain
+# preflight receipt and use the same interpreter as its local binding.
 schema: wujihand.ros_local_runtime_binding.v2
 binding_id: workstation2_nv5_ros_v2
 host_id: workstation2
@@ -15,13 +17,13 @@ processes:
       - /REPLACE_WITH_NV5_OVERLAY/setup.bash
   - process_id: glove_source
     executable: /REPLACE_WITH_WUJI_SDK_ROS_PYTHON
-    environment_id: workstation2_wuji_sdk_ros_jazzy_v1
+    environment_id: workstation2_wuji_sdk_2026_8_3_ros_jazzy_v1
     setup_scripts:
       - /opt/ros/jazzy/setup.bash
       - /REPLACE_WITH_NV5_OVERLAY/setup.bash
   - process_id: isaac_consumer
     executable: /REPLACE_WITH_ISAAC_6_0_1_PYTHON
-    environment_id: workstation2_isaac_6_0_1_ros_jazzy_v1
+    environment_id: workstation2_isaac_6_0_1_ros_jazzy_wuji_sdk_2026_8_3_v1
     setup_scripts:
       - /opt/ros/jazzy/setup.bash
       - /REPLACE_WITH_NV5_OVERLAY/setup.bash
@@ -40,9 +42,9 @@ sources:
     source_kind: wuji_glove
     device_identity: REPLACE_WITH_LEFT_GLOVE_ID
     endpoint: wuji://REPLACE_WITH_LEFT_GLOVE_ADDRESS
-    calibration_id: glove_left_sdk_default_pending_v1
+    calibration_id: wuji_sdk.user.REPLACE_NAMED_USER_ID.left.urdf_REPLACE_SHA12.sdk_2026.8.3
   - binding_key: glove_right
     source_kind: wuji_glove
     device_identity: REPLACE_WITH_RIGHT_GLOVE_ID
     endpoint: wuji://REPLACE_WITH_RIGHT_GLOVE_ADDRESS
-    calibration_id: glove_right_sdk_default_pending_v1
+    calibration_id: wuji_sdk.user.REPLACE_NAMED_USER_ID.right.urdf_REPLACE_SHA12.sdk_2026.8.3

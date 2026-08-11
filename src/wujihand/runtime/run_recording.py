@@ -242,12 +242,21 @@ def finalize_rosbag_recording(
     _write_json_atomic(receipt_path, receipt)
 
     try:
+        preflight_root = root / "preflight"
+        preflight_files = (
+            tuple(
+                sorted(path for path in preflight_root.rglob("*") if path.is_file())
+            )
+            if preflight_root.is_dir()
+            else ()
+        )
         material = tuple(
             path
             for path in (
                 root / "manifest.json",
                 root / "recorder.json",
                 receipt_path,
+                *preflight_files,
                 *raw_files,
             )
             if path.is_file()

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import gc
@@ -427,6 +428,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id")
     parser.add_argument("--run-root", type=Path)
     parser.add_argument(
+        "--chain-preflight",
+        type=Path,
+        help="Passed Hand2 8.3 record-chain preflight receipt.",
+    )
+    parser.add_argument(
         "--verify-artifacts",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -482,6 +488,39 @@ if RESOLVED.control_profile.physics_hz % CONTROL_HZ != 0:
 if CONTROL_HZ % RENDER_HZ != 0:
     raise SystemExit("control_hz must be divisible by render_hz")
 
+HAND_REVISIONS = {
+    instance.asset.revision
+    for instance in RESOLVED.session.instances
+    if instance.asset.product == "wuji_hand_2"
+}
+REQUIRES_MATCHED_CHAIN = HAND_REVISIONS == {"beta1_description_v2026_8_3"}
+if REQUIRES_MATCHED_CHAIN != (ARGS.chain_preflight is not None):
+    raise SystemExit(
+        "Description 8.3 requires --chain-preflight and historical entries forbid it"
+    )
+CHAIN_PREFLIGHT: Mapping[str, object] | None = None
+if ARGS.chain_preflight is not None:
+    try:
+        document = json.loads(ARGS.chain_preflight.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"record-chain preflight receipt is unreadable: {exc}") from exc
+    if not isinstance(document, Mapping):
+        raise SystemExit("record-chain preflight receipt must contain a JSON object")
+    deployment_receipt = document.get("deployment")
+    if (
+        document.get("schema") != "wujihand.wuji_hand2_record_chain_preflight.v1"
+        or document.get("passed") is not True
+        or document.get("device_access_attempted") is not False
+        or document.get("isaac_started") is not False
+        or not isinstance(deployment_receipt, Mapping)
+        or deployment_receipt.get("deployment_id") != RESOLVED.deployment.deployment_id
+        or deployment_receipt.get("session_id") != RESOLVED.session.session.session_id
+        or deployment_receipt.get("assembly_id")
+        != RESOLVED.session.assembly.assembly_id
+    ):
+        raise SystemExit("record-chain preflight receipt does not close this runtime")
+    CHAIN_PREFLIGHT = document
+
 DATASET_PROFILE: MiniDatasetProfile | None = None
 dataset_profile_ref = RESOLVED.session.session.dataset_profile
 if dataset_profile_ref is not None:
@@ -497,8 +536,29 @@ if DATASET_SOURCE_MODE is DatasetSourceMode.SYNTHETIC_FIXTURE:
         raise SystemExit(
             "synthetic fixture requires bounded headless dataset recording with external preview"
         )
-elif ARGS.dataset_source_mode != DatasetSourceMode.LIVE_TELEOPERATION.value:
-    raise SystemExit("this runner accepts only live teleoperation or synthetic fixture input")
+elif DATASET_SOURCE_MODE not in {
+    DatasetSourceMode.LIVE_TELEOPERATION,
+    DatasetSourceMode.LIVE_QUALIFICATION,
+}:
+    raise SystemExit(
+        "this runner accepts only live teleoperation, live qualification, "
+        "or synthetic fixture input"
+    )
+if REQUIRES_MATCHED_CHAIN and ARGS.recording_enabled:
+    if DATASET_SOURCE_MODE not in {
+        DatasetSourceMode.LIVE_QUALIFICATION,
+        DatasetSourceMode.SYNTHETIC_FIXTURE,
+    }:
+        raise SystemExit("Description 8.3 recording remains qualification-only")
+    assert CHAIN_PREFLIGHT is not None
+    preflight_input = CHAIN_PREFLIGHT.get("input_mode")
+    expected_input = (
+        "stub"
+        if DATASET_SOURCE_MODE is DatasetSourceMode.SYNTHETIC_FIXTURE
+        else "glove"
+    )
+    if preflight_input != expected_input:
+        raise SystemExit("record-chain preflight input mode differs from recording mode")
 CONTROL_MAXIMUM_CATCH_UP_TICKS = (
     GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui or ARGS.external_preview_required else 0
 )
@@ -2564,6 +2624,26 @@ def _hand_source_trace(
     )
 
 
+def _chain_preflight_manifest() -> dict[str, object] | None:
+    if CHAIN_PREFLIGHT is None:
+        return None
+    if ARGS.chain_preflight is None:
+        raise RuntimeError("record-chain preflight globals are incomplete")
+    if ARGS.run_root is None:
+        raise RuntimeError("record-chain preflight provenance requires a recording run root")
+    receipt_path = ARGS.chain_preflight.resolve()
+    run_root_path = ARGS.run_root.resolve()
+    try:
+        relative = receipt_path.relative_to(run_root_path)
+    except ValueError as exc:
+        raise RuntimeError("record-chain preflight receipt must stay inside the run root") from exc
+    return {
+        "path": relative.as_posix(),
+        "qualification_id": CHAIN_PREFLIGHT.get("qualification_id"),
+        "input_mode": CHAIN_PREFLIGHT.get("input_mode"),
+    }
+
+
 def _run_manifest_payload(
     *,
     scene: DualNeroHand2IsaacScene,
@@ -2750,6 +2830,7 @@ def _run_manifest_payload(
             "lula_description_sha256": sha256_file(NERO_LULA_DESCRIPTION),
             "lula_urdf_path": str(NERO_LULA_URDF.relative_to(ROOT)),
             "lula_urdf_sha256": sha256_file(NERO_LULA_URDF),
+            "record_chain_preflight": _chain_preflight_manifest(),
         },
         "recording_inventory": {
             "topics": list(

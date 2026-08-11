@@ -7,6 +7,7 @@ import pytest
 
 from tools.run_isaac_dataset_live_preview import _ancestry_tiers
 from tools.run_isaac_dataset_live_preview import _component_path_inventory
+from tools.run_isaac_dataset_live_preview import _expected_hand_source_pose_count
 from tools.run_isaac_dataset_live_preview import _pose_group_delta
 from tools.run_isaac_dataset_live_preview import _q54_group_ranges
 from tools.run_isaac_dataset_live_preview import _renderable_geometry_bindings
@@ -129,6 +130,12 @@ def test_preview_component_inventory_requires_all_nero_arm_links() -> None:
         pose_paths=source,
         replay_paths=replay,
         component_prefixes=prefixes,
+        expected_source_pose_counts={
+            "left_arm": 8,
+            "left_hand": 27,
+            "right_arm": 8,
+            "right_hand": 27,
+        },
     )
 
     assert len(source_by_component["left_arm"]) == 8
@@ -140,6 +147,31 @@ def test_preview_component_inventory_requires_all_nero_arm_links() -> None:
             pose_paths=source,
             replay_paths=tuple(path for path in replay if path != source_by_component["left_arm"][0]),
             component_prefixes=prefixes,
+            expected_source_pose_counts={
+                "left_arm": 8,
+                "left_hand": 27,
+                "right_arm": 8,
+                "right_hand": 27,
+            },
+        )
+
+
+def test_preview_hand_pose_count_is_fail_closed_by_description_revision() -> None:
+    assert _expected_hand_source_pose_count(
+        asset_revision="beta1_description_v2026_6_27",
+        side="left",
+        backend_base_frame="l_base_link",
+    ) == 27
+    assert _expected_hand_source_pose_count(
+        asset_revision="beta1_description_v2026_8_3",
+        side="right",
+        backend_base_frame="r_wrist",
+    ) == 26
+    with pytest.raises(ValueError, match="not qualified"):
+        _expected_hand_source_pose_count(
+            asset_revision="beta1_description_future",
+            side="right",
+            backend_base_frame="r_wrist",
         )
 
 

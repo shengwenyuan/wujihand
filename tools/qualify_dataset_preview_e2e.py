@@ -32,6 +32,10 @@ def main() -> int:
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--deployment", default=DEFAULT_DEPLOYMENT)
     parser.add_argument("--local-runtime-binding", default=DEFAULT_LOCAL_BINDING)
+    parser.add_argument(
+        "--matched-chain-binding",
+        help="Required by the explicit Description 8.3 deployment.",
+    )
     args = parser.parse_args()
     run_id = args.run_id or new_run_id(prefix="dataset-preview-qual")
     run_root = (ROOT / "artifacts/diagnostics/dataset-preview-qualification" / run_id).resolve()
@@ -51,6 +55,8 @@ def main() -> int:
         "isaac_cpu_affinity:=0-15",
         "qualification_fixture:=true",
     ]
+    if args.matched_chain_binding:
+        command.append(f"matched_chain_binding:={args.matched_chain_binding}")
     environment = os.environ.copy()
     python_paths = (
         str(ROOT),

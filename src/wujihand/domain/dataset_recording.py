@@ -32,6 +32,7 @@ class DatasetEpisodeEvent(str, Enum):
 
 class DatasetSourceMode(str, Enum):
     LIVE_TELEOPERATION = "live_teleoperation"
+    LIVE_QUALIFICATION = "live_qualification"
     SYNTHETIC_FIXTURE = "synthetic_fixture"
     REPLAY = "replay"
 
@@ -181,7 +182,7 @@ class DatasetEpisodeBoundary:
         if not isinstance(self.source_mode, DatasetSourceMode):
             raise ValueError("source_mode must be a DatasetSourceMode")
         if self.source_mode is not DatasetSourceMode.LIVE_TELEOPERATION and self.dataset_eligible:
-            raise ValueError("fixture and replay episodes cannot be dataset eligible")
+            raise ValueError("qualification, fixture, and replay episodes cannot be dataset eligible")
         gates = (
             self.recorder_ready,
             self.inputs_ready,

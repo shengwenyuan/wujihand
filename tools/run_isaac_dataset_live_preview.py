@@ -84,12 +84,6 @@ PREVIEW_REFERENCE_WARMUP_APPLIED_FRAMES = 30
 PREVIEW_COMPONENT_SOURCE_POSITION_DELTA_M = 1e-4
 PREVIEW_COMPONENT_SOURCE_ORIENTATION_DELTA_RAD = 1e-3
 PREVIEW_COMPONENTS = ("left_arm", "left_hand", "right_arm", "right_hand")
-PREVIEW_EXPECTED_COMPONENT_SOURCE_POSE_COUNTS = {
-    "left_arm": 8,
-    "left_hand": 27,
-    "right_arm": 8,
-    "right_hand": 27,
-}
 SCENE_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
 SCENE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 SCENE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
@@ -197,9 +191,12 @@ def _component_path_inventory(
     pose_paths: tuple[str, ...],
     replay_paths: tuple[str, ...],
     component_prefixes: dict[str, str],
+    expected_source_pose_counts: dict[str, int],
 ) -> tuple[dict[str, tuple[str, ...]], dict[str, tuple[str, ...]]]:
     if tuple(component_prefixes) != PREVIEW_COMPONENTS:
         raise ValueError("operator-preview component prefixes are incomplete or unordered")
+    if tuple(expected_source_pose_counts) != PREVIEW_COMPONENTS:
+        raise ValueError("operator-preview expected component counts are incomplete or unordered")
     if len(set(component_prefixes.values())) != len(component_prefixes):
         raise ValueError("operator-preview component prefixes are not unique")
 
@@ -216,7 +213,7 @@ def _component_path_inventory(
         for component, prefix in component_prefixes.items()
     }
     for component in PREVIEW_COMPONENTS:
-        expected_count = PREVIEW_EXPECTED_COMPONENT_SOURCE_POSE_COUNTS[component]
+        expected_count = expected_source_pose_counts[component]
         if len(source[component]) != expected_count:
             raise RuntimeError(
                 f"operator-preview {component} source inventory is incomplete: "
@@ -231,6 +228,28 @@ def _component_path_inventory(
                 f"missing={missing}"
             )
     return source, replay
+
+
+def _expected_hand_source_pose_count(
+    *,
+    asset_revision: str,
+    side: str,
+    backend_base_frame: str,
+) -> int:
+    known = {
+        ("beta1_description_v2026_6_27", "left", "l_base_link"): 27,
+        ("beta1_description_v2026_6_27", "right", "r_base_link"): 27,
+        ("beta1_description_v2026_8_3", "left", "l_wrist"): 26,
+        ("beta1_description_v2026_8_3", "right", "r_wrist"): 26,
+    }
+    key = (asset_revision, side, backend_base_frame)
+    try:
+        return known[key]
+    except KeyError as exc:
+        raise ValueError(
+            "operator-preview Hand2 pose inventory is not qualified for "
+            f"revision={asset_revision!r}, side={side!r}, base={backend_base_frame!r}"
+        ) from exc
 
 
 def _pose_group_delta(
@@ -263,6 +282,7 @@ class _PoseReplayWriter:
         stage: Any,
         paths: tuple[str, ...],
         component_prefixes: dict[str, str],
+        expected_source_pose_counts: dict[str, int],
         sdf: Any,
         usd: Any,
         usd_geom: Any,
@@ -288,6 +308,7 @@ class _PoseReplayWriter:
             pose_paths=paths,
             replay_paths=self.replay_paths,
             component_prefixes=component_prefixes,
+            expected_source_pose_counts=expected_source_pose_counts,
         )
         geometry_by_owner = dict(renderable_bindings)
         self.component_renderable_paths = {
@@ -537,6 +558,28 @@ def main(argv: list[str] | None = None) -> int:
         "left_hand": sides_by_name["left"].hand_prim_path,
         "right_arm": sides_by_name["right"].arm_prim_path,
         "right_hand": sides_by_name["right"].hand_prim_path,
+    }
+    hand_instances = {
+        side: resolved.session.instance(sides_by_name[side].hand_instance_id)
+        for side in ("left", "right")
+    }
+    expected_component_source_pose_counts = {
+        "left_arm": 8,
+        "left_hand": _expected_hand_source_pose_count(
+            asset_revision=hand_instances["left"].asset.revision,
+            side="left",
+            backend_base_frame=hand_instances["left"].binding.backend_frame(
+                hand_instances["left"].asset.frame_name("base")
+            ),
+        ),
+        "right_arm": 8,
+        "right_hand": _expected_hand_source_pose_count(
+            asset_revision=hand_instances["right"].asset.revision,
+            side="right",
+            backend_base_frame=hand_instances["right"].binding.backend_frame(
+                hand_instances["right"].asset.frame_name("base")
+            ),
+        ),
     }
     alignment_references = {
         resolved.session.instance(runtime.arm_instance_id).binding.compatibility_profile
@@ -943,6 +986,9 @@ def main(argv: list[str] | None = None) -> int:
                         stage=scene.stage,
                         paths=_preview_pose_paths(current),
                         component_prefixes=component_prefixes,
+                        expected_source_pose_counts=(
+                            expected_component_source_pose_counts
+                        ),
                         sdf=Sdf,
                         usd=Usd,
                         usd_geom=UsdGeom,
@@ -1373,7 +1419,7 @@ def main(argv: list[str] | None = None) -> int:
             "component_replay_inventory": (
                 pose_writer is not None
                 and pose_writer.component_source_pose_counts
-                == PREVIEW_EXPECTED_COMPONENT_SOURCE_POSE_COUNTS
+                == expected_component_source_pose_counts
                 and all(
                     pose_writer.component_replay_pose_counts[component]
                     == pose_writer.component_source_pose_counts[component]
