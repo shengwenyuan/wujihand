@@ -1,0 +1,18 @@
+schema: wujihand.wuji_hand2_matched_chain_local_binding.v1
+binding_id: workstation2_wuji_hand2_matched_chain_v2026_8_3
+interpreter: /REPLACE/isaacsim-6.0.1/bin/python
+sdk_module_root: /REPLACE/wuji-sdk-overlays/2026.8.3-wheel-sha-prefix
+sdk_wheel: /REPLACE/wuji_sdk-2026.8.3-cp312-cp312-manylinux_2_34_x86_64.whl
+user:
+  user_id: REPLACE_NAMED_USER_ID
+  display_name: REPLACE_DISPLAY_NAME
+  models_dir: /REPLACE/.wuji/sdk/users/REPLACE_NAMED_USER_ID/models
+hands:
+  left:
+    serial_number: REPLACE_LEFT_GLOVE_SERIAL
+    urdf_path: /REPLACE/.wuji/sdk/users/REPLACE_NAMED_USER_ID/models/left_hand.urdf
+    urdf_sha256: "0000000000000000000000000000000000000000000000000000000000000000" # REPLACE
+  right:
+    serial_number: REPLACE_RIGHT_GLOVE_SERIAL
+    urdf_path: /REPLACE/.wuji/sdk/users/REPLACE_NAMED_USER_ID/models/right_hand.urdf
+    urdf_sha256: "0000000000000000000000000000000000000000000000000000000000000000" # REPLACE

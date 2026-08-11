@@ -1,0 +1,29 @@
+schema: wujihand.wuji_hand2_matched_chain_qualification.v1
+qualification_id: wuji_hand2_sdk_2026_8_3_description_v2026_8_3_v1
+sdk:
+  distribution: wuji-sdk
+  package_version: 2026.8.3
+  wheel_sha256: 8acaf6a90e42c78f9523bf007f8c298cee6bfbeddb200550906bf0e069e63da8
+description:
+  release: v2026.8.3
+  hand2_model_revision: v2026.7.23
+  source_name: wuji-description-v2026-8-3
+  commit: 8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  asset_revision: beta1_description_v2026_8_3
+sides:
+  left:
+    session_path: configs/sessions/isaac_hand2_left_glove_qualification_v2026_8_3_v1.yaml
+    session_id: isaac_hand2_left_glove_qualification_v2026_8_3_v1
+    binding_root: l_wrist
+    layout_id: wuji_hand2_left_firmware_v1
+    urdf_filename: left_hand.urdf
+    urdf_link_count: 48
+    urdf_joint_count: 47
+  right:
+    session_path: configs/sessions/isaac_hand2_right_glove_qualification_v2026_8_3_v1.yaml
+    session_id: isaac_hand2_right_glove_qualification_v2026_8_3_v1
+    binding_root: r_wrist
+    layout_id: wuji_hand2_right_firmware_v1
+    urdf_filename: right_hand.urdf
+    urdf_link_count: 48
+    urdf_joint_count: 47
