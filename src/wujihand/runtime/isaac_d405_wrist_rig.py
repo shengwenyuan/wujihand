@@ -18,6 +18,7 @@ from wujihand.adapters.simulation.d405_wrist_rig_assets import (
     determinant,
     load_stl_triangles,
 )
+from wujihand.domain.pose import quaternion_wxyz_to_rotation_matrix
 from wujihand.integrity import sha256_file
 from wujihand.specs import AttachmentSpec, IsaacCameraProfile, PoseSpec
 
@@ -83,6 +84,8 @@ class D405WristRigRuntime:
     camera_collision_sha256: str
     camera_profile_path: Path
     camera_profile: IsaacCameraProfile
+    mount_in_hand: RigidTransform
+    body_in_mount: RigidTransform
     body_in_hand: RigidTransform
     optical_in_hand: RigidTransform
     optical_in_body: RigidTransform
@@ -185,6 +188,34 @@ def _is_identity_attachment(transform: PoseSpec) -> bool:
         0.0,
         0.0,
         0.0,
+    )
+
+
+def _rigid_transform(pose: PoseSpec) -> RigidTransform:
+    matrix = quaternion_wxyz_to_rotation_matrix(pose.quat_wxyz)
+    return RigidTransform(
+        translation_m=pose.position_m,
+        rotation=cast(
+            Matrix3,
+            tuple(cast(Vector3, tuple(float(value) for value in row)) for row in matrix),
+        ),
+    )
+
+
+def _compose(left: RigidTransform, right: RigidTransform) -> RigidTransform:
+    rotated_translation = cast(
+        Vector3,
+        tuple(
+            sum(left.rotation[row][column] * right.translation_m[column] for column in range(3))
+            for row in range(3)
+        ),
+    )
+    return RigidTransform(
+        translation_m=cast(
+            Vector3,
+            tuple(left.translation_m[index] + rotated_translation[index] for index in range(3)),
+        ),
+        rotation=_matrix_multiply(left.rotation, right.rotation),
     )
 
 
@@ -388,7 +419,6 @@ def resolve_d405_wrist_rig_runtimes(
             or hand_to_mount.child.frame != mount.asset.frame_name("hand_interface")
             or mount_to_camera.parent.frame != mount.asset.frame_name("camera_interface")
             or mount_to_camera.child.frame != camera.asset.frame_name("rear_mount")
-            or not _is_identity_attachment(hand_to_mount.transform)
             or not _is_identity_attachment(mount_to_camera.transform)
         ):
             raise RuntimeError(f"{side} wrist-rig canonical attachment contract differs")
@@ -440,6 +470,29 @@ def resolve_d405_wrist_rig_runtimes(
         camera_profile = ConfigRepository(project_root).load_isaac_camera_profile(
             camera_profile_path
         )
+        mount_in_hand = _rigid_transform(hand_to_mount.transform)
+        body_in_mount = RigidTransform(
+            translation_m=_vector3(
+                frames.get("body_translation_in_hand_mm"),
+                field=f"optical_frames.{side}.body_translation_in_hand_mm",
+                scale=0.001,
+            ),
+            rotation=_matrix3(
+                frames.get("body_rotation_in_hand"),
+                field=f"optical_frames.{side}.body_rotation_in_hand",
+            ),
+        )
+        optical_in_mount = RigidTransform(
+            translation_m=_vector3(
+                frames.get("optical_origin_in_hand_mm"),
+                field=f"optical_frames.{side}.optical_origin_in_hand_mm",
+                scale=0.001,
+            ),
+            rotation=_matrix3(
+                frames.get("optical_rotation_in_hand"),
+                field=f"optical_frames.{side}.optical_rotation_in_hand",
+            ),
+        )
         result.append(
             D405WristRigRuntime(
                 side=side,
@@ -460,28 +513,10 @@ def resolve_d405_wrist_rig_runtimes(
                 camera_collision_sha256=camera_collision.expected_sha256,
                 camera_profile_path=camera_profile_path,
                 camera_profile=camera_profile,
-                body_in_hand=RigidTransform(
-                    translation_m=_vector3(
-                        frames.get("body_translation_in_hand_mm"),
-                        field=f"optical_frames.{side}.body_translation_in_hand_mm",
-                        scale=0.001,
-                    ),
-                    rotation=_matrix3(
-                        frames.get("body_rotation_in_hand"),
-                        field=f"optical_frames.{side}.body_rotation_in_hand",
-                    ),
-                ),
-                optical_in_hand=RigidTransform(
-                    translation_m=_vector3(
-                        frames.get("optical_origin_in_hand_mm"),
-                        field=f"optical_frames.{side}.optical_origin_in_hand_mm",
-                        scale=0.001,
-                    ),
-                    rotation=_matrix3(
-                        frames.get("optical_rotation_in_hand"),
-                        field=f"optical_frames.{side}.optical_rotation_in_hand",
-                    ),
-                ),
+                mount_in_hand=mount_in_hand,
+                body_in_mount=body_in_mount,
+                body_in_hand=_compose(mount_in_hand, body_in_mount),
+                optical_in_hand=_compose(mount_in_hand, optical_in_mount),
                 optical_in_body=RigidTransform(
                     translation_m=_vector3(
                         rear_to_optical.get("translation_mm"),
@@ -813,7 +848,8 @@ def materialize_isaac_d405_wrist_rigs(
         root_path = f"{hand_base_path}/D405WristRig"
         if stage.GetPrimAtPath(root_path).IsValid():
             raise RuntimeError(f"wrist-rig root already exists: {root_path}")
-        UsdGeom.Xform.Define(stage, root_path)
+        root = UsdGeom.Xform.Define(stage, root_path)
+        _set_pose(root.GetPrim(), runtime.mount_in_hand)
         mount_visual_path = _author_visual_mesh(
             stage,
             path=f"{root_path}/MountV2Visual",
@@ -822,7 +858,7 @@ def materialize_isaac_d405_wrist_rigs(
             color=(0.11, 0.32, 0.72),
         )
         camera_root = UsdGeom.Xform.Define(stage, f"{root_path}/D405Housing")
-        _set_pose(camera_root.GetPrim(), runtime.body_in_hand)
+        _set_pose(camera_root.GetPrim(), runtime.body_in_mount)
         camera_visual_path = _author_visual_mesh(
             stage,
             path=f"{root_path}/D405Housing/Visual",

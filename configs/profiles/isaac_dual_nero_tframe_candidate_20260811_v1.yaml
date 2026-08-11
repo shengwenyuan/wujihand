@@ -1,0 +1,35 @@
+schema: wujihand.isaac_static_usd_workcell.v1
+profile_id: isaac_dual_nero_tframe_candidate_20260811_v1
+import_id: dual_nero_tframe
+scene:
+  source: dual-nero-tframe-isaac-6-0-1-v1
+  source_revision: sha256:2a639aad11d8e22bf3395d9573fcd69dbd8d2ab2a4d9aec09a4e6d17ff2232d9
+  path: tframe.usda
+  expected_sha256: 0bc8d7446b026ccdb819a3ce124e516b208e6c2f8416232ba87572e503eea6af
+composition: reference
+frame: tframe_origin
+transform:
+  position_m: [0.0, 0.0, 0.0]
+  quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+policies:
+  ground: project
+  physics_scene: project
+  camera: project
+  collision: preserve
+  fixed_rigid_body_paths: []
+lighting:
+  mode: selected_hdr
+  content:
+    source: modelscope-sss225-robolab-assets
+    source_revision: commit:377fb4959532d2ee6055d3a874f25c4b327e2894
+    path: assets/backgrounds/indoors/photo_studio_01_2k.hdr
+    expected_sha256: b6178cf04ea2ac9390b8794d3088a04c0254905f335f5f30d2b582c57c40f387
+  intensity: 800.0
+  exposure: 0.0
+  visible_in_primary_ray: false
+  background_color_rgb: [0.12, 0.12, 0.12]
+expectations:
+  default_prim: TFrame
+  meters_per_unit: 1.0
+  up_axis: Z
+  min_colliders: 42

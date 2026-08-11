@@ -1,0 +1,69 @@
+schema: wujihand.workcell.v1
+workcell_id: isaac_dual_nero_tframe_candidate_20260811_v1
+world_frame: world
+frames:
+  - frame_id: tframe_origin
+    parent: world
+    transform:
+      # The selected T-frame AABB reaches z=-0.59 m in its asset frame.
+      position_m: [0.0, 0.0, 0.59]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: tframe_shoulder_center
+    parent: tframe_origin
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_oblique_eye
+    parent: world
+    transform:
+      position_m: [1.15, 1.35, 0.95]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_oblique_target
+    parent: world
+    transform:
+      position_m: [0.0, 0.0, 0.34]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_top_eye
+    parent: world
+    transform:
+      position_m: [0.0, 0.0, 1.55]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_top_target
+    parent: world
+    transform:
+      position_m: [0.0, 0.0, 0.30]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_right_interface_eye
+    parent: world
+    transform:
+      position_m: [-0.70, 0.55, 0.52]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+  - frame_id: simulation_nominal_camera_right_interface_target
+    parent: world
+    transform:
+      position_m: [-0.104, 0.0, 0.45]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+mounts:
+  # The STEP witness fixes the shoulder centers at +/-0.104 m. Their clocking
+  # is owner-confirmed; logical left/right is assigned only by the Session.
+  - mount_id: tframe_positive_x_shoulder_mount
+    frame: tframe_shoulder_center
+    transform:
+      position_m: [0.104, 0.0, 0.0]
+      quat_wxyz: [0.5, -0.5, 0.5, -0.5]
+  - mount_id: tframe_negative_x_shoulder_mount
+    frame: tframe_shoulder_center
+    transform:
+      position_m: [-0.104, 0.0, 0.0]
+      quat_wxyz: [0.5, 0.5, -0.5, -0.5]
+entities:
+  - entity_id: ground
+    frame: world
+    transform:
+      position_m: [0.0, 0.0, 0.0]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: plane
+    mobility: fixed
+    mass_kg: null
+compatibility_profile: configs/profiles/isaac_dual_nero_tframe_candidate_20260811_v1.yaml

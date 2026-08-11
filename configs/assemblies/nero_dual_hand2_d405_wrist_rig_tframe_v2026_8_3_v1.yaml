@@ -1,5 +1,5 @@
 schema: wujihand.assembly_spec.v1
-assembly_id: nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_8_3_v1
+assembly_id: nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1
 instances:
   - instance_id: nero_left
     asset:
@@ -56,8 +56,8 @@ attachments:
     child: {instance: hand_left, frame: hand_base}
     transform:
       position_m: [0.023, 0.0, -0.0235]
-      quat_wxyz: [0.5, 0.5, -0.5, -0.5]
-    assumption: historical_ry_plus_90_mount_composed_with_v2026_8_3_l_wrist_orientation_only_compensation
+      quat_wxyz: [0.5, -0.5, -0.5, 0.5]
+    assumption: tframe_owner_confirmed_left_hand_flange_clocking_is_180_degrees_about_hand_base_positive_z
   - attachment_id: hand2_left_wrist_to_mount_v2
     parent: {instance: hand_left, frame: hand_base}
     child:

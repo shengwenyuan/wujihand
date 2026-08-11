@@ -1,0 +1,172 @@
+schema: wujihand.step_occurrence_selection.v1
+selection_id: dual_nero_tframe_structure_v1
+status: manually_reviewed_geometry_selection_pending_mount_qualification
+source:
+  sha256: 3cf8f2388649de17470e67db920077c8b6cd778cf80c2536d42f3ccacd0a7dc5
+  size_bytes: 136148726
+  step_schema: CONFIG_CONTROL_DESIGN
+  length_unit: millimetre
+include:
+  - occurrence_id: NAUO1
+    product_name: M-BIMA1-180001-A
+    role: load_bearing_structure
+    rationale: primary_tframe_structure
+  - occurrence_id: NAUO5
+    product_name: M-BIMA1-180007-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+  - occurrence_id: NAUO6
+    product_name: M-BIMA1-180003-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+  - occurrence_id: NAUO7
+    product_name: M-BIMA1-180005-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+  - occurrence_id: NAUO8
+    product_name: M-BIMA1-180006-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+  - occurrence_id: NAUO9
+    product_name: M-BIMA1-180002-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+  - occurrence_id: NAUO10
+    product_name: M-BIMA1-180004-A
+    role: load_bearing_structure
+    rationale: tframe_structure
+exclude:
+  - occurrence_id: NAUO2
+    product_name: D型模块-1
+    role: unqualified_auxiliary_module
+    rationale: not_confirmed_as_load_bearing_or_required_collision_geometry
+  - occurrence_id: NAUO3
+    product_name: 24V机械臂电源-1
+    role: electrical_equipment
+    rationale: not_tframe_structure
+  - occurrence_id: NAUO4
+    product_name: 24V机械臂电源-1
+    role: electrical_equipment
+    rationale: not_tframe_structure
+  - occurrence_id: NAUO11
+    product_name: 品字线定制V1.0
+    role: cable_assembly
+    rationale: not_tframe_structure
+  - occurrence_id: NAUO12
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO13
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO14
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO15
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO16
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO17
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO18
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO19
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO20
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO21
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO22
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO23
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO24
+    product_name: hexagon socket countersunk head screws gb_GB_FASTENER_SCREWS_HSCHS M3X30-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO25
+    product_name: hexagon socket countersunk head screws gb_GB_FASTENER_SCREWS_HSCHS M3X30-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO26
+    product_name: hexagon socket countersunk head screws gb_GB_FASTENER_SCREWS_HSCHS M3X30-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO27
+    product_name: hexagon socket countersunk head screws gb_GB_FASTENER_SCREWS_HSCHS M3X30-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO28
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO29
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO30
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO31
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M3X5-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO32
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M4X6-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO33
+    product_name: hexagon socket head cap screws gb_GB_FASTENER_SCREWS_HSHCS M4X6-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO34
+    product_name: hex nuts, style 1-grades ab gb_GB_FASTENER_NUT_SNAB1 M4-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO35
+    product_name: hex nuts, style 1-grades ab gb_GB_FASTENER_NUT_SNAB1 M4-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO36
+    product_name: hex nuts, style 1-grades ab gb_GB_FASTENER_NUT_SNAB1 M4-N
+    role: fastener
+    rationale: omitted_from_visual_and_collision_proxy
+  - occurrence_id: NAUO39
+    product_name: YF24插座-1
+    role: electrical_connector
+    rationale: child_of_excluded_cable_assembly_and_not_tframe_structure
+mount_witness:
+  - occurrence_id: NAUO37
+    product_name: 七轴外发模型-1
+    role: provisional_nero_mount_witness
+    rationale: geometry_witness_only_never_emit_robot_geometry
+  - occurrence_id: NAUO38
+    product_name: 七轴外发模型-1
+    role: provisional_nero_mount_witness
+    rationale: geometry_witness_only_never_emit_robot_geometry
+assumptions:
+  - included_m_bima_occurrences_are_the_tframe_load_bearing_structure
+  - d_type_module_is_excluded_until_required_collision_or_structural_role_is_confirmed
+  - mount_witness_origin_and_axes_are_not_yet_proven_equal_to_pinned_nero_base_link
+  - mount_witness_left_right_assignment_is_intentionally_unresolved

@@ -1,0 +1,21 @@
+schema: wujihand.nero_dual_simulation_startup.v1
+profile_id: isaac_nero_dual_tframe_inspection_startup_v1
+status: provisional_inspection_only
+initial_arm_positions:
+  - instance_id: nero_left
+    group_id: arm_joints
+    layout_id: agilex_nero_q7_v1
+    q7_rad: [-1.5707963267948966, -1.5707963267948966, 1.5707963267948966, 1.5707963267948966, 0.0, 0.0, 0.0]
+  - instance_id: nero_right
+    group_id: arm_joints
+    layout_id: agilex_nero_q7_v1
+    q7_rad: [-1.5707963267948966, 1.5707963267948966, 1.5707963267948966, 1.5707963267948966, 0.0, 0.0, 0.0]
+arm_drive_gains:
+  stiffness: 6500.0
+  damping: 220.79402165819616
+assumptions:
+  - q7_is_a_pinned_urdf_fk_inspection_pose_not_a_hardware_safe_pose
+  - base_local_plus_z_points_outward_from_each_tframe_shoulder
+  - shoulder_clocking_is_owner_confirmed_without_reinterpreting_mesh_protrusions
+  - upper_arms_hang_down_and_forearms_and_fingers_point_to_owner_confirmed_asset_plus_y_front
+  - drive_gains_are_isaac_only_and_inherited_from_the_qualified_simulation_baseline

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 
@@ -66,6 +67,13 @@ def test_d405_wrist_rig_uses_versioned_hand_base_backend_frames() -> None:
     rigs = resolve_d405_wrist_rig_runtimes(ROOT, resolved)
 
     assert tuple(rig.hand_base_backend_frame for rig in rigs) == ("l_wrist", "r_wrist")
+    expected = (
+        ((0.0, -1.0, 0.0), (-1.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
+        ((0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
+    )
+    for rig, rotation in zip(rigs, expected, strict=True):
+        np.testing.assert_allclose(rig.mount_in_hand.rotation, rotation, atol=1e-12)
+        assert rig.mount_in_hand.translation_m == (0.0, 0.0, 0.0)
 
 
 def test_mount_proxy_retains_boxes_capsules_and_no_d405_box_in_c2() -> None:
@@ -98,6 +106,8 @@ def test_collision_proxy_rejects_side_drift(tmp_path: Path) -> None:
             expected_side="right",
             expected_canonical_frame="hand_interface",
         )
+
+
 def test_runtime_is_immutable_value_data() -> None:
     resolved = SessionResolver(ROOT).resolve(SESSION)
     right = resolve_d405_wrist_rig_runtimes(ROOT, resolved)[1]

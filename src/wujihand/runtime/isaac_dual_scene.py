@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -39,9 +39,6 @@ from wujihand.adapters.simulation.nero_model import (
     NeroModelProfile,
     load_nero_model_profile,
 )
-from wujihand.adapters.simulation.nero_tabletop import (
-    NeroDualTabletopQualificationProfile,
-)
 from wujihand.adapters.simulation.q27_execution import (
     IsaacQ27ExecutionAdapter,
 )
@@ -71,6 +68,26 @@ from .isaac_workcell_plan import resolve_isaac_workcell_plan
 class ScenePose:
     position_m: tuple[float, float, float]
     quat_wxyz: tuple[float, float, float, float]
+
+
+class NeroSimulationDriveGains(Protocol):
+    @property
+    def stiffness(self) -> float: ...
+
+    @property
+    def damping(self) -> float: ...
+
+
+class NeroDualSimulationStartup(Protocol):
+    @property
+    def arm_drive_gains(self) -> NeroSimulationDriveGains: ...
+
+    def initial_position(
+        self,
+        instance_id: str,
+        group_id: str,
+        layout_id: str,
+    ) -> npt.NDArray[np.float64]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -348,7 +365,7 @@ class DualNeroHand2IsaacScene:
         resolved: ResolvedSession,
         sides: tuple[DualSideRuntime, DualSideRuntime],
         alignment_profile: NeroLinkGeometryAlignment,
-        qualification_profile: NeroDualTabletopQualificationProfile,
+        qualification_profile: NeroDualSimulationStartup,
         physics_hz: int,
         self_collision_sides: frozenset[str] = frozenset(),
         self_collision_filter_profile: NeroHand2SelfCollisionFilterProfile | None = None,
@@ -538,20 +555,26 @@ class DualNeroHand2IsaacScene:
         self.expected_root_paths = tuple(
             sorted(handle.articulation_root_path for handle in self.authored.values())
         )
-        self.partitions: dict[str, NeroHand2DofPartition] = {}
-        self.dataset_dynamic_object_paths: dict[str, str] = {}
-        self.dataset_kinematic_link_paths: dict[tuple[str, str], str] = {}
-        self.dataset_kinematic_link_indices: dict[tuple[str, str], int] = {}
-        self.operator_preview_link_paths: dict[tuple[str, str], str] = {}
-        self.operator_preview_link_indices: dict[tuple[str, str], int] = {}
+        self.partitions: dict[str, NeroHand2DofPartition]
+        self.dataset_dynamic_object_paths: dict[str, str]
+        self.dataset_kinematic_link_paths: dict[tuple[str, str], str]
+        self.dataset_kinematic_link_indices: dict[tuple[str, str], int]
+        self.operator_preview_link_paths: dict[tuple[str, str], str]
+        self.operator_preview_link_indices: dict[tuple[str, str], int]
         if visual_replay_only:
             self.root_paths_before_reset = self.expected_root_paths
+            self.partitions = {}
             self.arm_drive_runtime = {}
             self.external_fixed_collider_paths = list(
                 self.workcell_materialization.fixed_collider_paths
             )
             self.arm_targets = {}
             self.hand_targets = {}
+            self.dataset_dynamic_object_paths = {}
+            self.dataset_kinematic_link_paths = {}
+            self.dataset_kinematic_link_indices = {}
+            self.operator_preview_link_paths = {}
+            self.operator_preview_link_indices = {}
             return
         self.world.reset()
         (
@@ -571,6 +594,11 @@ class DualNeroHand2IsaacScene:
         self.hand_targets = {
             side: self.hand_profiles[side].rest_position.copy() for side in ("left", "right")
         }
+        self.dataset_dynamic_object_paths = {}
+        self.dataset_kinematic_link_paths = {}
+        self.dataset_kinematic_link_indices = {}
+        self.operator_preview_link_paths = {}
+        self.operator_preview_link_indices = {}
         if resolved.session.dataset_profile is not None:
             self._discover_dataset_truth_inventory()
 
@@ -970,6 +998,17 @@ class DualNeroHand2IsaacScene:
             )
             self.q27_execution.apply_target_q27(target)
             applied[side] = target.positions.copy()
+        return applied
+
+    def teleport_to_targets(self) -> dict[str, npt.NDArray[np.float64]]:
+        """Initialize simulation state directly at the current q27 targets."""
+
+        applied = self.apply_targets()
+        for side, positions in applied.items():
+            self.articulations[side].set_joint_positions(positions[np.newaxis, :])
+            self.articulations[side].set_joint_velocities(
+                np.zeros((1, 27), dtype=np.float64)
+            )
         return applied
 
     def rigid_body_snapshots(

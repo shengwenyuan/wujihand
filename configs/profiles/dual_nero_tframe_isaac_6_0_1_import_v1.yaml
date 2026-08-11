@@ -1,0 +1,75 @@
+schema: wujihand.dual_nero_tframe_step_import_recipe.v1
+recipe_id: dual_nero_tframe_isaac_6_0_1_import_v1
+status: generated_unqualified_simulation_only
+isaac:
+  version: 6.0.1
+  openusd_version: 0.25.11
+source:
+  sha256: 3cf8f2388649de17470e67db920077c8b6cd778cf80c2536d42f3ccacd0a7dc5
+  size_bytes: 136148726
+  step_schema: CONFIG_CONTROL_DESIGN
+  text_encoding: gb18030
+  length_unit: millimetre
+selection:
+  path: configs/profiles/dual_nero_tframe_step_selection_v1.yaml
+  selection_id: dual_nero_tframe_structure_v1
+output:
+  root: artifacts/derived/isaac/6.0.1/dual-nero-tframe/v1
+  root_prim: /TFrame
+  visual_root_prim: /TFrameVisual
+  collision_root_prim: /TFrameCollision
+  up_axis: Z
+  meters_per_unit: 1.0
+coordinate_frame:
+  frame_id: provisional_tframe_shoulder_center_v1
+  status: provisional_inspection_only
+  origin_policy: midpoint_of_mount_witness_origins
+  mount_witness_occurrence_ids:
+    - NAUO37
+    - NAUO38
+  assembly_to_asset_axis_rows:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 0.0, -1.0]
+    - [0.0, 1.0, 0.0]
+visual:
+  linear_deflection_mm: 0.5
+  angular_deflection_rad: 0.35
+  relative_deflection: false
+  parallel: false
+  double_sided: true
+collision:
+  method: per_topods_solid_adaptive_convex_or_static_triangle_mesh
+  linear_deflection_mm: 1.0
+  angular_deflection_rad: 0.5
+  relative_deflection: false
+  parallel: false
+  qhull_joggle: false
+  convex_hull_max_volume_ratio: 2.0
+  concave_fallback: static_triangle_mesh
+  minimum_source_solid_volume_mm3: 0.001
+brep_acceptance:
+  included_shape_policy: allow_invalid_aggregate_only_when_solids_and_shells_are_valid
+  allowed_non_solid_statuses:
+    - BRepCheck_UnorientableShape
+    - BRepCheck_NotConnected
+  mount_witness_policy: transform_only_allow_invalid_geometry_never_emit_witness_mesh
+canonicalization:
+  json_float_decimal_places: 12
+  geometry_quantization_m: 0.000001
+  occurrence_sort: natural_numeric
+  triangle_digest: sorted_quantized_unoriented_triangles_sha256
+toolchain:
+  python: 3.12
+  cadquery_ocp: 7.8.1.1.post1
+  opencascade: 7.8.1.1
+  numpy: 2.2.6
+  scipy: 1.16.1
+  trimesh: 4.12.2
+  pyyaml: 6.0.2
+  usd_core: 25.11
+assumptions:
+  - generated_asset_is_static_workcell_geometry_not_a_robot_assembly
+  - no_nero_hand2_camera_power_cable_connector_or_fastener_geometry_is_emitted
+  - provisional_mount_witness_frames_are_report_only_and_not_accepted_workcell_mounts
+  - left_right_assignment_requires_physical_installation_evidence
+  - pinned_nero_urdf_usd_kinematics_and_limits_are_not_modified
