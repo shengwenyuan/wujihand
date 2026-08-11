@@ -12,14 +12,13 @@ Isaac Sim 6.0.1 驱动仿真 NERO + Wuji Hand 2，并完成遥操作采集、回
 保留刚体、碰撞和驱动的 physics-enabled 仿真资产。
 
 默认双 NERO、ROS2、D405 与数据集业务入口仍固定为 `wuji-sdk==2026.7.21 +
-wuji-description v2026.6.27`。并列的 8.3 qualification 已完成 SDK/API/静态 retarget、Studio 8.3
-具名用户左右校准 URDF、matched-chain preflight 和左右穿戴 Isaac 验收；操作者确认贴合问题明显
-改善。另已建立显式版本化的双 NERO + 双 Hand2 8.3 + Glove/Tracker + record 入口，并完成无设备
-严格零漏全链。首次操作者 live record 已证明双臂、双手与写盘主链，并暴露、修正 8.3 wrist 根
-坐标系装配朝向；该记录缺少 D405 topic，只作为诊断证据。并列入口仍是
-`qualification_only=true`、`dataset_eligible=false`，待修正朝向并带 D405 的最终复录后收口。
-Hand2 self-collision 继续关闭，少量指间穿模是已知非阻塞限制。新版尚未成为默认业务链，也没有
-访问 NERO 或 Hand2 真机。
+wuji-description v2026.6.27`。并列的 `SDK 2026.8.3 + Description v2026.8.3` Hand2 Beta1
+同版链已完成验收，可作为新场景的固定上游；这不自动切换历史默认入口。最新版双 NERO + 双
+Hand2 8.3 + Glove/Tracker + ROS2 record 链已具备显式版本身份、fail-closed preflight、q54、
+operator preview、rosbag、checksum 和离线验证能力，T-frame 将通过新的 Workcell/Session/
+Deployment 复用该链。T-frame 首轮仍为 `qualification_only=true`、`dataset_eligible=false`，数据
+资格需在新场景质量 Gate 后单独提升。Hand2 self-collision 继续关闭，少量指间穿模是已知非阻塞
+限制；上述验收均未访问 NERO 或 Hand2 真机。
 
 官方仍将 Wuji Hand 2 定义为 Beta 阶段产品；`v2026.7.23` 更改了 Hand 2 模型坐标约定、根节点、
 命名、目录和碰撞语义。不能把滚动 `latest` 文档直接套入既有配置、数据集或验证结果。涉及升级时
@@ -28,6 +27,9 @@ Hand2 self-collision 继续关闭，少量指间穿模是已知非阻塞限制�
 [Wuji Description 发布记录](https://docs.wuji.tech/docs/zh/wuji-description/latest/release-notes/)，
 再建立独立迁移与回归 Gate。当前阶段一方案见
 [013：Wuji SDK + Description v2026.8.3 / Hand2 Beta1 同版链阶段一计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)。
+Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真实遥操作采集预埋见
+[015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划](015-wuji-hand2-beta1-real-hardware-bringup-and-teleoperation-data-plan.md)；
+该计划从只读资格验证开始，不授权当前仿真入口访问或控制真机。
 
 ## 当前主要入口
 
@@ -57,6 +59,8 @@ Hand2 self-collision 继续关闭，少量指间穿模是已知非阻塞限制�
 - [011：Mini 数据集完整性门禁与质量分级更新计划](011-mini-dataset-integrity-vs-quality-gate-update-plan.md)
 - [012：PI05 q54 / H25 Mini 数据集过拟合开发计划](012-pi05-q54-h25-mini-overfit-development-plan.md)
 - [013：Wuji SDK + Description v2026.8.3 / Hand2 Beta1 同版链阶段一计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)
+- [014：Dual NERO T 型架 Isaac + ROS2 Record 并列场景开发计划](014-dual-nero-t-frame-isaac-ros2-record-scene-development-plan.md)
+- [015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划](015-wuji-hand2-beta1-real-hardware-bringup-and-teleoperation-data-plan.md)
 
 ## Components
 
