@@ -21,7 +21,7 @@ from .workcell import EntitySpec
 
 
 ISAAC_STATIC_USD_WORKCELL_SCHEMA = "wujihand.isaac_static_usd_workcell.v1"
-ISAAC_TASK_SCENE_SCHEMA = "wujihand.isaac_task_scene.v1"
+ISAAC_TASK_SCENE_SCHEMA = "wujihand.isaac_task_scene.v2"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GROUND_POLICIES = frozenset({"preserve", "project", "none"})
 _PHYSICS_SCENE_POLICIES = frozenset({"preserve", "project"})
@@ -99,6 +99,31 @@ def _relative_prim_paths(
     if len(set(result)) != len(result):
         raise ValueError(f"{field} must not contain duplicates")
     return tuple(result)
+
+
+def _dynamic_rigid_bodies(
+    value: object,
+    *,
+    field: str,
+) -> tuple[tuple[str, str], ...]:
+    if not isinstance(value, Mapping) or any(
+        not isinstance(key, str) for key in value
+    ):
+        raise ValueError(f"{field} must be a string-keyed mapping")
+    result = tuple(
+        (
+            validate_identifier(logical_id, field=f"{field}.{logical_id}"),
+            _relative_prim_paths(
+                [relative_path],
+                field=f"{field}.{logical_id}",
+            )[0],
+        )
+        for logical_id, relative_path in sorted(value.items())
+    )
+    paths = tuple(path for _, path in result)
+    if len(set(paths)) != len(paths):
+        raise ValueError(f"{field} USD prim paths must be unique")
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -451,6 +476,7 @@ class IsaacTaskSceneProfile:
     transform: PoseSpec
     excluded_prim_paths: tuple[str, ...]
     fixed_rigid_body_paths: tuple[str, ...]
+    dynamic_rigid_bodies: tuple[tuple[str, str], ...]
     entities: tuple[EntitySpec, ...]
     expectations: IsaacSceneExpectations
 
@@ -474,6 +500,7 @@ class IsaacTaskSceneProfile:
                     "transform",
                     "excluded_prim_paths",
                     "fixed_rigid_body_paths",
+                    "dynamic_rigid_bodies",
                     "entities",
                     "expectations",
                 }
@@ -503,6 +530,20 @@ class IsaacTaskSceneProfile:
         entity_ids = tuple(entity.entity_id for entity in entities)
         if len(set(entity_ids)) != len(entity_ids):
             raise ValueError(f"{field}.entities entity_id values must be unique")
+        fixed_rigid_body_paths = _relative_prim_paths(
+            data["fixed_rigid_body_paths"],
+            field=f"{field}.fixed_rigid_body_paths",
+        )
+        dynamic_rigid_bodies = _dynamic_rigid_bodies(
+            data["dynamic_rigid_bodies"],
+            field=f"{field}.dynamic_rigid_bodies",
+        )
+        if set(fixed_rigid_body_paths) & {
+            path for _, path in dynamic_rigid_bodies
+        }:
+            raise ValueError(
+                f"{field} cannot declare one rigid body as both fixed and dynamic"
+            )
         return cls(
             schema=schema,
             profile_id=validate_identifier(
@@ -530,10 +571,8 @@ class IsaacTaskSceneProfile:
                 data["excluded_prim_paths"],
                 field=f"{field}.excluded_prim_paths",
             ),
-            fixed_rigid_body_paths=_relative_prim_paths(
-                data["fixed_rigid_body_paths"],
-                field=f"{field}.fixed_rigid_body_paths",
-            ),
+            fixed_rigid_body_paths=fixed_rigid_body_paths,
+            dynamic_rigid_bodies=dynamic_rigid_bodies,
             entities=entities,
             expectations=IsaacSceneExpectations.from_mapping(
                 data["expectations"],
@@ -552,6 +591,7 @@ class IsaacTaskSceneProfile:
             "transform": self.transform.to_mapping(),
             "excluded_prim_paths": list(self.excluded_prim_paths),
             "fixed_rigid_body_paths": list(self.fixed_rigid_body_paths),
+            "dynamic_rigid_bodies": dict(self.dynamic_rigid_bodies),
             "entities": [entity.to_mapping() for entity in self.entities],
             "expectations": self.expectations.to_mapping(),
         }

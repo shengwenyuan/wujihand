@@ -26,6 +26,7 @@ class IsaacWorkcellMaterialization:
     collider_paths: tuple[str, ...]
     fixed_collider_paths: tuple[str, ...]
     fixed_rigid_body_paths: tuple[str, ...]
+    dynamic_rigid_body_paths: tuple[tuple[str, str], ...]
     rigid_body_paths: tuple[str, ...]
     physics_scene_paths: tuple[str, ...]
     light_paths: tuple[str, ...]
@@ -43,6 +44,9 @@ class IsaacWorkcellMaterialization:
             "fixed_collider_paths": list(self.fixed_collider_paths),
             "fixed_rigid_body_paths": list(
                 self.fixed_rigid_body_paths
+            ),
+            "dynamic_rigid_body_paths": dict(
+                self.dynamic_rigid_body_paths
             ),
             "rigid_body_paths": list(self.rigid_body_paths),
             "physics_scene_paths": list(self.physics_scene_paths),
@@ -297,6 +301,16 @@ def materialize_isaac_workcell(
             and _rigid_body_enabled(prim, UsdPhysics)
         )
     )
+    if plan.task_scene_profile_id is not None:
+        declared_dynamic_paths = {
+            path for _, path in plan.dynamic_rigid_body_paths
+        }
+        if set(rigid_bodies) != declared_dynamic_paths:
+            raise RuntimeError(
+                "task-scene dynamic rigid-body inventory differs: "
+                f"declared={sorted(declared_dynamic_paths)}, "
+                f"actual={sorted(rigid_bodies)}"
+            )
     fixed_colliders = tuple(
         path
         for path in colliders
@@ -345,6 +359,7 @@ def materialize_isaac_workcell(
         collider_paths=colliders,
         fixed_collider_paths=fixed_colliders,
         fixed_rigid_body_paths=plan.fixed_rigid_body_paths,
+        dynamic_rigid_body_paths=plan.dynamic_rigid_body_paths,
         rigid_body_paths=rigid_bodies,
         physics_scene_paths=physics_scenes,
         light_paths=lights,

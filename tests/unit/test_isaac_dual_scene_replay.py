@@ -114,7 +114,11 @@ def test_dataset_state_uses_backend_qdot_and_restores_exact_pre_action(
     assert np.array_equal(scene.feedback_qdot27("left"), np.arange(27))
 
     banana_path = "/World/Environment/robolab_banana_bowl/banana"
-    scene.dataset_dynamic_object_paths = {"banana": banana_path}
+    bowl_path = "/World/Environment/robolab_banana_bowl/bowl"
+    scene.dataset_dynamic_object_paths = {
+        "banana": banana_path,
+        "bowl": bowl_path,
+    }
     scene.dataset_kinematic_link_paths = {("left", "palm"): "/World/Robots/Hand2Left/l_base_link"}
     monkeypatch.setattr(
         scene,
@@ -126,6 +130,14 @@ def test_dataset_state_uses_backend_qdot_and_restores_exact_pre_action(
                 quat_wxyz=(1.0, 0.0, 0.0, 0.0),
                 linear_velocity_m_s=(0.01, 0.02, 0.03),
                 angular_velocity_deg_s=(90.0, 0.0, 0.0),
+                kinematic_enabled=False,
+            ),
+            SceneRigidBodySnapshot(
+                prim_path=bowl_path,
+                position_m=(-0.1, 0.4, 0.2),
+                quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+                linear_velocity_m_s=(0.0, 0.0, 0.0),
+                angular_velocity_deg_s=(0.0, 0.0, -45.0),
                 kinematic_enabled=False,
             ),
         ),
@@ -169,8 +181,11 @@ def test_dataset_state_uses_backend_qdot_and_restores_exact_pre_action(
     )
     assert frame.rigid_bodies[0].angular_velocity_rad_s == pytest.approx((np.pi / 2.0, 0.0, 0.0))
 
-    rigid = _FakeRigidPrim()
-    scene.dynamic_workcell_prims = {banana_path: rigid}
+    dynamic_prims = {
+        banana_path: _FakeRigidPrim(),
+        bowl_path: _FakeRigidPrim(),
+    }
+    scene.dynamic_workcell_prims = dynamic_prims
     scene.restore_dataset_state_frame(frame, q54_profile=profile)
 
     for side, expected_position, expected_velocity in (
@@ -182,10 +197,22 @@ def test_dataset_state_uses_backend_qdot_and_restores_exact_pre_action(
         assert articulation.velocities is not None
         assert np.allclose(articulation.positions[0], expected_position)
         assert np.allclose(articulation.velocities[0], expected_velocity)
-    assert rigid.pose is not None
-    assert rigid.linear_velocity is not None
-    assert rigid.angular_velocity is not None
-    assert np.allclose(rigid.angular_velocity, (np.pi / 2.0, 0.0, 0.0))
+    assert tuple(body.logical_object_id for body in frame.rigid_bodies) == (
+        "banana",
+        "bowl",
+    )
+    for rigid in dynamic_prims.values():
+        assert rigid.pose is not None
+        assert rigid.linear_velocity is not None
+        assert rigid.angular_velocity is not None
+    assert np.allclose(
+        dynamic_prims[banana_path].angular_velocity,
+        (np.pi / 2.0, 0.0, 0.0),
+    )
+    assert np.allclose(
+        dynamic_prims[bowl_path].angular_velocity,
+        (0.0, 0.0, -np.pi / 4.0),
+    )
 
     post_frame = scene.create_dataset_state_frame(
         run_id="episode-001",

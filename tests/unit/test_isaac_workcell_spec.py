@@ -107,7 +107,7 @@ def test_profile_rejects_unpinned_or_conflicting_policy() -> None:
 
 def _task_scene_profile() -> dict[str, Any]:
     return {
-        "schema": "wujihand.isaac_task_scene.v1",
+        "schema": "wujihand.isaac_task_scene.v2",
         "profile_id": "demo_task_scene_v1",
         "import_id": "demo_task",
         "scene": _profile()["scene"],
@@ -118,7 +118,11 @@ def _task_scene_profile() -> dict[str, Any]:
             "quat_wxyz": [1.0, 0.0, 0.0, 0.0],
         },
         "excluded_prim_paths": ["GroundPlane", "robot_table"],
-        "fixed_rigid_body_paths": ["bowl"],
+        "fixed_rigid_body_paths": [],
+        "dynamic_rigid_bodies": {
+            "banana": "fruit/banana",
+            "bowl": "bowl",
+        },
         "entities": [
             {
                 "entity_id": "task_table",
@@ -149,7 +153,11 @@ def test_task_scene_round_trips_as_an_independent_overlay() -> None:
         "GroundPlane",
         "robot_table",
     )
-    assert profile.fixed_rigid_body_paths == ("bowl",)
+    assert profile.fixed_rigid_body_paths == ()
+    assert dict(profile.dynamic_rigid_bodies) == {
+        "banana": "fruit/banana",
+        "bowl": "bowl",
+    }
     assert profile.entities[0].entity_id == "task_table"
     assert profile.to_mapping() == mapping
 
@@ -160,3 +168,18 @@ def test_task_scene_rejects_absolute_prim_paths() -> None:
 
     with pytest.raises(ValueError, match="relative USD prim path"):
         IsaacTaskSceneProfile.from_mapping(mapping)
+
+
+def test_task_scene_rejects_conflicting_or_duplicate_dynamic_bodies() -> None:
+    conflicting = _task_scene_profile()
+    conflicting["fixed_rigid_body_paths"] = ["bowl"]
+    with pytest.raises(ValueError, match="both fixed and dynamic"):
+        IsaacTaskSceneProfile.from_mapping(conflicting)
+
+    duplicate = _task_scene_profile()
+    duplicate["dynamic_rigid_bodies"] = {
+        "first": "bowl",
+        "second": "bowl",
+    }
+    with pytest.raises(ValueError, match="prim paths must be unique"):
+        IsaacTaskSceneProfile.from_mapping(duplicate)

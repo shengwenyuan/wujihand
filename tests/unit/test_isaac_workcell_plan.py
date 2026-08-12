@@ -65,7 +65,6 @@ def test_robolab_workcell_compiles_to_content_identity_and_hybrid_ops() -> None:
     assert plan.primitives == ()
     assert plan.fixed_rigid_body_paths == (
         "/World/Environment/robolab_banana_bowl/table",
-        "/World/Environment/robolab_banana_bowl/bowl",
     )
     assert mapping["fixed_rigid_body_paths"] == list(
         plan.fixed_rigid_body_paths
@@ -81,7 +80,7 @@ def test_tframe_composes_the_banana_task_scene_without_changing_session() -> Non
         "configs/workcells/isaac_dual_nero_tframe_candidate_20260811_v1.yaml"
     )
     task_scene = (
-        "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml"
+        "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml"
     )
 
     base_plan = resolve_isaac_workcell_plan(ROOT, workcell)
@@ -96,7 +95,7 @@ def test_tframe_composes_the_banana_task_scene_without_changing_session() -> Non
     assert task_plan.workcell_id == base_plan.workcell_id
     assert task_plan.profile_id == base_plan.profile_id
     assert task_plan.task_scene_profile_id == (
-        "isaac_robolab_banana_bowl_low_table_v1"
+        "isaac_robolab_banana_bowl_low_table_v2"
     )
     assert task_plan.task_scene_profile_path == task_scene
     assert tuple(operation.import_id for operation in task_plan.imports) == (
@@ -112,9 +111,11 @@ def test_tframe_composes_the_banana_task_scene_without_changing_session() -> Non
         "franka_table",
         "table",
     )
-    assert task_plan.fixed_rigid_body_paths == (
-        "/World/Environment/robolab_banana_bowl_task/bowl",
-    )
+    assert task_plan.fixed_rigid_body_paths == ()
+    assert dict(task_plan.dynamic_rigid_body_paths) == {
+        "banana": "/World/Environment/robolab_banana_bowl_task/banana",
+        "bowl": "/World/Environment/robolab_banana_bowl_task/bowl",
+    }
     task_entities = {
         operation.entity_id: operation
         for operation in task_plan.primitives
@@ -141,6 +142,33 @@ def test_tframe_composes_the_banana_task_scene_without_changing_session() -> Non
             operation.pose.position_m[2]
             - operation.entity.primitive.size_m[2] / 2.0
         ) == pytest.approx(0.0)
+
+
+def test_tframe_composes_a_second_robolab_scene_without_object_special_cases() -> None:
+    repository = ConfigRepository(ROOT)
+    workcell = repository.load_workcell(
+        "configs/workcells/isaac_dual_nero_tframe_candidate_20260811_v1.yaml"
+    )
+
+    plan = resolve_isaac_workcell_plan(
+        ROOT,
+        workcell,
+        task_scene="configs/scenes/isaac_robolab_colored_blocks_low_table_v1.yaml",
+    )
+
+    assert plan.task_scene_profile_id == (
+        "isaac_robolab_colored_blocks_low_table_v1"
+    )
+    assert plan.fixed_rigid_body_paths == ()
+    assert dict(plan.dynamic_rigid_body_paths) == {
+        color: f"/World/Environment/robolab_colored_blocks_task/{color}"
+        for color in (
+            "blue_block",
+            "green_block",
+            "red_block",
+            "yellow_block",
+        )
+    }
 
 
 def test_each_robolab_layout_is_a_distinct_resolved_session() -> None:

@@ -311,8 +311,8 @@ def validate(run_root: Path) -> dict[str, Any]:
     )
     expected_task_scene = (
         {
-            "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
-            "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+            "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
+            "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
         }
         if deployment_manifest.get("deployment_id")
         == "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1"

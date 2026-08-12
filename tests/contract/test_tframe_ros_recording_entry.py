@@ -72,7 +72,7 @@ def test_tframe_record_policy_keeps_task_scene_outside_the_session() -> None:
     policy = load_record_chain_qualification_policy(POLICY)
 
     assert policy.task_scene is not None
-    assert policy.task_scene.path == ("configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml")
+    assert policy.task_scene.path == ("configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml")
     assert policy.nero.assembly_attachment_quaternion(HandSide.LEFT) == (
         0.5,
         -0.5,

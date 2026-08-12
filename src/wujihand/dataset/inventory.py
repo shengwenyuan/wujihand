@@ -133,18 +133,23 @@ def validate_q54_runtime_inventory(
 def parse_dataset_truth_inventories(
     dataset_manifest: Mapping[str, object],
 ) -> tuple[dict[str, str], dict[tuple[str, str], str]]:
-    """Parse the deliberately small 008 banana and bilateral link inventory."""
+    """Parse scene-frozen dynamic objects and bilateral link truth."""
 
     objects_raw = _mapping(
         dataset_manifest.get("dynamic_object_inventory"),
         field="dynamic object inventory",
     )
-    if set(objects_raw) != {"banana"}:
-        raise ValueError("008 dynamic object inventory must contain only banana")
-    object_path = objects_raw["banana"]
-    if not isinstance(object_path, str) or not object_path.startswith("/"):
-        raise ValueError("banana inventory path must be an absolute USD prim path")
-    objects = {"banana": object_path}
+    if not objects_raw or len(objects_raw) > 32:
+        raise ValueError("dynamic object inventory must contain 1 to 32 objects")
+    objects: dict[str, str] = {}
+    for logical_id, path in sorted(objects_raw.items()):
+        if not logical_id or not isinstance(path, str) or not path.startswith("/"):
+            raise ValueError(
+                "dynamic object inventory must map non-empty IDs to absolute USD prim paths"
+            )
+        objects[logical_id] = path
+    if len(set(objects.values())) != len(objects):
+        raise ValueError("dynamic object inventory prim paths must be unique")
 
     links_raw = _sequence(
         dataset_manifest.get("kinematic_link_inventory"),
@@ -156,13 +161,13 @@ def parse_dataset_truth_inventories(
         if set(record) != {"side", "logical_link_id", "prim_path"}:
             raise ValueError(f"kinematic link inventory[{index}] keys differ")
         side = record["side"]
-        logical_id = record["logical_link_id"]
+        link_id = record["logical_link_id"]
         path = record["prim_path"]
-        if side not in {"left", "right"} or not isinstance(logical_id, str):
+        if side not in {"left", "right"} or not isinstance(link_id, str):
             raise ValueError(f"kinematic link inventory[{index}] identity differs")
         if not isinstance(path, str) or not path.startswith("/"):
             raise ValueError(f"kinematic link inventory[{index}] prim path differs")
-        key = (side, logical_id)
+        key = (side, link_id)
         if key in links:
             raise ValueError("kinematic link inventory contains a duplicate identity")
         links[key] = path

@@ -114,6 +114,7 @@ class ResolvedIsaacWorkcellPlan:
     imports: tuple[ResolvedIsaacUsdImport, ...]
     primitives: tuple[ResolvedIsaacPrimitive, ...]
     fixed_rigid_body_paths: tuple[str, ...]
+    dynamic_rigid_body_paths: tuple[tuple[str, str], ...]
     policies: IsaacWorkcellPolicies
     lighting: ResolvedIsaacLighting
     expectations: IsaacSceneExpectations | None
@@ -135,6 +136,9 @@ class ResolvedIsaacWorkcellPlan:
             ],
             "fixed_rigid_body_paths": list(
                 self.fixed_rigid_body_paths
+            ),
+            "dynamic_rigid_body_paths": dict(
+                self.dynamic_rigid_body_paths
             ),
             "policies": self.policies.to_mapping(),
             "lighting": self.lighting.to_mapping(),
@@ -252,6 +256,7 @@ def resolve_isaac_workcell_plan(
 
     task_scene_profile_id: str | None = None
     task_scene_profile_path: str | None = None
+    dynamic_rigid_body_paths: tuple[tuple[str, str], ...] = ()
     if task_scene is not None:
         task_profile, task_scene_profile_path = _load_task_scene_profile(
             repository,
@@ -315,6 +320,14 @@ def resolve_isaac_workcell_plan(
             )
             known_entity_ids.add(entity.entity_id)
         task_scene_profile_id = task_profile.profile_id
+        task_import = imports[-1]
+        dynamic_rigid_body_paths = tuple(
+            (
+                logical_id,
+                f"{task_import.prim_path}/{relative_path}",
+            )
+            for logical_id, relative_path in task_profile.dynamic_rigid_bodies
+        )
 
     fixed_rigid_body_paths = tuple(
         f"{operation.prim_path}/{relative_path}"
@@ -332,6 +345,7 @@ def resolve_isaac_workcell_plan(
         imports=tuple(imports),
         primitives=tuple(primitives),
         fixed_rigid_body_paths=fixed_rigid_body_paths,
+        dynamic_rigid_body_paths=dynamic_rigid_body_paths,
         policies=policies,
         lighting=lighting,
         expectations=expectations,

@@ -10,8 +10,8 @@ assembly:
   path: configs/assemblies/nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1.yaml
   expected_id: nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1
 task_scene:
-  path: configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml
-  expected_id: isaac_robolab_banana_bowl_low_table_v1
+  path: configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml
+  expected_id: isaac_robolab_banana_bowl_low_table_v2
 description:
   release: v2026.8.3
   asset_revision: beta1_description_v2026_8_3

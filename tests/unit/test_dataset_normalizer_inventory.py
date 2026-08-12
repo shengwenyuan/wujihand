@@ -73,7 +73,10 @@ def _runtime_inventory() -> tuple[Q54JointProfile, dict[str, object]]:
 
 def _manifest_inventories() -> dict[str, object]:
     return {
-        "dynamic_object_inventory": {"banana": "/World/Workcell/banana"},
+        "dynamic_object_inventory": {
+            "banana": "/World/Workcell/banana",
+            "bowl": "/World/Workcell/bowl",
+        },
         "kinematic_link_inventory": [
             {
                 "side": side,
@@ -124,9 +127,20 @@ def _state(*, banana_kinematic: bool = False, missing_link: bool = False) -> Sim
                 kinematic=banana_kinematic,
                 valid=True,
             ),
+            DynamicRigidBodyTruth(
+                logical_object_id="bowl",
+                prim_path="/World/Workcell/bowl",
+                position_m=(0.2, 0.0, 0.0),
+                quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+                linear_velocity_m_s=(0.0, 0.0, 0.0),
+                angular_velocity_rad_s=(0.0, 0.0, 0.0),
+                sleeping=False,
+                kinematic=False,
+                valid=True,
+            ),
         ),
         kinematic_links=links,
-        expected_rigid_body_count=1,
+        expected_rigid_body_count=2,
         expected_kinematic_link_count=len(links),
     )
 
@@ -145,12 +159,15 @@ def test_q54_runtime_inventory_closes_all_names_indices_and_limits() -> None:
         validate_q54_runtime_inventory(inventory, profile=profile)
 
 
-def test_truth_inventory_requires_banana_and_all_fourteen_links() -> None:
+def test_truth_inventory_accepts_scene_frozen_objects_and_all_fourteen_links() -> None:
     manifest = _manifest_inventories()
 
     objects, links = parse_dataset_truth_inventories(manifest)
 
-    assert objects == {"banana": "/World/Workcell/banana"}
+    assert objects == {
+        "banana": "/World/Workcell/banana",
+        "bowl": "/World/Workcell/bowl",
+    }
     assert len(links) == 14
 
     raw_links = manifest["kinematic_link_inventory"]
@@ -159,8 +176,16 @@ def test_truth_inventory_requires_banana_and_all_fourteen_links() -> None:
     with pytest.raises(ValueError, match="14 unique bilateral"):
         parse_dataset_truth_inventories(manifest)
 
+    manifest = _manifest_inventories()
+    manifest["dynamic_object_inventory"] = {
+        "banana": "/World/Workcell/object",
+        "bowl": "/World/Workcell/object",
+    }
+    with pytest.raises(ValueError, match="prim paths must be unique"):
+        parse_dataset_truth_inventories(manifest)
 
-def test_each_state_must_match_manifest_and_dynamic_banana_semantics() -> None:
+
+def test_each_state_must_match_manifest_and_dynamic_object_semantics() -> None:
     objects, links = parse_dataset_truth_inventories(_manifest_inventories())
 
     validate_state_truth_inventory(

@@ -1,0 +1,78 @@
+schema: wujihand.isaac_task_scene.v2
+profile_id: isaac_robolab_banana_bowl_low_table_v2
+import_id: robolab_banana_bowl_task
+scene:
+  source: modelscope-sss225-robolab-assets
+  source_revision: commit:377fb4959532d2ee6055d3a874f25c4b327e2894
+  path: assets/scenes/banana_bowl.usda
+  expected_sha256: caf59864ffd777e53fb14e88e5620e19a967bbaa8d448bf98a8fdd41cb8832a0
+composition: reference
+frame: world
+transform:
+  # Align the source operation-table surface center with [0, 0.55, 0.20] m.
+  position_m: [-0.0000582, 0.0028054, 0.1970015]
+  quat_wxyz: [0.7071067811865476, 0.0, 0.0, 0.7071067811865475]
+excluded_prim_paths:
+  - GroundPlane
+  - franka_table
+  - table
+fixed_rigid_body_paths: []
+dynamic_rigid_bodies:
+  banana: banana
+  bowl: bowl
+entities:
+  - entity_id: banana_task_table_top
+    frame: world
+    transform:
+      position_m: [0.0, 0.55, 0.18]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.70, 1.00, 0.04]
+    mobility: fixed
+    mass_kg: null
+  - entity_id: banana_task_table_near_left_leg
+    frame: world
+    transform:
+      position_m: [-0.30, 0.10, 0.09]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.05, 0.05, 0.18]
+    mobility: fixed
+    mass_kg: null
+  - entity_id: banana_task_table_near_right_leg
+    frame: world
+    transform:
+      position_m: [0.30, 0.10, 0.09]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.05, 0.05, 0.18]
+    mobility: fixed
+    mass_kg: null
+  - entity_id: banana_task_table_far_left_leg
+    frame: world
+    transform:
+      position_m: [-0.30, 1.00, 0.09]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.05, 0.05, 0.18]
+    mobility: fixed
+    mass_kg: null
+  - entity_id: banana_task_table_far_right_leg
+    frame: world
+    transform:
+      position_m: [0.30, 1.00, 0.09]
+      quat_wxyz: [1.0, 0.0, 0.0, 0.0]
+    primitive:
+      kind: box
+      size_m: [0.05, 0.05, 0.18]
+    mobility: fixed
+    mass_kg: null
+expectations:
+  default_prim: world
+  meters_per_unit: 1.0
+  up_axis: Z
+  min_colliders: 2

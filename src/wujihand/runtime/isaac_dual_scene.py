@@ -659,13 +659,14 @@ class DualNeroHand2IsaacScene:
         return names, tuple((float(row[0]), float(row[1])) for row in limits)
 
     def _discover_dataset_truth_inventory(self) -> None:
-        """Freeze the deliberately small privileged-truth inventory for 008."""
+        """Freeze scene-declared dynamic objects and bilateral link truth."""
 
-        dynamic_paths = self.workcell_materialization.rigid_body_paths
-        dynamic = {Path(path).name.lower(): path for path in dynamic_paths}
-        if set(dynamic) != {"banana"}:
+        dynamic = dict(
+            self.workcell_materialization.dynamic_rigid_body_paths
+        )
+        if not dynamic:
             raise RuntimeError(
-                f"008 dataset dynamic inventory must contain only banana: actual={sorted(dynamic)}"
+                "dataset task scene must declare at least one dynamic rigid body"
             )
         self.dataset_dynamic_object_paths = dynamic
 

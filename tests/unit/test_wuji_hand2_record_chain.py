@@ -187,8 +187,8 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
             "stub",
             None,
             {
-                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
-                "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
+                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
             },
         ),
         (
@@ -197,8 +197,8 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
             "glove",
             "live_teleoperation",
             {
-                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
-                "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
+                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
             },
         ),
     ),
