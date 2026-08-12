@@ -37,6 +37,29 @@ sources:
       nero/urdf/nero_description.urdf: c297c4bd2caeff44c673ae69070fc80f950510c0cb33cfa8b81b5bc774e91278
     asset_trees:
       nero/meshes: 2323405c805cbc4187f451a22d02954fc952a8a2b67b9602119ad26e1ee5031e
+  - name: agilex-agx-arm-urdf-nero-gripper-flange
+    kind: git
+    url: https://github.com/agilexrobotics/agx_arm_urdf.git
+    commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    retrieved_at: 2026-08-12
+    local_runtime_path: third_party/src/agx_arm_urdf_nero_gripper_flange
+    license_path: LICENSE
+    license_sha256: 247944c63de1573653722ba784f96123da267105b7b48577e0c8826a24b809f6
+    sparse_paths:
+      - LICENSE
+      - nero/urdf/nero_with_gripper_flange_description.xacro
+      - nero/urdf/nero_with_gripper_description.xacro
+      - nero/meshes/gripper_flange.stl
+      - nero/meshes/dae/gripper_flange.dae
+      - nero/meshes/gripper_base.stl
+      - nero/meshes/dae/gripper_base.dae
+    artifacts:
+      nero/urdf/nero_with_gripper_flange_description.xacro: eba3a5e7b7ac82a9d6fd376a8fc9314e0b65fcf07d2dff43c9a34822dd53f44b
+      nero/urdf/nero_with_gripper_description.xacro: 3d7a7bd643156fbef72fe4a418a27a4804e22b89e1c9827ef5af2db3d9fff066
+      nero/meshes/gripper_flange.stl: 1ae6d1c5af001582a3328564839e8eb5f2acec02e7e2b19e65fc3c43f8a9c95a
+      nero/meshes/dae/gripper_flange.dae: 93b4fd381b2edd42a3ec946567027aa3392c65be2f3f00c5711b86f4070980fa
+      nero/meshes/gripper_base.stl: 041b1c8ffa29bff9a5e9350ec9d3e1a0129a5abcba1f347b29b5ad7367ba5f5a
+      nero/meshes/dae/gripper_base.dae: 92f7c3116b219168c36678a44f56f49c1e63fc080129f8a27fad213727ea8a7d
   - name: agilex-pyagxarm
     kind: git
     url: https://github.com/agilexrobotics/pyAgxArm.git
@@ -100,6 +123,53 @@ sources:
       nero_description.import.json: 236915c248585f7a849eab22b21f1f54cd76826ea15b7a45ad64fe96f421e6fe
     asset_trees:
       nero_description: 07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0
+  - name: agilex-nero-gripper-flange-isaac-6-0-1-v1
+    kind: generated
+    sha256: eaa29a46124c9697a53f8765acd3400b4e8d56c5624748f4ad615f083d679e0d
+    generated_at: 2026-08-12
+    generated_by: tools/import_nero_gripper_flange_to_usd.py
+    generator_sha256: b97fb9efead130e7ade33feab5e20ffdbc0f542e520f374930a64e52632f7985
+    import_adapter: src/wujihand/adapters/simulation/nero_gripper_flange_import.py
+    import_adapter_sha256: e69d88cb98d8c8b3a591922fc21271eb2acf25645cef5b5b4b69a82d2f66a5e1
+    generator_recipe: configs/profiles/agilex_nero_gripper_flange_isaac_6_0_1_import_v1.yaml
+    generator_recipe_sha256: 41467c2f73d9a7a513f94cf84984eb64d32a7d58521fec1b60d5de5dd16c1c47
+    base_recipe: configs/profiles/agilex_nero_isaac_6_0_1_import_v1.yaml
+    base_recipe_sha256: 3566450d3f7eb2a6079a39ba554fcf74e9fa9796ea036442a4225a13189f89ec
+    isaac_distribution_version: 6.0.1.0
+    urdf_importer_extension_version: 3.11.2
+    derived_from:
+      - agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+      - agilex-agx-arm-urdf-nero-gripper-flange@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    inherited_license: MIT
+    local_runtime_path: artifacts/derived/isaac/6.0.1/agilex_nero_gripper_flange_v1
+    artifacts:
+      nero_description/nero_description.usda: d8ca2ceb58ad57cab0dc521323b560631207ba1838d4be0c1ddd8f85a27d5289
+      nero_description.import.json: b42eeadf4414394f7864091f2d8b3a7968399dd5c54d982a3ed8ba0e81489cb6
+    asset_trees:
+      nero_description: eaa29a46124c9697a53f8765acd3400b4e8d56c5624748f4ad615f083d679e0d
+  - name: wuji-hand2-adapter-plate-isaac-6-0-1-v1
+    kind: generated
+    sha256: 0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+    generated_at: 2026-08-12
+    generated_by: tools/import_hand2_adapter_plate_to_usd.py
+    generator_sha256: 5bed0c381be433a6b6f2de1d194d1433175f42f4dbcd117acb039327c0ada30d
+    generator_recipe: configs/profiles/wuji_hand2_adapter_plate_isaac_6_0_1_import_v1.yaml
+    generator_recipe_sha256: a019cb65805081069033c98ebbb302253fecaf64074267096eaaa509ada78243
+    cadquery_ocp_version: 7.8.1.1
+    derived_from:
+      - wuji-description-v2026-6-27@aee64892ebcf8e3237bedc30231bb09476cbc71d
+      - wuji-description-v2026-8-3@8271644a78d69ed9a4adcf9165d882c64ad33dfa
+    inherited_license: Apache-2.0
+    local_runtime_path: artifacts/derived/isaac/6.0.1/wuji_hand2_adapter_plate_v1
+    artifacts:
+      import.json: 2cb527fdeb9fe9067646e5ce9fe0973c8504a0b2de09e2e25f96a133a6d59073
+      left/wujihand2.usda: 0dfdfa021edaee9f93e1ffc58e208535026c6ab35586ae434ed473572dbb483a
+      right/wujihand2.usda: 50e76e4d9c4f95acd0d7926f6586d930a0f24ffd38ef6ed8abc397c314144772
+      shared/adapter_plate.usdc: 3baa4b1bff03834b56ef0f86b87264269c8b077e5c8ba7343928e0902480795c
+    asset_trees:
+      left: da01b4763288814dddc977b71c2fac2c28b19698fefca536244caafb25799c84
+      right: ee6ac413ce3d94bc07240ea397b4e884a9c92294145ea86fa5a5f604126bcf23
+      shared: eb2e746b2bba074685ddb279373aaf9d2c68be4e35701030c061ad0ba334db51
   - name: dual-nero-tframe-step-2026-08-07
     kind: restricted
     sha256: 3cf8f2388649de17470e67db920077c8b6cd778cf80c2536d42f3ccacd0a7dc5

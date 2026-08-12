@@ -1,0 +1,52 @@
+schema: wujihand.backend_binding.v1
+binding_id: wuji_hand2_beta1_left_isaac_v2026_8_3_adapter_plate_candidate_v1
+asset_id: wuji_hand2_beta1_left
+asset_revision: beta1_description_v2026_8_3
+asset_side: left
+backend: isaac
+loader: usd
+artifact:
+  source: wuji-hand2-adapter-plate-isaac-6-0-1-v1
+  source_revision: sha256:0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+  path: left/wujihand2.usda
+resource_trees:
+  - source: wuji-hand2-adapter-plate-isaac-6-0-1-v1
+    source_revision: sha256:0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+    path: left
+  - source: wuji-hand2-adapter-plate-isaac-6-0-1-v1
+    source_revision: sha256:0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+    path: shared
+  - source: wuji-description-v2026-8-3
+    source_revision: commit:8271644a78d69ed9a4adcf9165d882c64ad33dfa
+    path: hand2/hand2_beta1/body/usd/left
+root: l_wrist
+namespace_policy: prefix
+frame_map:
+  hand_base: l_wrist
+  hand2_left_neutral: l_wrist
+group_bindings:
+  - group_id: finger_joints
+    joints:
+      - l_thumb_cmc_flex
+      - l_thumb_cmc_abd
+      - l_thumb_mcp
+      - l_thumb_ip
+      - l_index_finger_mcp_flex
+      - l_index_finger_mcp_abd
+      - l_index_finger_pip
+      - l_index_finger_dip
+      - l_middle_finger_mcp_flex
+      - l_middle_finger_mcp_abd
+      - l_middle_finger_pip
+      - l_middle_finger_dip
+      - l_ring_finger_mcp_flex
+      - l_ring_finger_mcp_abd
+      - l_ring_finger_pip
+      - l_ring_finger_dip
+      - l_pinky_mcp_flex
+      - l_pinky_mcp_abd
+      - l_pinky_pip
+      - l_pinky_dip
+    actuators: []
+builder: null
+compatibility_profile: configs/profiles/hand2_left_v2026_8_3.yaml

@@ -1,0 +1,43 @@
+schema: wujihand.hand2_adapter_plate_import.v1
+profile_id: wuji_hand2_adapter_plate_isaac_6_0_1_import_v1
+status: simulation_candidate_historical_vendor_plate
+plate_source:
+  lock_id: wuji-description-v2026-6-27
+  commit: aee64892ebcf8e3237bedc30231bb09476cbc71d
+  step_path: hand2_beta/body/step/Wuji-Hand2-Adapter-Mount-Beta1.step
+  step_sha256: e6d335758a665efbc67f671fc21fbdcb032e7bd34617baba62d2d9f67ddfbd43
+  solid_volume_mm3: 7634.246372058091
+  outer_face_origin_mm: [52.4077017015, -2.1321946765, -54.478006125]
+hand_source:
+  lock_id: wuji-description-v2026-8-3
+  commit: 8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  whole_hand_step:
+    left:
+      path: hand2/hand2_beta1/body/step/wuji-hand2-description-left_beta1_with_mount_step.STEP
+      sha256: 62f731fcc11e48fa32478f4a730b2e488bdfa05e99c843fe05b670debab74b18
+    right:
+      path: hand2/hand2_beta1/body/step/wuji-hand2-description-right_beta1_with_mount_step.STEP
+      sha256: df9ba9fec37f91dc0a2bb0d0b1ff2873159a9df0f7098b31e49059a8159a7067
+  usd:
+    left: hand2/hand2_beta1/body/usd/left/wujihand2.usd
+    right: hand2/hand2_beta1/body/usd/right/wujihand2.usd
+plate_frame_in_hand:
+  left:
+    wrist_prim: l_wrist
+    quat_wxyz: [0.0, -0.7071067811865476, 0.7071067811865475, 0.0]
+  right:
+    wrist_prim: r_wrist
+    quat_wxyz: [0.0, -0.7071067811865476, -0.7071067811865475, 0.0]
+output:
+  root: artifacts/derived/isaac/6.0.1/wuji_hand2_adapter_plate_v1
+  plate: shared/adapter_plate.usdc
+  left: left/wujihand2.usda
+  right: right/wujihand2.usda
+  report: import.json
+collision_approximation: convexHull
+assumptions:
+  - v2026_6_27_standalone_plate_is_engineering_equivalent_to_the_plate_in_v2026_8_3_whole_hand_step
+  - equivalence_is_mass_property_based_and_does_not_require_step_or_brep_identity
+  - generated_hand_body_and_control_asset_remain_v2026_8_3
+  - plate_outer_face_is_the_hand_mount_frame_xy_plane
+  - d405_mount_transform_remains_unchanged_and_uses_the_same_plate_frame

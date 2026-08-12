@@ -486,10 +486,24 @@ class SessionResolver:
                 f"Wuji Hand 2 binding {binding.binding_id!r} must pin an upstream artifact"
             )
         actual_sources = {ref.source for ref in content_refs}
-        if actual_sources != {expected_source}:
+        expected_record = self.source_lock.record(expected_source)
+        expected_revisions = {
+            f"{expected_source}@{value}"
+            for kind, value in expected_record.revision
+            if kind in {"commit", "sha256", "tag"}
+        }
+        incompatible = sorted(
+            source
+            for source in actual_sources
+            if source != expected_source
+            and expected_revisions.isdisjoint(
+                self.source_lock.record(source).derived_from
+            )
+        )
+        if incompatible:
             raise ValueError(
                 f"Wuji Hand 2 binding {binding.binding_id!r} sources "
-                f"{sorted(actual_sources)!r} disagree with asset provenance "
+                f"{incompatible!r} disagree with asset provenance "
                 f"{expected_source!r}"
             )
         if (

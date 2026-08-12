@@ -35,6 +35,8 @@ DEFAULT_SESSION = ROOT / (
 CAMERA_PATH = "/OmniverseKit_Persp"
 CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
+INTERFACE_CAMERA_EYE_FRAME = "simulation_nominal_camera_right_interface_eye"
+INTERFACE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_right_interface_target"
 INITIALIZATION_FRAMES = 240
 
 
@@ -54,6 +56,7 @@ def parse_args() -> argparse.Namespace:
         help="Positive values close automatically; zero keeps the GUI open.",
     )
     parser.add_argument("--screenshot", type=Path)
+    parser.add_argument("--interface-screenshot", type=Path)
     parser.add_argument(
         "--wrist-screenshot-dir",
         type=Path,
@@ -75,17 +78,17 @@ def parse_args() -> argparse.Namespace:
 ARGS = parse_args()
 if ARGS.frames < 0 or (not ARGS.gui and ARGS.frames == 0):
     raise SystemExit("headless inspection requires --frames > 0")
-if (ARGS.screenshot is not None or ARGS.wrist_screenshot_dir is not None) and not ARGS.gui:
+if (
+    ARGS.screenshot is not None
+    or ARGS.interface_screenshot is not None
+    or ARGS.wrist_screenshot_dir is not None
+) and not ARGS.gui:
     raise SystemExit("viewport capture requires --gui")
 
 RESOLVED = SessionResolver(ROOT).resolve(
     ARGS.session,
     verify_artifacts=ARGS.verify_artifacts,
-    overrides=(
-        None
-        if ARGS.task_scene is None
-        else {"task_scene": ARGS.task_scene}
-    ),
+    overrides=(None if ARGS.task_scene is None else {"task_scene": ARGS.task_scene}),
 )
 WORKCELL_PLAN = resolve_isaac_workcell_plan(
     ROOT,
@@ -101,10 +104,17 @@ SIDES = resolve_dual_side_runtimes(ROOT, RESOLVED)
 alignment_paths = {
     RESOLVED.instance(side.arm_instance_id).binding.compatibility_profile for side in SIDES
 }
-if None in alignment_paths or len(alignment_paths) != 1:
-    raise SystemExit("T-frame inspection requires one NERO alignment profile")
-ALIGNMENT = load_nero_link_geometry_alignment(ROOT / str(next(iter(alignment_paths))))
-if sha256_file(ROOT / ALIGNMENT.source_urdf_path) != ALIGNMENT.source_urdf_sha256:
+if len(alignment_paths) != 1:
+    raise SystemExit("T-frame inspection requires one shared NERO alignment selection")
+alignment_path = next(iter(alignment_paths))
+ALIGNMENT = (
+    None
+    if alignment_path is None
+    else load_nero_link_geometry_alignment(ROOT / alignment_path)
+)
+if ALIGNMENT is not None and (
+    sha256_file(ROOT / ALIGNMENT.source_urdf_path) != ALIGNMENT.source_urdf_sha256
+):
     raise SystemExit("pinned NERO URDF hash drifted")
 
 from isaacsim import SimulationApp  # type: ignore[import-not-found]
@@ -195,6 +205,19 @@ def main() -> int:
     if ARGS.screenshot is not None:
         capture(ARGS.screenshot)
 
+    if ARGS.interface_screenshot is not None:
+        set_camera_view(
+            eye=np.asarray(workcell_frame_position(RESOLVED, INTERFACE_CAMERA_EYE_FRAME)),
+            target=np.asarray(workcell_frame_position(RESOLVED, INTERFACE_CAMERA_TARGET_FRAME)),
+            camera_prim_path=CAMERA_PATH,
+        )
+        capture(ARGS.interface_screenshot)
+        set_camera_view(
+            eye=np.asarray(workcell_frame_position(RESOLVED, CAMERA_EYE_FRAME)),
+            target=np.asarray(workcell_frame_position(RESOLVED, CAMERA_TARGET_FRAME)),
+            camera_prim_path=CAMERA_PATH,
+        )
+
     wrist_screenshots: dict[str, str] = {}
     if ARGS.wrist_screenshot_dir is not None:
         for handles in scene.wrist_rigs:
@@ -212,9 +235,7 @@ def main() -> int:
         "workcell_id": RESOLVED.workcell.workcell_id,
         "task_scene_profile_id": WORKCELL_PLAN.task_scene_profile_id,
         "task_scene_profile_path": WORKCELL_PLAN.task_scene_profile_path,
-        "environment_imports": [
-            operation.import_id for operation in WORKCELL_PLAN.imports
-        ],
+        "environment_imports": [operation.import_id for operation in WORKCELL_PLAN.imports],
         "startup_profile_id": STARTUP.profile_id,
         "status": STARTUP.status,
         "hardware_access": False,
@@ -238,6 +259,9 @@ def main() -> int:
             side: scene.feedback_q27(side)[:7].tolist() for side in ("left", "right")
         },
         "screenshot": None if ARGS.screenshot is None else str(ARGS.screenshot.resolve()),
+        "interface_screenshot": (
+            None if ARGS.interface_screenshot is None else str(ARGS.interface_screenshot.resolve())
+        ),
         "wrist_screenshots": wrist_screenshots,
     }
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True), flush=True)

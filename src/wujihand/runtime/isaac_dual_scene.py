@@ -367,7 +367,7 @@ class DualNeroHand2IsaacScene:
         project_root: Path,
         resolved: ResolvedSession,
         sides: tuple[DualSideRuntime, DualSideRuntime],
-        alignment_profile: NeroLinkGeometryAlignment,
+        alignment_profile: NeroLinkGeometryAlignment | None,
         qualification_profile: NeroDualSimulationStartup,
         physics_hz: int,
         self_collision_sides: frozenset[str] = frozenset(),
@@ -471,19 +471,22 @@ class DualNeroHand2IsaacScene:
                 name=arm_instance.binding.backend_frame(runtime.attachment.parent.frame),
                 rigid_body=True,
             )
-            wrist_housing = _one_prim(
-                self.stage,
-                prefix=runtime.arm_prim_path,
-                name=arm_instance.binding.backend_frame(
-                    arm_instance.asset.frame_name("wrist_housing")
-                ),
-                rigid_body=True,
-            )
-            self.geometry_alignments[runtime.side] = apply_isaac_nero_link_geometry_alignment(
-                self.stage,
-                link_path=str(wrist_housing.GetPath()),
-                profile=alignment_profile,
-            )
+            if alignment_profile is not None:
+                wrist_housing = _one_prim(
+                    self.stage,
+                    prefix=runtime.arm_prim_path,
+                    name=arm_instance.binding.backend_frame(
+                        arm_instance.asset.frame_name("wrist_housing")
+                    ),
+                    rigid_body=True,
+                )
+                self.geometry_alignments[runtime.side] = (
+                    apply_isaac_nero_link_geometry_alignment(
+                        self.stage,
+                        link_path=str(wrist_housing.GetPath()),
+                        profile=alignment_profile,
+                    )
+                )
             add_reference_to_stage(
                 str(runtime.hand_asset),
                 runtime.hand_prim_path,

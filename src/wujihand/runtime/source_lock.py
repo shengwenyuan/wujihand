@@ -25,6 +25,7 @@ class SourceRecord:
     artifacts: tuple[tuple[str, str], ...]
     asset_trees: tuple[tuple[str, str], ...]
     revision: tuple[tuple[str, str], ...]
+    derived_from: tuple[str, ...]
     dataset_id: str | None
     manifest_sha256: str | None
     expected_blob_count: int | None
@@ -245,6 +246,9 @@ def _source_record(value: object, *, index: int) -> SourceRecord:
             if data.get(key) is not None
         )
     )
+    derived_from = _string_tuple(
+        data.get("derived_from"), field=f"sources[{index}].derived_from"
+    )
     dataset_id = _optional_string(
         data.get("dataset_id"),
         field=f"sources[{index}].dataset_id",
@@ -259,6 +263,7 @@ def _source_record(value: object, *, index: int) -> SourceRecord:
         artifacts=artifacts,
         asset_trees=trees,
         revision=revision,
+        derived_from=derived_from,
         dataset_id=dataset_id,
         manifest_sha256=manifest_sha256,
         expected_blob_count=_optional_non_negative_int(
@@ -296,6 +301,24 @@ def _optional_string(value: object, *, field: str) -> str | None:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
         raise ValueError(f"{field} must be a non-blank string")
     return value
+
+
+def _string_tuple(value: object, *, field: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    raw = [value] if isinstance(value, str) else value
+    if not isinstance(raw, list):
+        raise ValueError(f"{field} must be a string or list of strings")
+    result_list: list[str] = []
+    for index, item in enumerate(raw):
+        text = _optional_string(item, field=f"{field}[{index}]")
+        if text is None:
+            raise ValueError(f"{field}[{index}] must be a non-blank string")
+        result_list.append(text)
+    result = tuple(result_list)
+    if len(set(result)) != len(result):
+        raise ValueError(f"{field} values must be unique")
+    return result
 
 
 def _optional_sha256(value: object, *, field: str) -> str | None:

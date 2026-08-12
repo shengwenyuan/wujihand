@@ -1,0 +1,22 @@
+schema: wujihand.nero_gripper_flange_import.v1
+profile_id: agilex_nero_gripper_flange_isaac_6_0_1_import_v1
+status: simulation_candidate_vendor_geometry_unmeasured
+base_recipe: configs/profiles/agilex_nero_isaac_6_0_1_import_v1.yaml
+flange_source:
+  lock_id: agilex-agx-arm-urdf-nero-gripper-flange
+  commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  xacro_path: nero/urdf/nero_with_gripper_flange_description.xacro
+  ros_package_name: agilex_nero_gripper_flange
+gripper_flange_clocking:
+  link_name: gripper_flange
+  post_rotation_rpy_rad: [0.0, 0.0, 0.0]
+output:
+  root: artifacts/derived/isaac/6.0.1/agilex_nero_gripper_flange_v1
+  robot_name: nero_description
+assumptions:
+  - vendor_gripper_flange_transform_and_geometry_are_not_current_unit_measurements
+  - pinned_nero_link_geometry_and_joint7_kinematics_remain_unchanged
+  - tframe_candidate_does_not_apply_the_tabletop_link6_geometry_alignment
+  - owner_observed_tframe_clocking_uses_the_pinned_vendor_gripper_flange_orientation_without_an_additional_rotation
+  - custom_adapter_is_omitted_as_a_zero_length_non_colliding_placeholder
+  - tframe_startup_places_the_source_link6_cylinder_axis_parallel_to_world_x_and_the_cup_axis_parallel_to_world_y
