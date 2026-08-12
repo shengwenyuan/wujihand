@@ -21,7 +21,7 @@ import sys
 from threading import Lock, Thread
 import time
 import traceback
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -99,6 +99,13 @@ from wujihand.runtime.isaac_dual_teleoperation import (
 from wujihand.adapters.simulation import (
     load_nero_dual_simulation_startup_profile,
     load_nero_link_geometry_alignment,
+)
+from wujihand.adapters.simulation.isaac_contact_tracking import (
+    IsaacContactTracker,
+    author_isaac_contact_reports,
+)
+from wujihand.adapters.simulation.nero_hand2_self_collision import (
+    load_nero_hand2_self_collision_filter_profile,
 )
 from wujihand.runtime.wuji_hand2_record_chain import (
     load_record_chain_preflight_receipt,
@@ -190,6 +197,189 @@ class _DeferredDatasetState:
             physics_boundary_index=physics_boundary_index,
             snapshot=self.snapshot,
         )
+
+
+class _SelfCollisionQ27Probe:
+    def __init__(self, scene: DualNeroHand2IsaacScene) -> None:
+        self.names: dict[str, tuple[str, ...]] = {}
+        self.limits: dict[str, NDArray[np.float64]] = {}
+        self.minimum: dict[str, NDArray[np.float64]] = {}
+        self.maximum: dict[str, NDArray[np.float64]] = {}
+        self.maximum_target_error: dict[str, NDArray[np.float64]] = {}
+        self.maximum_target_error_rad = 0.0
+        self.final_target_error_rad = 0.0
+        self.nonfinite_samples = 0
+        self.outside_limit_samples = 0
+        self.samples = 0
+        for side in ("left", "right"):
+            names, limits = scene.runtime_joint_inventory(side)
+            values = np.asarray(limits, dtype=np.float64)
+            self.names[side] = names
+            self.limits[side] = values
+            self.minimum[side] = np.full(27, np.inf, dtype=np.float64)
+            self.maximum[side] = np.full(27, -np.inf, dtype=np.float64)
+            self.maximum_target_error[side] = np.zeros(27, dtype=np.float64)
+
+    def observe(
+        self,
+        feedback: Mapping[str, NDArray[np.float64]],
+        targets: Mapping[str, NDArray[np.float64]],
+    ) -> None:
+        self.final_target_error_rad = 0.0
+        for side in ("left", "right"):
+            values = feedback[side]
+            if not np.isfinite(values).all():
+                self.nonfinite_samples += 1
+                continue
+            self.minimum[side] = np.minimum(self.minimum[side], values)
+            self.maximum[side] = np.maximum(self.maximum[side], values)
+            target_error = np.abs(values - targets[side])
+            self.maximum_target_error[side] = np.maximum(
+                self.maximum_target_error[side], target_error
+            )
+            self.maximum_target_error_rad = max(
+                self.maximum_target_error_rad,
+                float(np.max(target_error)),
+            )
+            self.final_target_error_rad = max(
+                self.final_target_error_rad,
+                float(np.max(target_error)),
+            )
+            limits = self.limits[side]
+            self.outside_limit_samples += int(
+                np.any((values < limits[:, 0] - 0.01) | (values > limits[:, 1] + 0.01))
+            )
+        self.samples += 1
+
+    def to_mapping(self, scene: DualNeroHand2IsaacScene) -> dict[str, object]:
+        sides: dict[str, object] = {}
+        for side in ("left", "right"):
+            joint_range = self.maximum[side] - self.minimum[side]
+            target_error = self.maximum_target_error[side]
+            arm_indices = np.asarray(scene.partitions[side].arm_indices_q7, dtype=np.int64)
+            hand_indices = np.asarray(scene.partitions[side].hand_indices_q20, dtype=np.int64)
+            maximum_target_error_index = int(np.argmax(target_error))
+            sides[side] = {
+                "joint_names": list(self.names[side]),
+                "minimum_feedback_rad": self.minimum[side].tolist(),
+                "maximum_feedback_rad": self.maximum[side].tolist(),
+                "maximum_arm_target_error_rad": float(np.max(target_error[arm_indices])),
+                "maximum_hand_target_error_rad": float(np.max(target_error[hand_indices])),
+                "maximum_target_error_joint_name": self.names[side][maximum_target_error_index],
+                "maximum_arm_joint_range_rad": float(np.max(joint_range[arm_indices])),
+                "maximum_hand_joint_range_rad": float(np.max(joint_range[hand_indices])),
+                "maximum_abs_feedback_rad": float(
+                    np.max(np.abs(np.concatenate((self.minimum[side], self.maximum[side]))))
+                ),
+            }
+        return {
+            "samples": self.samples,
+            "nonfinite_samples": self.nonfinite_samples,
+            "outside_limit_samples": self.outside_limit_samples,
+            "maximum_target_error_rad": self.maximum_target_error_rad,
+            "final_target_error_rad": self.final_target_error_rad,
+            "sides": sides,
+        }
+
+
+def _self_collision_policy_mapping() -> dict[str, object]:
+    profile = None
+    if SELF_COLLISION_FILTER_PROFILE is not None:
+        profile = {
+            "path": RESOLVED.self_collision_profile_path,
+            "profile_id": RESOLVED.self_collision_profile_id,
+            "sha256": RESOLVED.self_collision_profile_sha256,
+        }
+    return {
+        "enabled": profile is not None,
+        "mode": ("merged_q27_filtered_pairs_v2" if profile is not None else "merged_q27_disabled"),
+        "profile": profile,
+        "qualification_probe_enabled": ARGS.self_collision_qualification,
+    }
+
+
+def _self_collision_qualification_mapping(
+    *,
+    scene: DualNeroHand2IsaacScene,
+    tracker: IsaacContactTracker,
+    probe: _SelfCollisionQ27Probe,
+    readback: Mapping[str, bool],
+    contact_api_paths: tuple[str, ...],
+    completed_frames: int,
+    counters: Counter[str],
+) -> dict[str, object]:
+    contacts = tracker.to_mapping()
+    hand_contact_pairs: dict[str, list[str]] = {"left": [], "right": []}
+    maximum_hand_penetration_m = 0.0
+    for pair_name, raw in contacts.items():
+        record = cast(Mapping[str, object], raw)
+        paths = cast(list[str], record["paths"])
+        for side in ("left", "right"):
+            prefix = f"/World/Robots/Hand2{side.capitalize()}/"
+            if all(path.startswith(prefix) for path in paths):
+                contact_frames = sum(
+                    cast(Mapping[str, int], record["phase_contact_frames"]).values()
+                )
+                if contact_frames:
+                    hand_contact_pairs[side].append(pair_name)
+                    separation = record["minimum_separation_m"]
+                    if separation is not None:
+                        maximum_hand_penetration_m = max(
+                            maximum_hand_penetration_m,
+                            max(0.0, -float(separation)),
+                        )
+    probe_result = probe.to_mapping(scene)
+    side_metrics = cast(Mapping[str, Mapping[str, object]], probe_result["sides"])
+    expected_filtered_pairs = sum(
+        side in {"left", "right"}
+        for rule in cast(Any, SELF_COLLISION_FILTER_PROFILE).filtered_pairs
+        for side in rule.sides
+    )
+    checks = {
+        "self_collision_readback_enabled_both": readback == {"left": True, "right": True},
+        "filtered_pairs_match_profile": (
+            len(scene.self_collision_filtered_pairs) == expected_filtered_pairs
+        ),
+        "contact_reporting_enabled": bool(contact_api_paths),
+        "both_hands_reach_internal_contact": all(hand_contact_pairs.values()),
+        "hand_contact_penetration_bounded": maximum_hand_penetration_m <= 0.002,
+        "q27_samples_cover_control_ticks": probe_result["samples"] == completed_frames,
+        "q27_feedback_finite": probe_result["nonfinite_samples"] == 0,
+        "q27_feedback_stays_inside_limits": probe_result["outside_limit_samples"] == 0,
+        "q27_final_target_error_bounded": float(probe_result["final_target_error_rad"]) <= 0.15,
+        "both_arms_move": all(
+            float(side_metrics[side]["maximum_arm_joint_range_rad"]) > 0.005
+            for side in ("left", "right")
+        ),
+        "both_hands_move": all(
+            float(side_metrics[side]["maximum_hand_joint_range_rad"]) > 0.05
+            for side in ("left", "right")
+        ),
+        "control_has_zero_missed_periods": counters["scheduler.missed_control_periods"] == 0,
+    }
+    return {
+        "passed": all(checks.values()),
+        "filter_profile": {
+            "path": RESOLVED.self_collision_profile_path,
+            "sha256": RESOLVED.self_collision_profile_sha256,
+            "profile_id": RESOLVED.self_collision_profile_id,
+        },
+        "readback": dict(readback),
+        "authored_filtered_pairs": [
+            {
+                "pair_id": pair_id,
+                "first_rigid_body_path": first,
+                "second_rigid_body_path": second,
+            }
+            for pair_id, first, second in scene.self_collision_filtered_pairs
+        ],
+        "contact_report_api_count": len(contact_api_paths),
+        "contacts": contacts,
+        "hand_contact_pairs": hand_contact_pairs,
+        "maximum_hand_penetration_m": maximum_hand_penetration_m,
+        "q27": probe_result,
+        "checks": checks,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +627,11 @@ def parse_args() -> argparse.Namespace:
         help="Passed Hand2 8.3 record-chain preflight receipt.",
     )
     parser.add_argument(
+        "--self-collision-qualification",
+        action="store_true",
+        help="Enable bounded contact and q27 probes for a Session self-collision policy.",
+    )
+    parser.add_argument(
         "--verify-artifacts",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -458,6 +653,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("--report cannot be combined with recording mode")
     if not args.recording_enabled and (args.run_id is not None or args.run_root is not None):
         parser.error("--run-id/--run-root require --recording-enabled")
+    if args.self_collision_qualification and (args.recording_enabled or args.frames == 0):
+        parser.error("self-collision qualification requires bounded non-recording mode")
     return args
 
 
@@ -481,6 +678,19 @@ try:
 except (FileNotFoundError, ValueError) as exc:
     raise SystemExit(f"NV-5 ROS deployment preflight failed: {exc}") from exc
 
+SELF_COLLISION_FILTER_PROFILE = None
+if RESOLVED.self_collision_profile_path is not None:
+    self_collision_profile_path = ROOT / RESOLVED.self_collision_profile_path
+    SELF_COLLISION_FILTER_PROFILE = load_nero_hand2_self_collision_filter_profile(
+        self_collision_profile_path
+    )
+    if SELF_COLLISION_FILTER_PROFILE.profile_id != RESOLVED.self_collision_profile_id:
+        raise SystemExit("resolved self-collision profile identity differs")
+    if sha256_file(self_collision_profile_path) != RESOLVED.self_collision_profile_sha256:
+        raise SystemExit("resolved self-collision profile content differs")
+if ARGS.self_collision_qualification and SELF_COLLISION_FILTER_PROFILE is None:
+    raise SystemExit("self-collision qualification requires a Session runtime profile")
+
 if RESOLVED.deployment.execution_owner_process_id != "isaac_consumer":
     raise SystemExit("NV-5 requires isaac_consumer as the unique owner")
 if RESOLVED.session.session.backend != "isaac":
@@ -499,9 +709,7 @@ HAND_REVISIONS = {
 }
 REQUIRES_MATCHED_CHAIN = HAND_REVISIONS == {"beta1_description_v2026_8_3"}
 if REQUIRES_MATCHED_CHAIN != (ARGS.chain_preflight is not None):
-    raise SystemExit(
-        "Description 8.3 requires --chain-preflight and historical entries forbid it"
-    )
+    raise SystemExit("Description 8.3 requires --chain-preflight and historical entries forbid it")
 CHAIN_PREFLIGHT: Mapping[str, object] | None = None
 WORKCELL_PLAN = None
 if ARGS.chain_preflight is not None:
@@ -539,21 +747,23 @@ elif DATASET_SOURCE_MODE not in {
         "this runner accepts only live teleoperation, live qualification, "
         "or synthetic fixture input"
     )
-if REQUIRES_MATCHED_CHAIN and ARGS.recording_enabled:
-    if DATASET_SOURCE_MODE not in {
-        DatasetSourceMode.LIVE_QUALIFICATION,
-        DatasetSourceMode.SYNTHETIC_FIXTURE,
-    }:
-        raise SystemExit("Description 8.3 recording remains qualification-only")
+if REQUIRES_MATCHED_CHAIN:
     assert CHAIN_PREFLIGHT is not None
     preflight_input = CHAIN_PREFLIGHT.get("input_mode")
     expected_input = (
-        "stub"
-        if DATASET_SOURCE_MODE is DatasetSourceMode.SYNTHETIC_FIXTURE
-        else "glove"
+        "stub" if DATASET_SOURCE_MODE is DatasetSourceMode.SYNTHETIC_FIXTURE else "glove"
     )
     if preflight_input != expected_input:
         raise SystemExit("record-chain preflight input mode differs from recording mode")
+    preflight_dataset = CHAIN_PREFLIGHT.get("dataset")
+    expected_eligible = DATASET_SOURCE_MODE is DatasetSourceMode.LIVE_TELEOPERATION
+    if (
+        not isinstance(preflight_dataset, Mapping)
+        or preflight_dataset.get("source_mode") != DATASET_SOURCE_MODE.value
+        or preflight_dataset.get("qualification_only") is not (not expected_eligible)
+        or preflight_dataset.get("dataset_eligible") is not expected_eligible
+    ):
+        raise SystemExit("record-chain preflight dataset policy differs from runtime")
 CONTROL_MAXIMUM_CATCH_UP_TICKS = (
     GUI_MAXIMUM_CATCH_UP_TICKS if ARGS.gui or ARGS.external_preview_required else 0
 )
@@ -605,7 +815,9 @@ simulation_app = SimulationApp(
 )
 
 import rclpy  # type: ignore[import-not-found]
+import omni.physx  # type: ignore[import-not-found]
 import isaacsim.core.experimental.utils.app as app_utils  # type: ignore[import-not-found]
+from pxr import PhysxSchema  # type: ignore[import-not-found]
 from rclpy.duration import Duration  # type: ignore[import-not-found]
 from rclpy.executors import (  # type: ignore[import-not-found]
     SingleThreadedExecutor,
@@ -704,8 +916,7 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
             if (
                 window >= policy.minimum_windows
                 and delta <= policy.max_window_delta_rad
-                and max(target_errors_rad.values())
-                <= QUALIFICATION.initial_q7_max_error_rad
+                and max(target_errors_rad.values()) <= QUALIFICATION.initial_q7_max_error_rad
             ):
                 return {
                     "converged": True,
@@ -714,9 +925,7 @@ def _settle(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
                     "physics_steps": completed_physics_steps,
                     "final_max_delta_rad": delta,
                     "arm_target_errors_rad": target_errors_rad,
-                    "arm_target_error_limit_rad": (
-                        QUALIFICATION.initial_q7_max_error_rad
-                    ),
+                    "arm_target_error_limit_rad": (QUALIFICATION.initial_q7_max_error_rad),
                 }
         previous = current
     raise RuntimeError(
@@ -972,6 +1181,9 @@ def _replay_camera_frames(
 
 
 def main() -> int:
+    self_collision_sides = (
+        frozenset({"left", "right"}) if SELF_COLLISION_FILTER_PROFILE is not None else frozenset()
+    )
     scene = DualNeroHand2IsaacScene(
         project_root=ROOT,
         resolved=RESOLVED.session,
@@ -979,14 +1191,53 @@ def main() -> int:
         alignment_profile=ALIGNMENT,
         qualification_profile=QUALIFICATION,
         physics_hz=RESOLVED.control_profile.physics_hz,
-        self_collision_sides=frozenset(),
+        self_collision_sides=self_collision_sides,
+        self_collision_filter_profile=SELF_COLLISION_FILTER_PROFILE,
         wrist_rig_collision_mode="all",
         workcell_plan=WORKCELL_PLAN,
     )
+    contact_api_paths = (
+        author_isaac_contact_reports(
+            scene.stage,
+            prim_path_prefix="/World/Robots",
+            threshold_n=0.0,
+        )
+        if ARGS.self_collision_qualification
+        else ()
+    )
+    self_collision_readback = {
+        side: bool(
+            PhysxSchema.PhysxArticulationAPI(
+                scene.stage.GetPrimAtPath(scene.authored[side].articulation_root_path)
+            )
+            .GetEnabledSelfCollisionsAttr()
+            .Get()
+        )
+        for side in ("left", "right")
+    }
+    if self_collision_readback != {
+        side: side in self_collision_sides for side in ("left", "right")
+    }:
+        raise RuntimeError("merged-q27 self-collision readback differs from request")
     scene.world.set_block_on_render(GUI_BLOCK_ON_RENDER)
     if bool(scene.world.get_block_on_render()) is not GUI_BLOCK_ON_RENDER:
         raise RuntimeError("Isaac render blocking policy was not applied")
     readiness = _settle(scene)
+    contact_tracker = (
+        IsaacContactTracker(separation_epsilon_m=0.00005)
+        if ARGS.self_collision_qualification
+        else None
+    )
+    contact_subscription = (
+        omni.physx.get_physx_simulation_interface().subscribe_contact_report_events(
+            contact_tracker.callback
+        )
+        if contact_tracker is not None
+        else None
+    )
+    self_collision_q27_probe = (
+        _SelfCollisionQ27Probe(scene) if ARGS.self_collision_qualification else None
+    )
     q54_runtime_inventory: Q54RuntimeInventory | None = None
     if DATASET_PROFILE is not None:
         left_names, left_limits = scene.runtime_joint_inventory("left")
@@ -1557,6 +1808,8 @@ def main() -> int:
             render_index = completed_renders if render_due else None
             for substep in range(PHYSICS_SUBSTEPS_PER_CONTROL):
                 physics_substep_indices.append(completed_physics_steps)
+                if contact_tracker is not None:
+                    contact_tracker.set_frame("ros_fixture", completed_physics_steps)
                 physics_substep_start_ns.append(time.monotonic_ns())
                 world_step_start_ns = time.monotonic_ns()
                 scene.world.step(render=False)
@@ -1603,6 +1856,8 @@ def main() -> int:
                 if render_due:
                     completed_renders += 1
             post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
+            if self_collision_q27_probe is not None:
+                self_collision_q27_probe.observe(post_feedback, applied_targets)
             post_dataset_frame: _DeferredDatasetState | None = None
             operator_preview_state: _DeferredDatasetState | None = None
             operator_preview_due = bool(
@@ -1650,9 +1905,7 @@ def main() -> int:
                         physics_boundary_index=post_state.physics_boundary_index,
                         snapshot=preview_snapshot,
                     )
-                    preview_duration_ns = (
-                        time.monotonic_ns() - preview_snapshot_start_ns
-                    )
+                    preview_duration_ns = time.monotonic_ns() - preview_snapshot_start_ns
                     counters["operator_preview.snapshot_total_ns"] += preview_duration_ns
                     counters["operator_preview.snapshot_max_ns"] = max(
                         counters["operator_preview.snapshot_max_ns"],
@@ -2105,8 +2358,26 @@ def main() -> int:
         )
         return 0
 
+    self_collision_qualification = None
+    if ARGS.self_collision_qualification:
+        if contact_tracker is None or self_collision_q27_probe is None:
+            raise RuntimeError("self-collision qualification probes are missing")
+        self_collision_qualification = _self_collision_qualification_mapping(
+            scene=scene,
+            tracker=contact_tracker,
+            probe=self_collision_q27_probe,
+            readback=self_collision_readback,
+            contact_api_paths=contact_api_paths,
+            completed_frames=completed_frames,
+            counters=counters,
+        )
+    del contact_subscription
+
     report = {
         "schema": "wujihand.isaac_ros_dual_teleoperation_receipt.v2",
+        "passed": (
+            True if self_collision_qualification is None else self_collision_qualification["passed"]
+        ),
         "scope": (
             "simulation-only dual NERO + Hand2; no UDP, CAN, NERO "
             "hardware, or Hand2 hardware commands"
@@ -2153,6 +2424,8 @@ def main() -> int:
             "frozen_object_count": python_gc_frozen_object_count,
             "unfrozen_on_close": python_gc_unfrozen_on_close,
         },
+        "self_collision_qualification": self_collision_qualification,
+        "self_collision_policy": _self_collision_policy_mapping(),
         "state": "consumer_completed",
     }
     report_path = ARGS.report
@@ -2169,7 +2442,7 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"NV5 ROS CONSUMER CLOSED: report={report_path}", flush=True)
-    return 0
+    return 0 if report["passed"] else 2
 
 
 def _publish_route_command(
@@ -2778,7 +3051,7 @@ def _run_manifest_payload(
             "qos": RESOLVED.qos_profile.to_mapping(),
         },
         "control": RESOLVED.control_profile.to_mapping(),
-        "self_collision_policy": "merged_q27_disabled",
+        "self_collision_policy": _self_collision_policy_mapping(),
         "simulation_timing": {
             "physics_hz": RESOLVED.control_profile.physics_hz,
             "physics_dt_s": 1.0 / RESOLVED.control_profile.physics_hz,
@@ -2944,6 +3217,7 @@ def _run_receipt_payload(
 ) -> dict[str, object]:
     return {
         "scope": "consumer_and_trace_producer_only",
+        "self_collision_policy": _self_collision_policy_mapping(),
         "completed_ticks": completed_frames,
         "completed_physics_steps": completed_physics_steps,
         "completed_renders": completed_renders,

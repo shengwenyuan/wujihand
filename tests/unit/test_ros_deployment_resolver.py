@@ -15,6 +15,10 @@ BANANA_BOWL = (
     ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_robolab_banana_bowl_live_v2.yaml"
 )
 LOCAL = ROOT / "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
+TFRAME_SELF_COLLISION = (
+    ROOT / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
+)
 
 
 def test_ros_resolver_closes_full_and_arm_only_graphs() -> None:
@@ -49,3 +53,19 @@ def test_ros_resolver_closes_banana_bowl_rich_workcell() -> None:
     assert resolved.session.workcell.workcell_id == ("isaac_robolab_banana_bowl_dual_station_v1")
     assert len(resolved.route_plan.routes) == 4
     assert resolved.deployment.report_root.endswith("robolab-banana-bowl")
+
+
+def test_ros_resolver_closes_session_owned_self_collision_profile() -> None:
+    resolved = RosDeploymentResolver(ROOT).resolve(
+        TFRAME_SELF_COLLISION,
+        local_binding=LOCAL,
+        verify_artifacts=False,
+    )
+
+    assert resolved.self_collision_profile_id == (
+        "isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1"
+    )
+    assert resolved.self_collision_profile_path == (
+        "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1.yaml"
+    )
+    assert len(resolved.self_collision_profile_sha256 or "") == 64

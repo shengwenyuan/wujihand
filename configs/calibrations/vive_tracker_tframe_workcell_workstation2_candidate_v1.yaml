@@ -11,7 +11,7 @@ tracker_to_workcell:
 translation_scale: 1.0
 max_translation_delta_m: 0.4
 rotation_scale: 1.0
-max_rotation_delta_deg: 15.0
+max_rotation_delta_deg: 45.0
 relative_rotation_semantics: workcell_spatial_delta
 scope: simulation_only
 provenance: workstation2_tframe_front_plus_y_candidate_2026_08_11

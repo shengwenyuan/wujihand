@@ -48,13 +48,16 @@ def _processes(context: object) -> list[object]:
     record_qualification = (
         LaunchConfiguration("record_qualification").perform(context).lower() == "true"
     )
+    self_collision_qualification = (
+        LaunchConfiguration("self_collision_qualification").perform(context).lower() == "true"
+    )
     qualification_fixture = (
         LaunchConfiguration("qualification_fixture").perform(context).lower() == "true"
     )
     matched_chain_path = LaunchConfiguration("matched_chain_binding").perform(context).strip()
-    record_chain_qualification_path = LaunchConfiguration(
-        "record_chain_qualification"
-    ).perform(context)
+    record_chain_qualification_path = LaunchConfiguration("record_chain_qualification").perform(
+        context
+    )
     isaac_cpu_affinity = (
         LaunchConfiguration("isaac_cpu_affinity", default="").perform(context).strip()
     )
@@ -90,13 +93,13 @@ def _processes(context: object) -> list[object]:
         raise ValueError(
             "record_qualification requires live record:=true without qualification_fixture"
         )
-    if requires_matched_chain and record and not (
-        record_qualification or qualification_fixture
-    ):
-        raise ValueError(
-            "the Description 8.3 entry remains qualification-only; "
-            "set record_qualification:=true"
-        )
+    if self_collision_qualification and (record or frames == 0):
+        raise ValueError("self_collision_qualification requires bounded non-recording mode")
+    dataset_source_mode = (
+        "synthetic_fixture"
+        if qualification_fixture
+        else ("live_qualification" if record_qualification or not record else "live_teleoperation")
+    )
     split_dataset_preview = bool(record and dataset_mode and gui)
     if qualification_fixture and not split_dataset_preview:
         raise ValueError(
@@ -144,9 +147,7 @@ def _processes(context: object) -> list[object]:
             **runtime_environment,
             "PYTHONPATH": sdk_pythonpath,
         }
-        chain_preflight_path = (
-            current_run_root / "preflight" / "wuji_hand2_record_chain.json"
-        )
+        chain_preflight_path = current_run_root / "preflight" / "wuji_hand2_record_chain.json"
         preflight_command = [
             str(matched_local.interpreter),
             str(project_root / "tools/preflight_wuji_hand2_record_chain.py"),
@@ -160,6 +161,8 @@ def _processes(context: object) -> list[object]:
             matched_chain_path,
             "--input",
             "stub" if qualification_fixture else "glove",
+            "--dataset-source-mode",
+            dataset_source_mode,
             "--output",
             str(chain_preflight_path),
         ]
@@ -222,9 +225,7 @@ def _processes(context: object) -> list[object]:
                 output="screen",
                 sigterm_timeout="10",
                 additional_env=(
-                    sdk_runtime_environment
-                    if process_id == "glove_source"
-                    else runtime_environment
+                    sdk_runtime_environment if process_id == "glove_source" else runtime_environment
                 ),
             )
         )
@@ -247,6 +248,10 @@ def _processes(context: object) -> list[object]:
         consumer_command.extend(["--cpu-affinity", isaac_cpu_affinity])
     if frames:
         consumer_command.extend(["--frames", str(frames)])
+    if dataset_mode:
+        consumer_command.extend(["--dataset-source-mode", dataset_source_mode])
+    if self_collision_qualification:
+        consumer_command.append("--self-collision-qualification")
     if record:
         consumer_command.extend(
             [
@@ -259,10 +264,6 @@ def _processes(context: object) -> list[object]:
         )
         if split_dataset_preview:
             consumer_command.append("--external-preview-required")
-        if qualification_fixture:
-            consumer_command.extend(["--dataset-source-mode", "synthetic_fixture"])
-        elif record_qualification:
-            consumer_command.extend(["--dataset-source-mode", "live_qualification"])
     if chain_preflight_path is not None:
         consumer_command.extend(["--chain-preflight", str(chain_preflight_path)])
     consumer_action = ExecuteProcess(
@@ -293,9 +294,7 @@ def _processes(context: object) -> list[object]:
             f"{namespace}/{consumer_node_name}",
         ]
         if chain_preflight_path is not None:
-            preview_command.extend(
-                ["--chain-preflight", str(chain_preflight_path)]
-            )
+            preview_command.extend(["--chain-preflight", str(chain_preflight_path)])
         actions.append(
             ExecuteProcess(
                 cmd=preview_command,
@@ -438,6 +437,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("frames", default_value="0"),
             DeclareLaunchArgument("record", default_value="false"),
             DeclareLaunchArgument("record_qualification", default_value="false"),
+            DeclareLaunchArgument("self_collision_qualification", default_value="false"),
             DeclareLaunchArgument("run_id", default_value=""),
             DeclareLaunchArgument("isaac_cpu_affinity", default_value=""),
             DeclareLaunchArgument("qualification_fixture", default_value="false"),
@@ -445,8 +445,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "record_chain_qualification",
                 default_value=(
-                    "configs/qualifications/"
-                    "isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
+                    "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
                 ),
             ),
             OpaqueFunction(function=_processes),

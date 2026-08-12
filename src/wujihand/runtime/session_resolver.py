@@ -196,6 +196,11 @@ class SessionResolver:
         resolved_instances: list[ResolvedInstance] = []
         used_source_names: set[str] = set()
         referenced_paths: set[str] = set()
+        self_collision_profile = session.runtime.self_collision_profile
+        if self_collision_profile is not None:
+            if session.backend != "isaac" or session.runtime_role != "teleop_consumer":
+                raise ValueError("self-collision profile requires an Isaac teleop_consumer Session")
+            referenced_paths.add(self.repository.validate_profile_reference(self_collision_profile))
         if session.dataset_profile is not None:
             if session.backend != "isaac" or session.runtime_role != "teleop_consumer":
                 raise ValueError("dataset Session v2 requires an Isaac teleop_consumer runtime")
@@ -296,8 +301,7 @@ class SessionResolver:
         }
         if len(hand2_sources) > 1:
             raise ValueError(
-                "a Session cannot mix Wuji Hand 2 Description releases: "
-                f"{sorted(hand2_sources)!r}"
+                f"a Session cannot mix Wuji Hand 2 Description releases: {sorted(hand2_sources)!r}"
             )
 
         self._validate_backend_symbols(tuple(resolved_instances))
@@ -473,11 +477,10 @@ class SessionResolver:
                 f"Wuji Hand 2 asset {asset.asset_id!r} must use source-lock provenance"
             )
         expected_source = asset.provenance_source.removeprefix(lock_prefix)
-        content_refs = tuple(
-            ref
-            for ref in (binding.artifact, binding.collision_artifact)
-            if ref is not None
-        ) + binding.resource_trees
+        content_refs = (
+            tuple(ref for ref in (binding.artifact, binding.collision_artifact) if ref is not None)
+            + binding.resource_trees
+        )
         if not content_refs:
             raise ValueError(
                 f"Wuji Hand 2 binding {binding.binding_id!r} must pin an upstream artifact"

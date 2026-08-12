@@ -44,9 +44,7 @@ class RecordChainDescriptionPolicy:
     release: str
     asset_revision: str
     roots: tuple[tuple[HandSide, str], ...]
-    root_orientation_compensations: tuple[
-        tuple[HandSide, tuple[float, float, float, float]], ...
-    ]
+    root_orientation_compensations: tuple[tuple[HandSide, tuple[float, float, float, float]], ...]
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str) -> Self:
@@ -80,9 +78,7 @@ class RecordChainDescriptionPolicy:
             roots=tuple(
                 (
                     side,
-                    validate_identifier(
-                        raw_roots[side.value], field=f"{field}.roots.{side.value}"
-                    ),
+                    validate_identifier(raw_roots[side.value], field=f"{field}.roots.{side.value}"),
                 )
                 for side in HandSide
             ),
@@ -94,10 +90,7 @@ class RecordChainDescriptionPolicy:
                             "position_m": [0.0, 0.0, 0.0],
                             "quat_wxyz": raw_compensations[side.value],
                         },
-                        field=(
-                            f"{field}.root_orientation_compensation_quat_wxyz."
-                            f"{side.value}"
-                        ),
+                        field=(f"{field}.root_orientation_compensation_quat_wxyz.{side.value}"),
                     ).quat_wxyz,
                 )
                 for side in HandSide
@@ -110,9 +103,7 @@ class RecordChainDescriptionPolicy:
                 return root
         raise KeyError(side)
 
-    def root_orientation_compensation(
-        self, side: HandSide
-    ) -> tuple[float, float, float, float]:
+    def root_orientation_compensation(self, side: HandSide) -> tuple[float, float, float, float]:
         for candidate, quaternion in self.root_orientation_compensations:
             if candidate is side:
                 return quaternion
@@ -127,9 +118,9 @@ class RecordChainNeroPolicy:
     attachment: PoseSpec
     parent_frame: str
     child_frame: str
-    assembly_attachment_quaternions: tuple[
-        tuple[HandSide, tuple[float, float, float, float]], ...
-    ] | None
+    assembly_attachment_quaternions: (
+        tuple[tuple[HandSide, tuple[float, float, float, float]], ...] | None
+    )
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str) -> Self:
@@ -138,15 +129,17 @@ class RecordChainNeroPolicy:
             value,
             expected=frozenset(
                 {"asset_id", "binding_id", "profile_id", "attachment"}
-                | ({optional_key} if isinstance(value, Mapping) and optional_key in value else set())
+                | (
+                    {optional_key}
+                    if isinstance(value, Mapping) and optional_key in value
+                    else set()
+                )
             ),
             field=field,
         )
         attachment = require_exact_mapping(
             data["attachment"],
-            expected=frozenset(
-                {"parent_frame", "child_frame", "position_m", "quat_wxyz"}
-            ),
+            expected=frozenset({"parent_frame", "child_frame", "position_m", "quat_wxyz"}),
             field=f"{field}.attachment",
         )
         raw_quaternions = (
@@ -160,12 +153,8 @@ class RecordChainNeroPolicy:
         )
         return cls(
             asset_id=validate_identifier(data["asset_id"], field=f"{field}.asset_id"),
-            binding_id=validate_identifier(
-                data["binding_id"], field=f"{field}.binding_id"
-            ),
-            profile_id=validate_identifier(
-                data["profile_id"], field=f"{field}.profile_id"
-            ),
+            binding_id=validate_identifier(data["binding_id"], field=f"{field}.binding_id"),
+            profile_id=validate_identifier(data["profile_id"], field=f"{field}.profile_id"),
             attachment=PoseSpec.from_mapping(
                 {
                     "position_m": attachment["position_m"],
@@ -236,14 +225,16 @@ class RecordChainQualificationPolicy:
                     "nero",
                     "required_sdk_processes",
                 }
-                | ({optional_key} if isinstance(value, Mapping) and optional_key in value else set())
+                | (
+                    {optional_key}
+                    if isinstance(value, Mapping) and optional_key in value
+                    else set()
+                )
             ),
             field="record_chain_qualification",
         )
         if data["schema"] != QUALIFICATION_SCHEMA:
-            raise ValueError(
-                f"record_chain_qualification.schema must be {QUALIFICATION_SCHEMA!r}"
-            )
+            raise ValueError(f"record_chain_qualification.schema must be {QUALIFICATION_SCHEMA!r}")
         processes = tuple(
             validate_identifier(
                 item, field=f"record_chain_qualification.required_sdk_processes[{index}]"
@@ -350,6 +341,7 @@ class RecordChainPreflightReceipt:
     side_receipts: tuple[MatchedChainPreflightReceipt, ...]
 
     def to_mapping(self) -> dict[str, object]:
+        dataset_eligible = self.dataset_source_mode == "live_teleoperation"
         return {
             "schema": PREFLIGHT_RECEIPT_SCHEMA,
             "passed": True,
@@ -368,23 +360,19 @@ class RecordChainPreflightReceipt:
                 "assembly_id": self.assembly_id,
                 "assembly_sha256": self.assembly_sha256,
             },
-            "task_scene": (
-                None if self.task_scene is None else self.task_scene.to_mapping()
-            ),
+            "task_scene": (None if self.task_scene is None else self.task_scene.to_mapping()),
             "dataset": {
                 "profile_id": self.dataset_profile_id,
                 "q54_profile_id": self.q54_profile_id,
                 "source_mode": self.dataset_source_mode,
-                "qualification_only": True,
-                "dataset_eligible": False,
+                "qualification_only": not dataset_eligible,
+                "dataset_eligible": dataset_eligible,
             },
             "description": {
                 "release": self.description_release,
                 "root_orientation_compensation_quat_wxyz": {
                     side.value: list(quaternion)
-                    for side, quaternion in (
-                        self.description_root_orientation_compensations
-                    )
+                    for side, quaternion in (self.description_root_orientation_compensations)
                 },
                 "beta_warning": (
                     "Wuji Hand2 remains Beta1; any SDK, Description, Studio user-model, "
@@ -392,12 +380,8 @@ class RecordChainPreflightReceipt:
                 ),
             },
             "sdk_processes": [item.to_mapping() for item in self.process_receipts],
-            "hands": {
-                item.side.value: item.to_mapping() for item in self.side_receipts
-            },
-            "scope": (
-                "simulation-only dual NERO + dual Hand2; no NERO or Hand2 hardware access"
-            ),
+            "hands": {item.side.value: item.to_mapping() for item in self.side_receipts},
+            "scope": ("simulation-only dual NERO + dual Hand2; no NERO or Hand2 hardware access"),
         }
 
 
@@ -417,6 +401,7 @@ def preflight_wuji_hand2_record_chain(
     local_runtime_binding_path: str | Path,
     matched_chain_binding_path: str | Path,
     input_mode: str,
+    dataset_source_mode: str | None = None,
     sdk_runtime: WujiSdkRuntimeFacts,
     user_manager: WujiSdkUserManager,
     studio_processes: Sequence[str] = (),
@@ -427,12 +412,20 @@ def preflight_wuji_hand2_record_chain(
 
     if input_mode not in {"stub", "glove"}:
         raise ValueError("input_mode must be 'stub' or 'glove'")
+    if dataset_source_mode is None:
+        dataset_source_mode = "synthetic_fixture" if input_mode == "stub" else "live_qualification"
+    if dataset_source_mode not in {
+        "synthetic_fixture",
+        "live_qualification",
+        "live_teleoperation",
+    }:
+        raise ValueError("unsupported dataset_source_mode")
+    if (input_mode == "stub") != (dataset_source_mode == "synthetic_fixture"):
+        raise ValueError("stub input and synthetic_fixture source mode must be paired")
     del verify_artifacts
     root = Path(project_root).resolve()
     policy = load_record_chain_qualification_policy(qualification_path)
-    requested_deployment = _project_relative(
-        root, deployment_path, field="record chain deployment"
-    )
+    requested_deployment = _project_relative(root, deployment_path, field="record chain deployment")
     if requested_deployment != policy.deployment.path:
         raise RuntimeError("record chain deployment differs from the qualification policy")
 
@@ -521,9 +514,7 @@ def preflight_wuji_hand2_record_chain(
         task_scene=task_scene,
         dataset_profile_id=dataset_profile.profile_id,
         q54_profile_id=dataset_profile.q54.profile_id,
-        dataset_source_mode=(
-            "synthetic_fixture" if input_mode == "stub" else "live_qualification"
-        ),
+        dataset_source_mode=dataset_source_mode,
         description_release=policy.description.release,
         description_root_orientation_compensations=(
             policy.description.root_orientation_compensations
@@ -589,13 +580,8 @@ def _validate_description_and_nero(
         ):
             raise RuntimeError(f"{side.value} NERO pinned model/binding differs")
         arm_profile_path = arm.asset.canonical_profile
-        profile = load_yaml_strict(
-            (root / arm_profile_path).read_text(encoding="utf-8")
-        )
-        if (
-            not isinstance(profile, Mapping)
-            or profile.get("profile_id") != policy.nero.profile_id
-        ):
+        profile = load_yaml_strict((root / arm_profile_path).read_text(encoding="utf-8"))
+        if not isinstance(profile, Mapping) or profile.get("profile_id") != policy.nero.profile_id:
             raise RuntimeError(f"{side.value} NERO provisional simulation profile differs")
         attachments = tuple(
             item
@@ -614,11 +600,8 @@ def _validate_description_and_nero(
         if (
             attachment.parent.frame != policy.nero.parent_frame
             or attachment.child.frame != policy.nero.child_frame
-            or attachment.transform.position_m
-            != policy.nero.attachment.position_m
-            or not _quaternions_equivalent(
-                attachment.transform.quat_wxyz, expected_quaternion
-            )
+            or attachment.transform.position_m != policy.nero.attachment.position_m
+            or not _quaternions_equivalent(attachment.transform.quat_wxyz, expected_quaternion)
         ):
             raise RuntimeError(f"{side.value} NERO-to-Hand2 attachment differs")
 
@@ -661,6 +644,8 @@ def load_record_chain_preflight_receipt(path: str | Path) -> Mapping[str, object
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ValueError(f"record-chain preflight receipt is unreadable: {exc}") from exc
     dataset = document.get("dataset") if isinstance(document, Mapping) else None
+    source_mode = dataset.get("source_mode") if isinstance(dataset, Mapping) else None
+    dataset_eligible = source_mode == "live_teleoperation"
     if (
         not isinstance(document, Mapping)
         or document.get("schema") != PREFLIGHT_RECEIPT_SCHEMA
@@ -668,8 +653,9 @@ def load_record_chain_preflight_receipt(path: str | Path) -> Mapping[str, object
         or document.get("device_access_attempted") is not False
         or document.get("isaac_started") is not False
         or not isinstance(dataset, Mapping)
-        or dataset.get("qualification_only") is not True
-        or dataset.get("dataset_eligible") is not False
+        or source_mode not in {"synthetic_fixture", "live_qualification", "live_teleoperation"}
+        or dataset.get("qualification_only") is not (not dataset_eligible)
+        or dataset.get("dataset_eligible") is not dataset_eligible
     ):
         raise ValueError("record-chain preflight receipt is not a passed offline receipt")
     return document

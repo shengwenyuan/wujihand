@@ -41,6 +41,9 @@ class ResolvedRosDeployment:
     route_plan: DualTeleoperationRoutePlan
     deployment_hash: str
     local_binding_hash: str
+    self_collision_profile_path: str | None
+    self_collision_profile_id: str | None
+    self_collision_profile_sha256: str | None
 
 
 class RosDeploymentResolver:
@@ -73,76 +76,66 @@ class RosDeploymentResolver:
             else self.repository.load_ros_local_runtime_binding(local_binding)
         )
         if local.binding_id != deployment.local_binding_id:
-            raise ValueError(
-                "ROS deployment and local runtime binding IDs differ"
-            )
+            raise ValueError("ROS deployment and local runtime binding IDs differ")
         process_ids = {process.process_id for process in deployment.processes}
-        local_process_ids = {
-            process.process_id for process in local.processes
-        }
+        local_process_ids = {process.process_id for process in local.processes}
         if not process_ids.issubset(local_process_ids):
-            raise ValueError(
-                "ROS local runtime binding is missing deployment processes"
-            )
+            raise ValueError("ROS local runtime binding is missing deployment processes")
         live_binding_keys = {
             source.local_binding_key
             for source in deployment.sources
             if source.local_binding_key is not None
         }
-        local_sources = {
-            source.binding_key: source for source in local.sources
-        }
+        local_sources = {source.binding_key: source for source in local.sources}
         if not live_binding_keys.issubset(local_sources):
-            raise ValueError(
-                "ROS local runtime binding is missing live source bindings"
-            )
+            raise ValueError("ROS local runtime binding is missing live source bindings")
         self._validate_routes(deployment, session)
         route_plan = build_dual_teleoperation_route_plan(
             deployment,
             local_sources=local_sources,
         )
-        qos = self.repository.load_ros_qos_profile(
-            deployment.qos_profile
-        )
-        compatibility_profile = (
-            session.session.runtime.compatibility_profile
-        )
+        qos = self.repository.load_ros_qos_profile(deployment.qos_profile)
+        compatibility_profile = session.session.runtime.compatibility_profile
         if compatibility_profile is None:
-            raise ValueError(
-                "ROS Session is missing its dual teleoperation profile"
-            )
-        control_profile = (
-            self.repository.load_dual_teleoperation_profile(
-                compatibility_profile
-            )
-        )
+            raise ValueError("ROS Session is missing its dual teleoperation profile")
+        control_profile = self.repository.load_dual_teleoperation_profile(compatibility_profile)
         mapping_path = deployment.tracking_setup.mapping.path
         mapping_file = self.repository.resolve_project_path(
             mapping_path,
             field="ROS Tracker mapping calibration",
         )
         mapping = load_tracker_workcell_mapping(mapping_file)
-        if (
-            mapping.mapping_id
-            != deployment.tracking_setup.mapping.expected_id
-        ):
+        if mapping.mapping_id != deployment.tracking_setup.mapping.expected_id:
             raise ValueError("ROS tracking mapping identity differs")
-        if (
-            mapping.tracking_frame
-            != deployment.tracking_setup.tracking_frame
-        ):
+        if mapping.tracking_frame != deployment.tracking_setup.tracking_frame:
             raise ValueError("ROS tracking frame differs from mapping")
         if mapping.workcell_frame != session.workcell.world_frame:
             raise ValueError("ROS mapping and Workcell frames differ")
-        deployment_hash = _sha256_mapping(
-            {
-                "config_path": config_path,
-                "deployment": deployment.to_mapping(),
-                "session_hash": session.session_hash,
-                "qos": qos.to_mapping(),
-                "mapping_sha256": sha256_file(mapping_file),
+        self_collision_ref = session.session.runtime.self_collision_profile
+        self_collision_path = None
+        self_collision_sha256 = None
+        if self_collision_ref is not None:
+            self_collision_path = self.repository.validate_profile_reference(self_collision_ref)
+            self_collision_sha256 = sha256_file(
+                self.repository.resolve_project_path(
+                    self_collision_path,
+                    field="self-collision profile",
+                )
+            )
+        deployment_identity: dict[str, object] = {
+            "config_path": config_path,
+            "deployment": deployment.to_mapping(),
+            "session_hash": session.session_hash,
+            "qos": qos.to_mapping(),
+            "mapping_sha256": sha256_file(mapping_file),
+        }
+        if self_collision_ref is not None:
+            deployment_identity["self_collision_profile"] = {
+                "path": self_collision_path,
+                "profile_id": self_collision_ref.expected_id,
+                "sha256": self_collision_sha256,
             }
-        )
+        deployment_hash = _sha256_mapping(deployment_identity)
         local_binding_hash = _sha256_mapping(
             {
                 "binding_id": local.binding_id,
@@ -154,12 +147,9 @@ class RosDeploymentResolver:
                     {
                         "process_id": process.process_id,
                         "environment_id": process.environment_id,
-                        "executable_sha256": _sha256_text(
-                            process.executable
-                        ),
+                        "executable_sha256": _sha256_text(process.executable),
                         "setup_script_sha256": [
-                            _sha256_text(script)
-                            for script in process.setup_scripts
+                            _sha256_text(script) for script in process.setup_scripts
                         ],
                     }
                     for process in local.processes
@@ -169,9 +159,7 @@ class RosDeploymentResolver:
                     {
                         "binding_key": source.binding_key,
                         "source_kind": source.source_kind,
-                        "device_identity_sha256": _sha256_text(
-                            source.device_identity
-                        ),
+                        "device_identity_sha256": _sha256_text(source.device_identity),
                         "endpoint_sha256": _sha256_text(source.endpoint),
                         "calibration_id": source.calibration_id,
                     }
@@ -194,6 +182,11 @@ class RosDeploymentResolver:
             route_plan=route_plan,
             deployment_hash=deployment_hash,
             local_binding_hash=local_binding_hash,
+            self_collision_profile_path=self_collision_path,
+            self_collision_profile_id=(
+                None if self_collision_ref is None else self_collision_ref.expected_id
+            ),
+            self_collision_profile_sha256=self_collision_sha256,
         )
 
     @staticmethod
@@ -206,13 +199,10 @@ class RosDeploymentResolver:
             for layout in session.session.runtime.control_layouts
         }
         actual = {
-            (binding.instance_id, binding.group_id)
-            for binding in deployment.control_bindings
+            (binding.instance_id, binding.group_id) for binding in deployment.control_bindings
         }
         if actual != expected:
-            raise ValueError(
-                "ROS deployment routes must exactly cover Session layouts"
-            )
+            raise ValueError("ROS deployment routes must exactly cover Session layouts")
 
 
 def _sha256_mapping(value: object) -> str:

@@ -6,23 +6,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 
 
-SELF_COLLISION_QUALIFICATION_SCHEMA = (
-    "wujihand.nero_hand2_self_collision_qualification.v1"
-)
-SELF_COLLISION_QUALIFICATION_PROFILE_ID = (
-    "isaac_nero_hand2_self_collision_qualification_v1"
-)
-SELF_COLLISION_FILTER_SCHEMA = (
-    "wujihand.nero_hand2_self_collision_filtered_pairs.v1"
-)
-SELF_COLLISION_FILTER_PROFILE_ID = (
-    "isaac_nero_hand2_self_collision_filtered_pairs_v1"
-)
+SELF_COLLISION_QUALIFICATION_SCHEMA = "wujihand.nero_hand2_self_collision_qualification.v1"
+SELF_COLLISION_QUALIFICATION_PROFILE_ID = "isaac_nero_hand2_self_collision_qualification_v1"
+SELF_COLLISION_FILTER_SCHEMA = "wujihand.nero_hand2_self_collision_filtered_pairs.v1"
+SELF_COLLISION_FILTER_SCHEMA_V2 = "wujihand.nero_hand2_self_collision_filtered_pairs.v2"
+SELF_COLLISION_FILTER_PROFILE_ID = "isaac_nero_hand2_self_collision_filtered_pairs_v1"
+SELF_COLLISION_CONTACT_TARGET_SCHEMA = "wujihand.nero_hand2_self_collision_contact_target.v1"
 
 
 def _mapping(value: object, *, field: str) -> Mapping[str, object]:
@@ -107,7 +101,9 @@ class NeroHand2SelfCollisionQualificationProfile:
 class SelfCollisionFilteredPair:
     pair_id: str
     sides: tuple[str, ...]
+    first_instance: Literal["arm", "hand"]
     first_rigid_body_name: str
+    second_instance: Literal["arm", "hand"]
     second_rigid_body_name: str
     evidence: tuple[tuple[str, object], ...]
 
@@ -118,6 +114,20 @@ class NeroHand2SelfCollisionFilterProfile:
     source_contract: tuple[tuple[str, str], ...]
     filtered_pairs: tuple[SelfCollisionFilteredPair, ...]
     assumptions: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NeroHand2SelfCollisionContactTargetProfile:
+    profile_id: str
+    hand2_source: str
+    targets: tuple[tuple[str, tuple[float, ...]], ...]
+    evidence: tuple[tuple[str, object], ...]
+
+    def target(self, side: str) -> tuple[float, ...]:
+        for target_side, q20 in self.targets:
+            if target_side == side:
+                return q20
+        raise KeyError(side)
 
 
 def load_nero_hand2_self_collision_qualification_profile(
@@ -142,11 +152,11 @@ def load_nero_hand2_self_collision_qualification_profile(
         field="self-collision qualification profile",
     )
 
-
     if data["schema"] != SELF_COLLISION_QUALIFICATION_SCHEMA:
         raise ValueError("unsupported self-collision qualification schema")
-    if data["profile_id"] != SELF_COLLISION_QUALIFICATION_PROFILE_ID:
-        raise ValueError("unexpected self-collision qualification profile ID")
+    profile_id = data["profile_id"]
+    if not isinstance(profile_id, str) or not profile_id:
+        raise ValueError("self-collision qualification profile ID must be non-blank")
     if data["status"] != "simulation_only":
         raise ValueError("self-collision qualification profile must be simulation_only")
 
@@ -183,9 +193,7 @@ def load_nero_hand2_self_collision_qualification_profile(
         ),
         field="self-collision qualification profile.thresholds",
     )
-    collision_contract = _mapping(
-        data["collision_mesh_contract"], field="collision_mesh_contract"
-    )
+    collision_contract = _mapping(data["collision_mesh_contract"], field="collision_mesh_contract")
     assumptions = data["assumptions"]
     if (
         not isinstance(assumptions, list)
@@ -194,30 +202,22 @@ def load_nero_hand2_self_collision_qualification_profile(
     ):
         raise ValueError("assumptions must contain non-blank strings")
     return NeroHand2SelfCollisionQualificationProfile(
-        profile_id=SELF_COLLISION_QUALIFICATION_PROFILE_ID,
+        profile_id=profile_id,
         physics_hz=_positive_int(data["physics_hz"], field="physics_hz"),
         hand_amplitude_rad=_finite(
             data["hand_amplitude_rad"], field="hand_amplitude_rad", positive=True
         ),
         phases=SelfCollisionPhaseFrames(
-            settle_rest=_positive_int(
-                phases["settle_rest_frames"], field="settle_rest_frames"
-            ),
-            observe_rest=_positive_int(
-                phases["observe_rest_frames"], field="observe_rest_frames"
-            ),
+            settle_rest=_positive_int(phases["settle_rest_frames"], field="settle_rest_frames"),
+            observe_rest=_positive_int(phases["observe_rest_frames"], field="observe_rest_frames"),
             close_trajectory=_positive_int(
                 phases["close_trajectory_frames"], field="close_trajectory_frames"
             ),
-            hold_grasp=_positive_int(
-                phases["hold_grasp_frames"], field="hold_grasp_frames"
-            ),
+            hold_grasp=_positive_int(phases["hold_grasp_frames"], field="hold_grasp_frames"),
             open_trajectory=_positive_int(
                 phases["open_trajectory_frames"], field="open_trajectory_frames"
             ),
-            final_rest=_positive_int(
-                phases["final_rest_frames"], field="final_rest_frames"
-            ),
+            final_rest=_positive_int(phases["final_rest_frames"], field="final_rest_frames"),
         ),
         thresholds=SelfCollisionThresholds(
             contact_report_threshold_n=_finite(
@@ -298,10 +298,12 @@ def load_nero_hand2_self_collision_filter_profile(
         ),
         field="self-collision filter profile",
     )
-    if data["schema"] != SELF_COLLISION_FILTER_SCHEMA:
+    schema = data["schema"]
+    if schema not in {SELF_COLLISION_FILTER_SCHEMA, SELF_COLLISION_FILTER_SCHEMA_V2}:
         raise ValueError("unsupported self-collision filter schema")
-    if data["profile_id"] != SELF_COLLISION_FILTER_PROFILE_ID:
-        raise ValueError("unexpected self-collision filter profile ID")
+    profile_id = data["profile_id"]
+    if not isinstance(profile_id, str) or not profile_id:
+        raise ValueError("self-collision filter profile ID must be non-blank")
     if data["status"] != "simulation_only_evidence_based":
         raise ValueError("self-collision filter profile must be evidence based")
     source_contract = _mapping(data["source_contract"], field="source_contract")
@@ -311,17 +313,18 @@ def load_nero_hand2_self_collision_filter_profile(
     pairs: list[SelfCollisionFilteredPair] = []
     for index, raw_pair in enumerate(raw_pairs):
         field = f"filtered_pairs[{index}]"
+        pair_fields = {
+            "pair_id",
+            "sides",
+            "first_rigid_body_name",
+            "second_rigid_body_name",
+            "evidence",
+        }
+        if schema == SELF_COLLISION_FILTER_SCHEMA_V2:
+            pair_fields |= {"first_instance", "second_instance"}
         pair = _exact_mapping(
             raw_pair,
-            expected=frozenset(
-                {
-                    "pair_id",
-                    "sides",
-                    "first_rigid_body_name",
-                    "second_rigid_body_name",
-                    "evidence",
-                }
-            ),
+            expected=frozenset(pair_fields),
             field=field,
         )
         sides = pair["sides"]
@@ -348,11 +351,20 @@ def load_nero_hand2_self_collision_filter_profile(
         pair_id = pair["pair_id"]
         if not isinstance(pair_id, str) or not pair_id:
             raise ValueError(f"{field}.pair_id must be non-blank")
+        first_instance = pair.get("first_instance", "arm")
+        second_instance = pair.get("second_instance", "arm")
+        if first_instance not in {"arm", "hand"} or second_instance not in {
+            "arm",
+            "hand",
+        }:
+            raise ValueError(f"{field} instances must be arm or hand")
         pairs.append(
             SelfCollisionFilteredPair(
                 pair_id=pair_id,
                 sides=tuple(cast(list[str], sides)),
+                first_instance=cast(Literal["arm", "hand"], first_instance),
                 first_rigid_body_name=first,
+                second_instance=cast(Literal["arm", "hand"], second_instance),
                 second_rigid_body_name=second,
                 evidence=tuple(sorted(evidence.items())),
             )
@@ -367,7 +379,7 @@ def load_nero_hand2_self_collision_filter_profile(
     ):
         raise ValueError("assumptions must contain non-blank strings")
     return NeroHand2SelfCollisionFilterProfile(
-        profile_id=SELF_COLLISION_FILTER_PROFILE_ID,
+        profile_id=profile_id,
         source_contract=tuple(
             sorted((str(key), str(value)) for key, value in source_contract.items())
         ),
@@ -376,10 +388,57 @@ def load_nero_hand2_self_collision_filter_profile(
     )
 
 
+def load_nero_hand2_self_collision_contact_target_profile(
+    path: str | Path,
+) -> NeroHand2SelfCollisionContactTargetProfile:
+    raw: Any = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    data = _exact_mapping(
+        raw,
+        expected=frozenset(
+            {"schema", "profile_id", "status", "hand2_source", "targets", "evidence"}
+        ),
+        field="self-collision contact target profile",
+    )
+    if data["schema"] != SELF_COLLISION_CONTACT_TARGET_SCHEMA:
+        raise ValueError("unsupported self-collision contact target schema")
+    if data["status"] != "simulation_only_recorded_glove_fixture":
+        raise ValueError("self-collision contact target profile has unexpected status")
+    profile_id = data["profile_id"]
+    hand2_source = data["hand2_source"]
+    if not isinstance(profile_id, str) or not profile_id:
+        raise ValueError("self-collision contact target profile ID must be non-blank")
+    if not isinstance(hand2_source, str) or not hand2_source:
+        raise ValueError("self-collision contact target Hand2 source must be non-blank")
+    raw_targets = _exact_mapping(
+        data["targets"],
+        expected=frozenset({"left", "right"}),
+        field="self-collision contact targets",
+    )
+    targets: list[tuple[str, tuple[float, ...]]] = []
+    for side in ("left", "right"):
+        raw_q20 = raw_targets[side]
+        if not isinstance(raw_q20, list) or len(raw_q20) != 20:
+            raise ValueError(f"self-collision contact target {side} must contain q20")
+        q20 = tuple(float(value) for value in raw_q20)
+        if not all(math.isfinite(value) for value in q20):
+            raise ValueError(f"self-collision contact target {side} must be finite")
+        targets.append((side, q20))
+    evidence = _mapping(data["evidence"], field="self-collision contact target evidence")
+    if not evidence:
+        raise ValueError("self-collision contact target evidence must not be empty")
+    return NeroHand2SelfCollisionContactTargetProfile(
+        profile_id=profile_id,
+        hand2_source=hand2_source,
+        targets=tuple(targets),
+        evidence=tuple(sorted(evidence.items())),
+    )
+
+
 def author_isaac_self_collision_filters(
     stage: object,
     *,
     arm_prim_paths: Mapping[str, str],
+    hand_prim_paths: Mapping[str, str],
     enabled_sides: frozenset[str],
     profile: NeroHand2SelfCollisionFilterProfile,
 ) -> tuple[tuple[str, str, str], ...]:
@@ -389,36 +448,41 @@ def author_isaac_self_collision_filters(
 
     if not enabled_sides <= {"left", "right"}:
         raise ValueError("enabled_sides must contain only left/right")
+
+    def rigid_body(instance: Literal["arm", "hand"], side: str, name: str) -> Any:
+        roots = arm_prim_paths if instance == "arm" else hand_prim_paths
+        root = roots.get(side)
+        if root is None:
+            raise RuntimeError(f"missing {instance} root for filtered-pair side {side!r}")
+        matches = [
+            prim
+            for prim in stage.Traverse()  # type: ignore[attr-defined]
+            if str(prim.GetPath()).startswith(root.rstrip("/") + "/")
+            and str(prim.GetName()) == name
+            and prim.HasAPI(UsdPhysics.RigidBodyAPI)
+        ]
+        if len(matches) != 1:
+            paths = [str(item.GetPath()) for item in matches]
+            raise RuntimeError(
+                f"filtered rigid body {instance}/{side}/{name!r} did not resolve uniquely: {paths}"
+            )
+        return matches[0]
+
     authored: list[tuple[str, str, str]] = []
     for rule in profile.filtered_pairs:
         for side in rule.sides:
             if side not in enabled_sides:
                 continue
-            root = arm_prim_paths.get(side)
-            if root is None:
-                raise RuntimeError(f"missing NERO root for filtered-pair side {side!r}")
-            matches: dict[str, list[Any]] = {
-                rule.first_rigid_body_name: [],
-                rule.second_rigid_body_name: [],
-            }
-            for prim in stage.Traverse():  # type: ignore[attr-defined]
-                path = str(prim.GetPath())
-                if not path.startswith(root.rstrip("/") + "/"):
-                    continue
-                name = str(prim.GetName())
-                if name in matches and prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                    matches[name].append(prim)
-            if any(len(values) != 1 for values in matches.values()):
-                resolved = {
-                    name: [str(item.GetPath()) for item in values]
-                    for name, values in matches.items()
-                }
-                raise RuntimeError(
-                    f"filtered pair {rule.pair_id!r} did not resolve uniquely: "
-                    f"{resolved}"
-                )
-            first = matches[rule.first_rigid_body_name][0]
-            second = matches[rule.second_rigid_body_name][0]
+            first = rigid_body(
+                rule.first_instance,
+                side,
+                rule.first_rigid_body_name,
+            )
+            second = rigid_body(
+                rule.second_instance,
+                side,
+                rule.second_rigid_body_name,
+            )
             first_path = str(first.GetPath())
             second_path = str(second.GetPath())
             api = UsdPhysics.FilteredPairsAPI.Apply(first)
@@ -442,5 +506,6 @@ __all__ = [
     "SelfCollisionThresholds",
     "author_isaac_self_collision_filters",
     "load_nero_hand2_self_collision_filter_profile",
+    "load_nero_hand2_self_collision_contact_target_profile",
     "load_nero_hand2_self_collision_qualification_profile",
 ]

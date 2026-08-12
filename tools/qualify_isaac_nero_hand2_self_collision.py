@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
 from collections.abc import Mapping
 import json
 import math
@@ -25,15 +24,20 @@ from wujihand.adapters.simulation.isaac_camera import (
     assert_profile_matches_readback,
     derive_pinhole_calibration,
 )
+from wujihand.adapters.simulation.isaac_contact_tracking import (
+    IsaacContactTracker as ContactTracker,
+    author_isaac_contact_reports,
+)
 from wujihand.adapters.simulation.nero_hand2_self_collision import (
+    load_nero_hand2_self_collision_contact_target_profile,
     load_nero_hand2_self_collision_filter_profile,
     load_nero_hand2_self_collision_qualification_profile,
 )
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
     load_nero_link_geometry_alignment,
 )
-from wujihand.adapters.simulation.nero_tabletop import (
-    load_nero_dual_tabletop_qualification_profile,
+from wujihand.adapters.simulation.nero_startup import (
+    load_nero_dual_simulation_startup_profile,
 )
 from wujihand.application.qualification.hand2_scripted import (
     build_hand2_qualification_targets,
@@ -50,9 +54,7 @@ from wujihand.runtime.isaac_dual_scene import (
 DEFAULT_SESSION = (
     ROOT / "configs/sessions/isaac_nero_dual_hand2_physical_simulation_nominal_v1.yaml"
 )
-DEFAULT_PROFILE = (
-    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
-)
+DEFAULT_PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
 DEFAULT_FILTER_PROFILE = (
     ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
 )
@@ -63,6 +65,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--session", type=Path, default=DEFAULT_SESSION)
     parser.add_argument("--profile", type=Path, default=DEFAULT_PROFILE)
     parser.add_argument("--filter-profile", type=Path, default=DEFAULT_FILTER_PROFILE)
+    parser.add_argument(
+        "--contact-target-profile",
+        type=Path,
+        help="Require a pinned q20 fixture to produce Hand2 internal contact during hold.",
+    )
     parser.add_argument(
         "--unfiltered",
         action="store_true",
@@ -97,98 +104,7 @@ simulation_app = SimulationApp({"headless": True})
 
 import omni.physx
 from isaacsim.core.prims import RigidPrim
-from pxr import Gf, PhysicsSchemaTools, PhysxSchema, Usd, UsdGeom, UsdPhysics
-
-
-class ContactTracker:
-    """Collect per-frame PhysX contact pairs without trusting aggregate forces."""
-
-    def __init__(self, *, separation_epsilon_m: float) -> None:
-        self.phase = "not_started"
-        self.frame_index = -1
-        self.separation_epsilon_m = separation_epsilon_m
-        self._pairs: dict[tuple[str, str], dict[str, object]] = {}
-
-    def set_frame(self, phase: str, frame_index: int) -> None:
-        self.phase = phase
-        self.frame_index = frame_index
-
-    def callback(self, headers: object, data: object) -> None:
-        for header in headers:  # type: ignore[union-attr]
-            left = self._path(getattr(header, "collider0", 0))
-            right = self._path(getattr(header, "collider1", 0))
-            if left == "/" or right == "/":
-                left = self._path(getattr(header, "actor0", 0))
-                right = self._path(getattr(header, "actor1", 0))
-            pair = tuple(sorted((left, right)))
-            record = self._pairs.setdefault(
-                cast(tuple[str, str], pair),
-                {
-                    "event_count": 0,
-                    "minimum_separation_m": math.inf,
-                    "event_phases": defaultdict(set),
-                    "contact_phases": defaultdict(set),
-                    "minimum_separation_by_phase_m": {},
-                },
-            )
-            record["event_count"] = int(record["event_count"]) + 1
-            cast(defaultdict[str, set[int]], record["event_phases"])[self.phase].add(
-                self.frame_index
-            )
-            offset = int(getattr(header, "contact_data_offset", 0))
-            count = int(getattr(header, "num_contact_data", 0))
-            event_minimum = math.inf
-            for index in range(offset, offset + count):
-                separation = float(getattr(data[index], "separation"))  # type: ignore[index]
-                event_minimum = min(event_minimum, separation)
-                record["minimum_separation_m"] = min(
-                    float(record["minimum_separation_m"]), separation
-                )
-            if event_minimum <= self.separation_epsilon_m:
-                cast(defaultdict[str, set[int]], record["contact_phases"])[
-                    self.phase
-                ].add(self.frame_index)
-            if not math.isinf(event_minimum):
-                phase_minimum = cast(
-                    dict[str, float], record["minimum_separation_by_phase_m"]
-                )
-                phase_minimum[self.phase] = min(
-                    phase_minimum.get(self.phase, math.inf), event_minimum
-                )
-
-    @staticmethod
-    def _path(encoded: object) -> str:
-        try:
-            return str(PhysicsSchemaTools.intToSdfPath(int(encoded)))
-        except (TypeError, ValueError):
-            return "/"
-
-    def to_mapping(self) -> dict[str, object]:
-        result: dict[str, object] = {}
-        for pair, raw in sorted(self._pairs.items()):
-            event_phases = cast(defaultdict[str, set[int]], raw["event_phases"])
-            contact_phases = cast(defaultdict[str, set[int]], raw["contact_phases"])
-            minimum = float(raw["minimum_separation_m"])
-            result[" <-> ".join(pair)] = {
-                "paths": list(pair),
-                "event_count": raw["event_count"],
-                "minimum_separation_m": None if math.isinf(minimum) else minimum,
-                "phase_event_frames": {
-                    phase: len(frames) for phase, frames in sorted(event_phases.items())
-                },
-                "phase_contact_frames": {
-                    phase: len(frames) for phase, frames in sorted(contact_phases.items())
-                },
-                "phase_minimum_separation_m": dict(
-                    sorted(
-                        cast(
-                            dict[str, float],
-                            raw["minimum_separation_by_phase_m"],
-                        ).items()
-                    )
-                ),
-            }
-        return result
+from pxr import Gf, PhysxSchema, Usd, UsdGeom, UsdPhysics
 
 
 def _enabled_sides(value: str) -> frozenset[str]:
@@ -245,22 +161,6 @@ def _topology(stage: object) -> dict[str, object]:
     }
 
 
-def _author_contact_reports(stage: object, threshold_n: float) -> tuple[str, ...]:
-    authored: list[str] = []
-    for prim in stage.Traverse():  # type: ignore[union-attr]
-        path = str(prim.GetPath())
-        if not path.startswith("/World/Robots/") or not prim.HasAPI(
-            UsdPhysics.RigidBodyAPI
-        ):
-            continue
-        api = PhysxSchema.PhysxContactReportAPI.Apply(prim)
-        api.CreateThresholdAttr(threshold_n)
-        authored.append(path)
-    if not authored:
-        raise RuntimeError("no robot rigid bodies accepted ContactReportAPI")
-    return tuple(sorted(authored))
-
-
 def _author_external_probes(
     scene: DualNeroHand2IsaacScene,
 ) -> dict[str, RigidPrim]:
@@ -272,9 +172,7 @@ def _author_external_probes(
         sphere.CreateRadiusAttr(0.006)
         sphere.CreateDisplayColorAttr([Gf.Vec3f(0.95, 0.18, 0.08)])
         xformable = UsdGeom.Xformable(sphere.GetPrim())
-        xformable.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
-            Gf.Vec3d(0.0, 0.0, -10.0)
-        )
+        xformable.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(0.0, 0.0, -10.0))
         UsdPhysics.CollisionAPI.Apply(sphere.GetPrim())
         rigid = UsdPhysics.RigidBodyAPI.Apply(sphere.GetPrim())
         rigid.CreateKinematicEnabledAttr(True)
@@ -352,12 +250,8 @@ def _camera_prim_readback(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
             focal_length_mm=float(camera.GetFocalLengthAttr().Get()),
             horizontal_aperture_mm=float(camera.GetHorizontalApertureAttr().Get()),
             vertical_aperture_mm=float(camera.GetVerticalApertureAttr().Get()),
-            horizontal_aperture_offset_mm=float(
-                camera.GetHorizontalApertureOffsetAttr().Get()
-            ),
-            vertical_aperture_offset_mm=float(
-                camera.GetVerticalApertureOffsetAttr().Get()
-            ),
+            horizontal_aperture_offset_mm=float(camera.GetHorizontalApertureOffsetAttr().Get()),
+            vertical_aperture_offset_mm=float(camera.GetVerticalApertureOffsetAttr().Get()),
             clipping_range_m=cast(
                 tuple[float, float],
                 tuple(float(value) for value in camera.GetClippingRangeAttr().Get()),
@@ -374,20 +268,14 @@ def _camera_prim_readback(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
             "projection_classification": prim.GetAttribute(
                 "wujihand:projectionClassification"
             ).Get(),
-            "simulation_warning": prim.GetAttribute(
-                "wujihand:simulationWarning"
-            ).Get(),
+            "simulation_warning": prim.GetAttribute("wujihand:simulationWarning").Get(),
             "simulation_only": prim.GetAttribute("wujihand:simulationOnly").Get(),
             "capture_rate_hz": prim.GetAttribute("wujihand:captureRateHz").Get(),
-            "optical_frame_convention": prim.GetAttribute(
-                "wujihand:opticalFrameConvention"
-            ).Get(),
+            "optical_frame_convention": prim.GetAttribute("wujihand:opticalFrameConvention").Get(),
         }
         expected_custom = {
             "camera_profile_id": runtime.camera_profile.profile_id,
-            "projection_classification": (
-                runtime.camera_profile.projection_classification
-            ),
+            "projection_classification": (runtime.camera_profile.projection_classification),
             "simulation_warning": runtime.camera_profile.warning,
             "simulation_only": True,
             "capture_rate_hz": runtime.camera_profile.capture.rate_hz,
@@ -404,12 +292,8 @@ def _camera_prim_readback(scene: DualNeroHand2IsaacScene) -> dict[str, object]:
                 "focal_length_mm": readback.focal_length_mm,
                 "horizontal_aperture_mm": readback.horizontal_aperture_mm,
                 "vertical_aperture_mm": readback.vertical_aperture_mm,
-                "horizontal_aperture_offset_mm": (
-                    readback.horizontal_aperture_offset_mm
-                ),
-                "vertical_aperture_offset_mm": (
-                    readback.vertical_aperture_offset_mm
-                ),
+                "horizontal_aperture_offset_mm": (readback.horizontal_aperture_offset_mm),
+                "vertical_aperture_offset_mm": (readback.vertical_aperture_offset_mm),
                 "clipping_range_m": list(readback.clipping_range_m),
                 "horizontal_fov_deg": calibration.horizontal_fov_deg,
                 "vertical_fov_deg": calibration.vertical_fov_deg,
@@ -440,18 +324,10 @@ def _runtime_body_properties(scene: DualNeroHand2IsaacScene) -> dict[str, object
         center_positions, center_orientations = articulation.get_body_coms()
         values = {
             "body_names": list(articulation.body_names),
-            "masses_kg": np.asarray(
-                articulation.get_body_masses(), dtype=np.float64
-            ).tolist(),
-            "centers_of_mass_m": np.asarray(
-                center_positions, dtype=np.float64
-            ).tolist(),
-            "principal_axes_wxyz": np.asarray(
-                center_orientations, dtype=np.float64
-            ).tolist(),
-            "inertias": np.asarray(
-                articulation.get_body_inertias(), dtype=np.float64
-            ).tolist(),
+            "masses_kg": np.asarray(articulation.get_body_masses(), dtype=np.float64).tolist(),
+            "centers_of_mass_m": np.asarray(center_positions, dtype=np.float64).tolist(),
+            "principal_axes_wxyz": np.asarray(center_orientations, dtype=np.float64).tolist(),
+            "inertias": np.asarray(articulation.get_body_inertias(), dtype=np.float64).tolist(),
         }
         if not all(
             np.isfinite(np.asarray(value, dtype=np.float64)).all()
@@ -476,16 +352,13 @@ def _mass_baseline_check(
     if ARGS.mass_baseline_report is None:
         raise ValueError("C2/C3 requires --mass-baseline-report from the matching C1 run")
     path = ARGS.mass_baseline_report.resolve()
-    baseline = cast(
-        Mapping[str, object], json.loads(path.read_text(encoding="utf-8"))
-    )
+    baseline = cast(Mapping[str, object], json.loads(path.read_text(encoding="utf-8")))
     if (
         baseline.get("passed") is not True
         or baseline.get("gate") != "C1"
         or baseline.get("wrist_rig_collision_mode") != "none"
         or baseline.get("enabled_self_collision_sides") != sorted(requested_sides)
-        or cast(Mapping[str, object], baseline.get("session"))["session_hash"]
-        != session_hash
+        or cast(Mapping[str, object], baseline.get("session"))["session_hash"] != session_hash
     ):
         raise RuntimeError("mass baseline report does not match this C2/C3 run")
     baseline_values = cast(Mapping[str, object], baseline["runtime_body_properties"])
@@ -546,9 +419,9 @@ def main() -> int:
     resolved = SessionResolver(project_root).resolve(ARGS.session, verify_artifacts=True)
     sides = resolve_dual_side_runtimes(project_root, resolved)
     if resolved.session.runtime.compatibility_profile is None:
-        raise RuntimeError("session must reference the tabletop qualification profile")
-    tabletop_path = project_root / resolved.session.runtime.compatibility_profile
-    tabletop = load_nero_dual_tabletop_qualification_profile(tabletop_path)
+        raise RuntimeError("session must reference a simulation startup profile")
+    startup_path = project_root / resolved.session.runtime.compatibility_profile
+    startup = load_nero_dual_simulation_startup_profile(startup_path)
     requested_sides = _enabled_sides(ARGS.enabled_sides)
     if not requested_sides and ARGS.wrist_rig_collision_mode != "none":
         raise ValueError("C0 cannot enable wrist-rig collision")
@@ -557,29 +430,34 @@ def main() -> int:
         if requested_sides and not ARGS.unfiltered
         else None
     )
+    contact_target_profile = (
+        load_nero_hand2_self_collision_contact_target_profile(ARGS.contact_target_profile)
+        if ARGS.contact_target_profile is not None
+        else None
+    )
     scene = DualNeroHand2IsaacScene(
         project_root=project_root,
         resolved=resolved,
         sides=sides,
         alignment_profile=_shared_alignment(project_root, resolved, sides),
-        qualification_profile=tabletop,
+        qualification_profile=startup,
         physics_hz=profile.physics_hz,
         self_collision_sides=requested_sides,
         self_collision_filter_profile=filter_profile,
         wrist_rig_collision_mode=ARGS.wrist_rig_collision_mode,
     )
-    probes = (
-        _author_external_probes(scene)
-        if ARGS.wrist_rig_collision_mode != "none"
-        else None
-    )
-    contact_api_paths = _author_contact_reports(
-        scene.stage, profile.thresholds.contact_report_threshold_n
+    probes = _author_external_probes(scene) if ARGS.wrist_rig_collision_mode != "none" else None
+    contact_api_paths = author_isaac_contact_reports(
+        scene.stage,
+        prim_path_prefix="/World/Robots",
+        threshold_n=profile.thresholds.contact_report_threshold_n,
     )
     topology_before = _topology(scene.stage)
     scene.world.reset()
     scene.partitions, root_paths_after_reset = scene.validate_articulations()
     scene.apply_arm_drive_gains(scene.partitions)
+    if startup.teleport_to_initial_position:
+        scene.teleport_to_targets()
     readback = _self_collision_readback(scene)
     runtime_body_properties = _runtime_body_properties(scene)
     camera_prim_readback = _camera_prim_readback(scene)
@@ -588,17 +466,13 @@ def main() -> int:
         session_hash=resolved.session_hash,
         current=runtime_body_properties,
     )
-    expected_readback = {
-        side: side in requested_sides for side in ("left", "right")
-    }
+    expected_readback = {side: side in requested_sides for side in ("left", "right")}
     if readback != expected_readback:
         raise RuntimeError(
             f"self-collision readback mismatch: expected={expected_readback}, actual={readback}"
         )
 
-    tracker = ContactTracker(
-        separation_epsilon_m=profile.thresholds.contact_separation_epsilon_m
-    )
+    tracker = ContactTracker(separation_epsilon_m=profile.thresholds.contact_separation_epsilon_m)
     subscription = omni.physx.get_physx_simulation_interface().subscribe_contact_report_events(
         tracker.callback
     )
@@ -606,16 +480,28 @@ def main() -> int:
         side: scene.hand_profiles[side].rest_position.copy() for side in ("left", "right")
     }
     grasp_targets = {
-        side: np.asarray(
-            build_hand2_qualification_targets(
-                HandSide(side),
-                rest_targets[side],
-                amplitude_rad=profile.hand_amplitude_rad,
-            )[1].q20_rad,
-            dtype=np.float64,
+        side: (
+            np.asarray(contact_target_profile.target(side), dtype=np.float64)
+            if contact_target_profile is not None
+            else np.asarray(
+                build_hand2_qualification_targets(
+                    HandSide(side),
+                    rest_targets[side],
+                    amplitude_rad=profile.hand_amplitude_rad,
+                )[1].q20_rad,
+                dtype=np.float64,
+            )
         )
         for side in ("left", "right")
     }
+    if contact_target_profile is not None:
+        commits = {scene.hand_profiles[side].provenance["commit"] for side in ("left", "right")}
+        if len(commits) != 1 or not contact_target_profile.hand2_source.endswith(commits.pop()):
+            raise RuntimeError("contact target Hand2 source differs from the Session")
+    for side, target in grasp_targets.items():
+        layout = scene.hand_profiles[side].layout
+        if not np.array_equal(target, layout.clamp(target)):
+            raise RuntimeError(f"{side} self-collision contact target exceeds q20 limits")
     phase_feedback: dict[str, dict[str, list[list[float]]]] = {}
     maximum_target_error = 0.0
     phase_maximum_target_error: dict[str, float] = {}
@@ -646,15 +532,9 @@ def main() -> int:
                 finite &= bool(np.isfinite(feedback).all())
                 error = float(np.max(np.abs(feedback - applied[side])))
                 maximum_target_error = max(maximum_target_error, error)
-                phase_maximum_target_error[phase] = max(
-                    phase_maximum_target_error[phase], error
-                )
-                arm_indices = np.asarray(
-                    scene.partitions[side].arm_indices_q7, dtype=np.int64
-                )
-                hand_indices = np.asarray(
-                    scene.partitions[side].hand_indices_q20, dtype=np.int64
-                )
+                phase_maximum_target_error[phase] = max(phase_maximum_target_error[phase], error)
+                arm_indices = np.asarray(scene.partitions[side].arm_indices_q7, dtype=np.int64)
+                hand_indices = np.asarray(scene.partitions[side].hand_indices_q20, dtype=np.int64)
                 phase_maximum_arm_error[phase] = max(
                     phase_maximum_arm_error[phase],
                     float(np.max(np.abs(feedback[arm_indices] - applied[side][arm_indices]))),
@@ -711,13 +591,7 @@ def main() -> int:
     del subscription
     hold_drift = {
         phase: max(
-            float(
-                np.max(
-                    np.abs(
-                        np.asarray(samples[side][-1]) - np.asarray(samples[side][0])
-                    )
-                )
-            )
+            float(np.max(np.abs(np.asarray(samples[side][-1]) - np.asarray(samples[side][0]))))
             for side in ("left", "right")
         )
         for phase, samples in phase_feedback.items()
@@ -739,37 +613,37 @@ def main() -> int:
         for pair_name, raw_record in contacts.items()
         if "WristRigContactProbe" in pair_name
         and "D405WristRig" in pair_name
-        and cast(Mapping[str, int], cast(Mapping[str, object], raw_record)["phase_contact_frames"])
-        .get("external_probe_smoke", 0)
+        and cast(
+            Mapping[str, int], cast(Mapping[str, object], raw_record)["phase_contact_frames"]
+        ).get("external_probe_smoke", 0)
         > 0
     ]
     steady_phases = {"observe_rest", "hold_grasp", "final_rest"}
-    maximum_steady_target_error = max(
-        phase_maximum_target_error[phase] for phase in steady_phases
-    )
-    maximum_steady_arm_error = max(
-        phase_maximum_arm_error[phase] for phase in steady_phases
-    )
-    maximum_steady_hand_error = max(
-        phase_maximum_hand_error[phase] for phase in steady_phases
-    )
+    maximum_steady_target_error = max(phase_maximum_target_error[phase] for phase in steady_phases)
+    maximum_steady_arm_error = max(phase_maximum_arm_error[phase] for phase in steady_phases)
+    maximum_steady_hand_error = max(phase_maximum_hand_error[phase] for phase in steady_phases)
     rest_phases = {"observe_rest", "final_rest"}
     unexplained_rest_pairs: list[str] = []
     deep_self_pairs: list[str] = []
     cross_side_frames = 0
+    hand_contact_pairs: dict[str, list[str]] = {"left": [], "right": []}
+    hand_contact_frames: dict[str, int] = {"left": 0, "right": 0}
     for pair_name, raw_record in contacts.items():
         record = cast(Mapping[str, object], raw_record)
         paths = cast(list[str], record["paths"])
         sides_for_pair = tuple(_pair_side(path) for path in paths)
         phase_frames = cast(Mapping[str, int], record["phase_contact_frames"])
-        phase_minimum = cast(
-            Mapping[str, float], record["phase_minimum_separation_m"]
-        )
+        phase_minimum = cast(Mapping[str, float], record["phase_minimum_separation_m"])
+        for side in ("left", "right"):
+            prefix = f"/World/Robots/Hand2{side.capitalize()}/"
+            if all(path.startswith(prefix) for path in paths):
+                hold_frames = phase_frames.get("hold_grasp", 0)
+                if hold_frames:
+                    hand_contact_pairs[side].append(pair_name)
+                    hand_contact_frames[side] += hold_frames
         if set(sides_for_pair) == {"left", "right"}:
             cross_side_frames += sum(phase_frames.values())
-        same_robot_side = (
-            sides_for_pair[0] is not None and sides_for_pair[0] == sides_for_pair[1]
-        )
+        same_robot_side = sides_for_pair[0] is not None and sides_for_pair[0] == sides_for_pair[1]
         if not same_robot_side:
             continue
         rest_frames = sum(phase_frames.get(phase, 0) for phase in rest_phases)
@@ -778,35 +652,22 @@ def main() -> int:
             default=math.inf,
         )
         primary_minimum = min(
-            (
-                value
-                for phase, value in phase_minimum.items()
-                if phase != "external_probe_smoke"
-            ),
+            (value for phase, value in phase_minimum.items() if phase != "external_probe_smoke"),
             default=math.inf,
         )
-        rest_penetration = (
-            0.0 if math.isinf(rest_minimum) else max(0.0, -rest_minimum)
-        )
-        primary_penetration = (
-            0.0 if math.isinf(primary_minimum) else max(0.0, -primary_minimum)
-        )
+        rest_penetration = 0.0 if math.isinf(rest_minimum) else max(0.0, -rest_minimum)
+        primary_penetration = 0.0 if math.isinf(primary_minimum) else max(0.0, -primary_minimum)
         if (
             rest_frames > profile.thresholds.maximum_unexplained_rest_contact_frames
-            or rest_penetration
-            > profile.thresholds.maximum_unexplained_rest_penetration_m
+            or rest_penetration > profile.thresholds.maximum_unexplained_rest_penetration_m
             and rest_frames > 0
         ):
             unexplained_rest_pairs.append(pair_name)
         if primary_penetration > profile.thresholds.maximum_any_self_penetration_m:
             deep_self_pairs.append(pair_name)
 
-    expected_mount_collision_count = (
-        14 if ARGS.wrist_rig_collision_mode in {"mount", "all"} else 0
-    )
-    expected_camera_collision_count = (
-        1 if ARGS.wrist_rig_collision_mode == "all" else 0
-    )
+    expected_mount_collision_count = 14 if ARGS.wrist_rig_collision_mode in {"mount", "all"} else 0
+    expected_camera_collision_count = 1 if ARGS.wrist_rig_collision_mode == "all" else 0
     wrist_rig_physics_inventory = _wrist_rig_physics_inventory(scene)
     checks = {
         "self_collision_readback_matches_requested_sides": readback == expected_readback,
@@ -816,19 +677,16 @@ def main() -> int:
         "topology_preserved": topology_before == topology_after,
         "q27_feedback_finite": finite,
         "q7_target_error_bounded": (
-            maximum_steady_arm_error
-            <= profile.thresholds.maximum_arm_target_error_rad
+            maximum_steady_arm_error <= profile.thresholds.maximum_arm_target_error_rad
         ),
         "q20_target_error_bounded": (
-            maximum_steady_hand_error
-            <= profile.thresholds.maximum_hand_target_error_rad
+            maximum_steady_hand_error <= profile.thresholds.maximum_hand_target_error_rad
         ),
         "hold_drift_bounded": (
             max(hold_drift.values()) <= profile.thresholds.maximum_hold_drift_rad
         ),
         "hand_base_translation_stable": all(
-            float(values["translation_m"])
-            <= profile.thresholds.transform_translation_tolerance_m
+            float(values["translation_m"]) <= profile.thresholds.transform_translation_tolerance_m
             for values in transform_drift.values()
         ),
         "hand_base_rotation_stable": all(
@@ -841,12 +699,14 @@ def main() -> int:
         "no_cross_side_contact": (
             cross_side_frames <= profile.thresholds.maximum_cross_side_contact_frames
         ),
+        "contact_fixture_reaches_both_hands": (
+            bool(all(hand_contact_frames.values())) if contact_target_profile is not None else True
+        ),
         "contact_reporting_enabled": bool(contact_api_paths),
         "wrist_rig_inventory_matches_gate": (
             all(
                 len(handles.mount_collision_paths) == expected_mount_collision_count
-                and len(handles.camera_collision_paths)
-                == expected_camera_collision_count
+                and len(handles.camera_collision_paths) == expected_camera_collision_count
                 for handles in scene.wrist_rigs
             )
             and (len(scene.wrist_rigs) == 2 or not scene.wrist_rig_runtimes)
@@ -860,11 +720,7 @@ def main() -> int:
             len(camera_prim_readback) == len(scene.wrist_rigs)
             and all(
                 math.isclose(
-                    float(
-                        cast(Mapping[str, object], values["readback"])[
-                            "horizontal_fov_deg"
-                        ]
-                    ),
+                    float(cast(Mapping[str, object], values["readback"])["horizontal_fov_deg"]),
                     140.0,
                     rel_tol=0.0,
                     abs_tol=1e-4,
@@ -900,9 +756,7 @@ def main() -> int:
     gate = (
         "C0"
         if not requested_sides
-        else {"none": "C1", "mount": "C2", "all": "C3"}[
-            ARGS.wrist_rig_collision_mode
-        ]
+        else {"none": "C1", "mount": "C2", "all": "C3"}[ARGS.wrist_rig_collision_mode]
     )
     report = {
         "schema": "wujihand.isaac_nero_hand2_self_collision_qualification.v1",
@@ -923,11 +777,19 @@ def main() -> int:
             None
             if filter_profile is None
             else {
-                "path": ARGS.filter_profile.resolve()
-                .relative_to(project_root)
-                .as_posix(),
+                "path": ARGS.filter_profile.resolve().relative_to(project_root).as_posix(),
                 "sha256": sha256_file(ARGS.filter_profile),
                 "profile_id": filter_profile.profile_id,
+            }
+        ),
+        "contact_target_profile": (
+            None
+            if contact_target_profile is None
+            else {
+                "path": ARGS.contact_target_profile.resolve().relative_to(project_root).as_posix(),
+                "sha256": sha256_file(ARGS.contact_target_profile),
+                "profile_id": contact_target_profile.profile_id,
+                "hand2_source": contact_target_profile.hand2_source,
             }
         ),
         "authored_filtered_pairs": [
@@ -955,9 +817,7 @@ def main() -> int:
                     "diagonal_inertia_kg_m2": (
                         handles.hand_base_mass_before.diagonal_inertia_kg_m2
                     ),
-                    "principal_axes_wxyz": (
-                        handles.hand_base_mass_before.principal_axes_wxyz
-                    ),
+                    "principal_axes_wxyz": (handles.hand_base_mass_before.principal_axes_wxyz),
                 },
             }
             for handles in scene.wrist_rigs
@@ -992,6 +852,8 @@ def main() -> int:
         "hand_base_transform_drift": transform_drift,
         "contact_report_api_paths": list(contact_api_paths),
         "contacts": contacts,
+        "hand_contact_pairs": hand_contact_pairs,
+        "hand_contact_frames": hand_contact_frames,
         "unexplained_rest_pairs": unexplained_rest_pairs,
         "deep_self_pairs": deep_self_pairs,
         "cross_side_contact_frames": cross_side_frames,

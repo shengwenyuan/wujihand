@@ -84,8 +84,9 @@ def test_launch_preflights_before_processes_and_injects_the_8_3_overlay() -> Non
     preview = source[source.index('name="dataset_live_preview"') :]
     assert "additional_env=runtime_environment" in preview
     assert 'consumer_command.extend(["--chain-preflight"' in source
-    assert 'consumer_command.extend(["--dataset-source-mode", "live_qualification"])' in source
-    assert "set record_qualification:=true" in source
+    assert 'consumer_command.extend(["--dataset-source-mode", dataset_source_mode])' in source
+    assert '"--dataset-source-mode",' in source
+    assert "record_qualification or not record" in source
 
 
 def test_live_qualification_is_explicitly_dataset_ineligible() -> None:
@@ -96,7 +97,8 @@ def test_live_qualification_is_explicitly_dataset_ineligible() -> None:
         "DATASET_ELIGIBLE = DATASET_SOURCE_MODE is DatasetSourceMode.LIVE_TELEOPERATION"
         in runner
     )
-    assert "Description 8.3 recording remains qualification-only" in runner
+    assert "Description 8.3 recording remains qualification-only" not in runner
+    assert "record-chain preflight dataset policy differs from runtime" in runner
 
 
 def test_preview_validator_pins_versioned_hand_link_inventories() -> None:

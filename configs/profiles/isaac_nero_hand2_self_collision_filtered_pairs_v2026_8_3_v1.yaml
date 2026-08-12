@@ -1,0 +1,43 @@
+schema: wujihand.nero_hand2_self_collision_filtered_pairs.v2
+profile_id: isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1
+status: simulation_only_evidence_based
+source_contract:
+  nero_source: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  hand2_source: wuji-description-v2026-8-3@8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  isaac_asset: agilex-nero-isaac-6-0-1@07ba62ca6d7ab79cb76a2148e76743cda78671e1bfa40ad418158554179214a0
+filtered_pairs:
+  - pair_id: nero_link5_link7_intrinsic_mesh_overlap_v1
+    sides: [left, right]
+    first_instance: arm
+    first_rigid_body_name: link5
+    second_instance: arm
+    second_rigid_body_name: link7
+    evidence:
+      observation: persistent_for_all_1080_tframe_v8_3_baseline_frames
+      scope: pinned_nero_collision_mesh_only
+  - pair_id: nero_link6_hand2_left_wrist_fixed_interface_v2026_8_3_v1
+    sides: [left]
+    first_instance: arm
+    first_rigid_body_name: link6
+    second_instance: hand
+    second_rigid_body_name: l_wrist
+    evidence:
+      minimum_separation_m: -0.007176418323069811
+      contact_frames: 1080
+      observation: persistent_at_rest_grasp_and_slow_open_close
+      scope: fixed_nero_hand2_attachment_interface
+  - pair_id: nero_link6_hand2_right_wrist_fixed_interface_v2026_8_3_v1
+    sides: [right]
+    first_instance: arm
+    first_rigid_body_name: link6
+    second_instance: hand
+    second_rigid_body_name: r_wrist
+    evidence:
+      minimum_separation_m: -0.007230978459119797
+      contact_frames: 1080
+      observation: persistent_at_rest_grasp_and_slow_open_close
+      scope: fixed_nero_hand2_attachment_interface
+assumptions:
+  - root_self_collision_remains_enabled
+  - only_intrinsic_nero_overlap_and_fixed_attachment_interfaces_are_filtered
+  - hand2_internal_and_external_workcell_collision_pairs_remain_unfiltered

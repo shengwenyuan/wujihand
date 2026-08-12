@@ -42,10 +42,15 @@ from wujihand.application.qualification.dataset_preview_fixture import (
     FIXTURE_PRODUCER,
     FIXTURE_PROFILE_ID,
     REQUIRED_FRAMES,
+    SELF_COLLISION_FIXTURE_PRODUCER,
+    SELF_COLLISION_FIXTURE_PROFILE_ID,
     fixture_profile_mapping,
     fixture_profile_sha256,
     input_state,
     phase_for_sequence,
+    self_collision_fixture_profile_mapping,
+    self_collision_fixture_profile_sha256,
+    self_collision_input_state,
 )
 from wujihand.runtime import FixedRateScheduler, RosDeploymentResolver
 from wujihand_ros2.conversion import (
@@ -69,7 +74,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frames", type=int, default=240)
     parser.add_argument(
         "--profile",
-        choices=("static_v1", FIXTURE_PROFILE_ID),
+        choices=("static_v1", FIXTURE_PROFILE_ID, SELF_COLLISION_FIXTURE_PROFILE_ID),
         default="static_v1",
     )
     parser.add_argument("--receipt", type=Path)
@@ -200,8 +205,12 @@ def main() -> int:
     args = parse_args()
     if args.frames < 1:
         raise SystemExit("--frames must be positive")
-    if args.profile == FIXTURE_PROFILE_ID and args.frames < REQUIRED_FRAMES:
-        raise SystemExit(f"{FIXTURE_PROFILE_ID} requires at least {REQUIRED_FRAMES} source frames")
+    bounded_profile = args.profile in {
+        FIXTURE_PROFILE_ID,
+        SELF_COLLISION_FIXTURE_PROFILE_ID,
+    }
+    if bounded_profile and args.frames < REQUIRED_FRAMES:
+        raise SystemExit(f"{args.profile} requires at least {REQUIRED_FRAMES} source frames")
     if args.profile == FIXTURE_PROFILE_ID and not args.run_id:
         raise SystemExit(f"{FIXTURE_PROFILE_ID} requires --run-id")
     if args.minimum_subscribers < 0:
@@ -254,7 +263,10 @@ def main() -> int:
             status_qos=qos_profile(resolved.qos_profile.policy("run_status")),
             timeout_s=args.discovery_timeout_s,
         )
-    producer = FIXTURE_PRODUCER if args.profile == FIXTURE_PROFILE_ID else "nv5-ros-fixture"
+    producer = {
+        FIXTURE_PROFILE_ID: FIXTURE_PRODUCER,
+        SELF_COLLISION_FIXTURE_PROFILE_ID: SELF_COLLISION_FIXTURE_PRODUCER,
+    }.get(args.profile, "nv5-ros-fixture")
     epoch = 1
     lifecycle_sequence = 0
     stream_ids = tuple(
@@ -330,7 +342,13 @@ def main() -> int:
                     raise RuntimeError("fixture requires four live route bindings")
                 hand_side = HandSide(side)
                 qualification_state = (
-                    input_state(hand_side, sequence) if args.profile == FIXTURE_PROFILE_ID else None
+                    input_state(hand_side, sequence)
+                    if args.profile == FIXTURE_PROFILE_ID
+                    else (
+                        self_collision_input_state(hand_side, sequence)
+                        if args.profile == SELF_COLLISION_FIXTURE_PROFILE_ID
+                        else None
+                    )
                 )
                 tracker_publishers[side].publish(
                     tracked_sample_to_message(
@@ -386,7 +404,7 @@ def main() -> int:
                 )
             rclpy.spin_once(node, timeout_sec=0.0)
             completed_frames += 1
-            if args.profile == FIXTURE_PROFILE_ID:
+            if bounded_profile:
                 phase_counts[phase_for_sequence(sequence)] += 1
             scheduler.complete(completed_ns=time.monotonic_ns())
     finally:
@@ -417,7 +435,7 @@ def main() -> int:
             payload = {
                 "schema": "wujihand.dataset_preview_fixture_receipt.v1",
                 "passed": (
-                    args.profile != FIXTURE_PROFILE_ID
+                    not bounded_profile
                     or (
                         completed_frames >= REQUIRED_FRAMES
                         and missed_periods == 0
@@ -428,10 +446,22 @@ def main() -> int:
                 "run_id": args.run_id,
                 "recording_started_barrier_host_time_ns": recording_started_host_time_ns,
                 "profile_sha256": (
-                    fixture_profile_sha256() if args.profile == FIXTURE_PROFILE_ID else None
+                    fixture_profile_sha256()
+                    if args.profile == FIXTURE_PROFILE_ID
+                    else (
+                        self_collision_fixture_profile_sha256()
+                        if args.profile == SELF_COLLISION_FIXTURE_PROFILE_ID
+                        else None
+                    )
                 ),
                 "profile": (
-                    fixture_profile_mapping() if args.profile == FIXTURE_PROFILE_ID else None
+                    fixture_profile_mapping()
+                    if args.profile == FIXTURE_PROFILE_ID
+                    else (
+                        self_collision_fixture_profile_mapping()
+                        if args.profile == SELF_COLLISION_FIXTURE_PROFILE_ID
+                        else None
+                    )
                 ),
                 "producer_instance": producer,
                 "transport_epoch": epoch,

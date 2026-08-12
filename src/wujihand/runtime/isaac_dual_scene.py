@@ -555,6 +555,7 @@ class DualNeroHand2IsaacScene:
             author_isaac_self_collision_filters(
                 self.stage,
                 arm_prim_paths={runtime.side: runtime.arm_prim_path for runtime in sides},
+                hand_prim_paths={runtime.side: runtime.hand_prim_path for runtime in sides},
                 enabled_sides=self_collision_sides,
                 profile=self_collision_filter_profile,
             )

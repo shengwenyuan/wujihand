@@ -24,8 +24,7 @@ from wujihand.runtime.wuji_hand2_record_chain import (
 
 
 DEFAULT_QUALIFICATION = (
-    ROOT
-    / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
+    ROOT / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
 )
 DEFAULT_DEPLOYMENT = (
     ROOT
@@ -40,6 +39,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-runtime-binding", type=Path, required=True)
     parser.add_argument("--matched-chain-binding", type=Path, required=True)
     parser.add_argument("--input", choices=("stub", "glove"), default="stub")
+    parser.add_argument(
+        "--dataset-source-mode",
+        choices=("synthetic_fixture", "live_qualification", "live_teleoperation"),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -63,6 +66,7 @@ def main() -> int:
         local_runtime_binding_path=args.local_runtime_binding,
         matched_chain_binding_path=args.matched_chain_binding,
         input_mode=args.input,
+        dataset_source_mode=args.dataset_source_mode,
         sdk_runtime=facts,
         user_manager=wuji_sdk.SdkManager.instance(),
         studio_processes=detect_wuji_studio_processes(),

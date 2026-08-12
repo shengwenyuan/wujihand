@@ -9,14 +9,22 @@ from wujihand.adapters.simulation.nero_hand2_self_collision import (
     SELF_COLLISION_FILTER_PROFILE_ID,
     SELF_COLLISION_QUALIFICATION_PROFILE_ID,
     load_nero_hand2_self_collision_filter_profile,
+    load_nero_hand2_self_collision_contact_target_profile,
     load_nero_hand2_self_collision_qualification_profile,
 )
 
 
 ROOT = Path(__file__).parents[2]
 PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
-FILTER_PROFILE = (
-    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
+FILTER_PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
+V8_3_PROFILE = (
+    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v2026_8_3_v1.yaml"
+)
+V8_3_FILTER_PROFILE = (
+    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1.yaml"
+)
+V8_3_CONTACT_TARGET_PROFILE = (
+    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_contact_target_v2026_8_3_v1.yaml"
 )
 
 
@@ -64,6 +72,32 @@ def test_self_collision_filter_freezes_only_observed_nero_pair() -> None:
     assert dict(profile.source_contract)["nero_source"].endswith(
         "f6642ce0d7872c686f29c99e9e10cd23d1d49313"
     )
+    assert pair.first_instance == pair.second_instance == "arm"
+
+
+def test_v8_3_self_collision_profiles_include_fixed_attachment_interfaces() -> None:
+    qualification = load_nero_hand2_self_collision_qualification_profile(V8_3_PROFILE)
+    profile = load_nero_hand2_self_collision_filter_profile(V8_3_FILTER_PROFILE)
+
+    assert qualification.profile_id.endswith("v2026_8_3_v1")
+    assert dict(qualification.collision_mesh_contract)["hand2_source"].endswith(
+        "8271644a78d69ed9a4adcf9165d882c64ad33dfa"
+    )
+    assert profile.profile_id.endswith("v2026_8_3_v1")
+    assert len(profile.filtered_pairs) == 3
+    wrist_pairs = profile.filtered_pairs[1:]
+    assert {pair.sides for pair in wrist_pairs} == {("left",), ("right",)}
+    assert all(
+        (pair.first_instance, pair.second_instance) == ("arm", "hand") for pair in wrist_pairs
+    )
+
+
+def test_v8_3_contact_target_profile_pins_two_finite_q20_vectors() -> None:
+    profile = load_nero_hand2_self_collision_contact_target_profile(V8_3_CONTACT_TARGET_PROFILE)
+
+    assert profile.profile_id.endswith("v2026_8_3_v1")
+    assert profile.hand2_source.endswith("8271644a78d69ed9a4adcf9165d882c64ad33dfa")
+    assert len(profile.target("left")) == len(profile.target("right")) == 20
 
 
 def test_self_collision_filter_rejects_unexplained_and_duplicate_rules(

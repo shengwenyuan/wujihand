@@ -11,6 +11,9 @@ from wujihand.application.qualification.dataset_preview_fixture import (
     fixture_profile_sha256,
     input_state,
     phase_for_sequence,
+    self_collision_fixture_profile_mapping,
+    self_collision_fixture_profile_sha256,
+    self_collision_input_state,
 )
 from wujihand.domain import HandSide
 
@@ -53,3 +56,20 @@ def test_fixture_profile_hash_is_stable_and_covers_both_sides() -> None:
     assert set(mapping["states"]["a"]) == {"left", "right"}  # type: ignore[index]
     assert len(fixture_profile_sha256()) == 64
     assert fixture_profile_sha256() == fixture_profile_sha256()
+
+
+def test_self_collision_fixture_preserves_a_b_a_and_pins_contact_landmarks() -> None:
+    for side in (HandSide.LEFT, HandSide.RIGHT):
+        reference = self_collision_input_state(side, 0)
+        contact = self_collision_input_state(side, REFERENCE_FRAMES)
+        returned = self_collision_input_state(side, REQUIRED_FRAMES - 1)
+        assert reference.tracker_position_m == returned.tracker_position_m
+        assert reference.tracker_quat_wxyz == returned.tracker_quat_wxyz
+        assert reference.hand_landmarks_m == returned.hand_landmarks_m
+        assert contact.tracker_position_m == (0.0, 0.080, 1.0)
+        assert contact.hand_landmarks_m != reference.hand_landmarks_m
+        assert len(contact.hand_landmarks_m) == 21
+
+    mapping = self_collision_fixture_profile_mapping()
+    assert mapping["profile_id"] == "self_collision_aba_contact_v1"
+    assert len(self_collision_fixture_profile_sha256()) == 64

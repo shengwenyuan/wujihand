@@ -17,23 +17,24 @@ from wujihand.specs import RosLocalRuntimeBindingSpec
 
 
 ROOT = Path(__file__).resolve().parents[2]
-POLICY = (
-    ROOT / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
-)
+POLICY = ROOT / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
 DEPLOYMENT = (
-    ROOT
-    / "configs/deployments/"
+    ROOT / "configs/deployments/"
     "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
 )
 TFRAME_POLICY = (
-    ROOT
-    / "configs/qualifications/"
-    "isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
+    ROOT / "configs/qualifications/isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
 )
 TFRAME_DEPLOYMENT = (
-    ROOT
-    / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
+    ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
+)
+TFRAME_SELF_COLLISION_POLICY = (
+    ROOT / "configs/qualifications/"
+    "isaac_nero_hand2_tframe_self_collision_record_chain_v2026_8_3_v1.yaml"
+)
+TFRAME_SELF_COLLISION_DEPLOYMENT = (
+    ROOT / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
 )
 
 
@@ -109,12 +110,16 @@ def _runtime_binding(interpreter: Path) -> RosLocalRuntimeBindingSpec:
     )
 
 
-def _receipt(side: HandSide, runtime: WujiSdkRuntimeFacts) -> MatchedChainPreflightReceipt:
+def _receipt(
+    side: HandSide,
+    runtime: WujiSdkRuntimeFacts,
+    input_mode: str,
+) -> MatchedChainPreflightReceipt:
     return MatchedChainPreflightReceipt(
         qualification_id="wuji_hand2_sdk_2026_8_3_description_v2026_8_3_v1",
         binding_id="fixture_matched_chain_v1",
         side=side,
-        input_mode="stub",
+        input_mode=input_mode,
         calibration_id=_calibration_id(side),
         serial_number=f"WG_{side.value.upper()}_FIXTURE",
         sdk_version="2026.8.3",
@@ -128,17 +133,12 @@ def _receipt(side: HandSide, runtime: WujiSdkRuntimeFacts) -> MatchedChainPrefli
         hand2_model_revision="v2026.7.23",
         description_commit="8" * 40,
         description_source="wuji-description-v2026-8-3",
-        description_artifact_path=(
-            f"hand2/hand2_beta1/body/usd/{side.value}/wujihand2.usd"
-        ),
+        description_artifact_path=(f"hand2/hand2_beta1/body/usd/{side.value}/wujihand2.usd"),
         description_artifact_sha256="8" * 64,
         session_path=(
-            f"configs/sessions/isaac_hand2_{side.value}_glove_qualification_"
-            "v2026_8_3_v1.yaml"
+            f"configs/sessions/isaac_hand2_{side.value}_glove_qualification_v2026_8_3_v1.yaml"
         ),
-        session_id=(
-            f"isaac_hand2_{side.value}_glove_qualification_v2026_8_3_v1"
-        ),
+        session_id=(f"isaac_hand2_{side.value}_glove_qualification_v2026_8_3_v1"),
         session_hash="0" * 64,
         binding_root=f"{side.value[0]}_wrist",
         layout_id=HAND2_LAYOUT_IDS[side.value],
@@ -172,12 +172,30 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
 
 
 @pytest.mark.parametrize(
-    ("policy_path", "deployment_path", "expected_task_scene"),
     (
-        (POLICY, DEPLOYMENT, None),
+        "policy_path",
+        "deployment_path",
+        "input_mode",
+        "dataset_source_mode",
+        "expected_task_scene",
+    ),
+    (
+        (POLICY, DEPLOYMENT, "stub", None, None),
         (
             TFRAME_POLICY,
             TFRAME_DEPLOYMENT,
+            "stub",
+            None,
+            {
+                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
+                "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
+            },
+        ),
+        (
+            TFRAME_SELF_COLLISION_POLICY,
+            TFRAME_SELF_COLLISION_DEPLOYMENT,
+            "glove",
+            "live_teleoperation",
             {
                 "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v1.yaml",
                 "profile_id": "isaac_robolab_banana_bowl_low_table_v1",
@@ -190,6 +208,8 @@ def test_record_chain_preflight_closes_both_hands_and_sdk_processes(
     monkeypatch: object,
     policy_path: Path,
     deployment_path: Path,
+    input_mode: str,
+    dataset_source_mode: str | None,
     expected_task_scene: dict[str, str] | None,
 ) -> None:
     interpreter = tmp_path / "isaac-python"
@@ -216,12 +236,12 @@ user:
 hands:
   left:
     serial_number: WG_LEFT_FIXTURE
-    urdf_path: {models / 'left_hand.urdf'}
-    urdf_sha256: {'a' * 64}
+    urdf_path: {models / "left_hand.urdf"}
+    urdf_sha256: {"a" * 64}
   right:
     serial_number: WG_RIGHT_FIXTURE
-    urdf_path: {models / 'right_hand.urdf'}
-    urdf_sha256: {'b' * 64}
+    urdf_path: {models / "right_hand.urdf"}
+    urdf_sha256: {"b" * 64}
 """,
         encoding="utf-8",
     )
@@ -231,7 +251,7 @@ hands:
     monkeypatch.setattr(
         record_chain,
         "preflight_wuji_hand2_matched_chain",
-        lambda *args, side, **kwargs: _receipt(side, runtime),
+        lambda *args, side, input_mode, **kwargs: _receipt(side, runtime, input_mode),
     )
     receipt = preflight_wuji_hand2_record_chain(
         ROOT,
@@ -239,7 +259,8 @@ hands:
         deployment_path=deployment_path,
         local_runtime_binding_path=_runtime_binding(interpreter),
         matched_chain_binding_path=matched_local,
-        input_mode="stub",
+        input_mode=input_mode,
+        dataset_source_mode=dataset_source_mode,
         sdk_runtime=runtime,
         user_manager=_Manager(),
         verify_artifacts=False,
@@ -258,12 +279,14 @@ hands:
         assert mapping["task_scene"]["profile_id"] == expected_task_scene["profile_id"]
         assert len(mapping["task_scene"]["sha256"]) == 64
     assert set(mapping["hands"]) == {"left", "right"}
+    expected_source_mode = dataset_source_mode or "synthetic_fixture"
+    expected_eligible = expected_source_mode == "live_teleoperation"
     assert mapping["dataset"] == {
         "profile_id": "isaac_nero_hand2_triview_q54_mini_dataset_v1",
         "q54_profile_id": "isaac_nero_hand2_q54_dataset_v1",
-        "source_mode": "synthetic_fixture",
-        "qualification_only": True,
-        "dataset_eligible": False,
+        "source_mode": expected_source_mode,
+        "qualification_only": not expected_eligible,
+        "dataset_eligible": expected_eligible,
     }
     assert set(mapping["deployment"]) == {
         "path",

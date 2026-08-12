@@ -70,6 +70,21 @@ def test_session_v2_owns_dataset_profile_without_launch_level_camera_args() -> N
     assert SessionSpec.from_mapping(session.to_mapping()) == session
 
 
+def test_session_runtime_optionally_pins_self_collision_profile() -> None:
+    value = _session()
+    value["runtime"]["self_collision_profile"] = _ref(
+        "configs/profiles/self_collision.yaml",
+        "self_collision_v1",
+    )
+
+    session = SessionSpec.from_mapping(value)
+
+    assert session.runtime.self_collision_profile is not None
+    assert session.runtime.self_collision_profile.expected_id == "self_collision_v1"
+    assert SessionSpec.from_mapping(session.to_mapping()) == session
+    assert "self_collision_profile" not in _session()["runtime"]
+
+
 def test_session_rejects_extra_keys_invalid_role_and_unsafe_ref() -> None:
     extra = _session()
     extra["camera"] = "default"

@@ -95,12 +95,16 @@ class RuntimeSpec:
     compatibility_profile: str | None
     transport_contract: str | None
     control_layouts: tuple[ControlLayoutSpec, ...]
+    self_collision_profile: ConfigRef | None = None
 
     @classmethod
     def from_mapping(cls, value: object, *, field: str = "runtime") -> Self:
+        expected = {"compatibility_profile", "transport_contract", "control_layouts"}
+        if isinstance(value, Mapping) and "self_collision_profile" in value:
+            expected.add("self_collision_profile")
         data = require_exact_mapping(
             value,
-            expected=frozenset({"compatibility_profile", "transport_contract", "control_layouts"}),
+            expected=frozenset(expected),
             field=field,
         )
         layouts = tuple(
@@ -125,14 +129,25 @@ class RuntimeSpec:
                 )
             ),
             control_layouts=layouts,
+            self_collision_profile=(
+                None
+                if "self_collision_profile" not in data
+                else ConfigRef.from_mapping(
+                    data["self_collision_profile"],
+                    field=f"{field}.self_collision_profile",
+                )
+            ),
         )
 
     def to_mapping(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "compatibility_profile": self.compatibility_profile,
             "transport_contract": self.transport_contract,
             "control_layouts": [layout.to_mapping() for layout in self.control_layouts],
         }
+        if self.self_collision_profile is not None:
+            result["self_collision_profile"] = self.self_collision_profile.to_mapping()
+        return result
 
 
 @dataclass(frozen=True, slots=True)

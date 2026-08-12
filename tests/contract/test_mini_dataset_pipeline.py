@@ -142,7 +142,8 @@ def test_device_free_preview_qualification_is_explicit_and_dataset_ineligible() 
     preview = (ROOT / "tools/run_isaac_dataset_live_preview.py").read_text(encoding="utf-8")
 
     assert 'DeclareLaunchArgument("qualification_fixture", default_value="false")' in launch
-    assert '"--dataset-source-mode", "synthetic_fixture"' in launch
+    assert '"synthetic_fixture"\n        if qualification_fixture' in launch
+    assert 'consumer_command.extend(["--dataset-source-mode", dataset_source_mode])' in launch
     assert "if qualification_fixture:\n            continue" in launch
     assert (
         "DATASET_ELIGIBLE = DATASET_SOURCE_MODE is DatasetSourceMode.LIVE_TELEOPERATION" in runner
