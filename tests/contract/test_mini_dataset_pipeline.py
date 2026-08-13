@@ -96,6 +96,7 @@ def test_008_runner_and_launch_select_dataset_facts_without_online_rgb() -> None
     renderer = (ROOT / "src/wujihand/runtime/isaac_dataset_rgb_renderer.py").read_text(
         encoding="utf-8"
     )
+    renderer_entry = (ROOT / "tools/render_mini_dataset_episode.py").read_text(encoding="utf-8")
     preview = (ROOT / "tools/run_isaac_dataset_live_preview.py").read_text(encoding="utf-8")
 
     assert "dataset_profile_ref = RESOLVED.session.session.dataset_profile" in runner
@@ -112,6 +113,9 @@ def test_008_runner_and_launch_select_dataset_facts_without_online_rgb() -> None
     assert 'OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"' in runner
     assert 'OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"' in preview
     assert "operator_preview_state=operator_preview_state" in runner
+    assert "load_nero_dual_simulation_startup_profile" in renderer_entry
+    assert "resolve_record_chain_workcell_plan" in renderer_entry
+    assert "workcell_plan=workcell_plan" in renderer_entry
     assert "ros2_jazzy_dual_teleoperation_dataset_rosbag_qos_v1.yaml" in launch
     assert "timeline.stop()" in renderer
     assert "current_time_step_index" in renderer

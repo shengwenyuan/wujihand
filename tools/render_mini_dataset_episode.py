@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "analysis/teleoperation_quality/src"))
 
 from teleoperation_quality.artifact import load_run_artifact
 from wujihand.adapters.simulation import (
-    load_nero_dual_tabletop_qualification_profile,
+    load_nero_dual_simulation_startup_profile,
     load_nero_link_geometry_alignment,
 )
 from wujihand.dataset import (
@@ -31,6 +31,10 @@ from wujihand.dataset import (
 from wujihand.integrity import sha256_file
 from wujihand.runtime import RosDeploymentResolver
 from wujihand.runtime.isaac_dual_scene import resolve_dual_side_runtimes
+from wujihand.runtime.wuji_hand2_record_chain import (
+    load_record_chain_preflight_receipt,
+    resolve_record_chain_workcell_plan,
+)
 
 
 DEFAULT_DEPLOYMENT = (
@@ -185,6 +189,17 @@ def main(argv: list[str] | None = None) -> int:
             dataset_profile_id=dataset_profile.profile_id,
             dataset_profile_sha256=dataset_profile.file_sha256,
         )
+        preflight_path = run_root / "preflight" / "wuji_hand2_record_chain.json"
+        workcell_plan = (
+            resolve_record_chain_workcell_plan(
+                ROOT,
+                resolved,
+                load_record_chain_preflight_receipt(preflight_path),
+                verify_content=args.verify_artifacts,
+            )
+            if preflight_path.is_file()
+            else None
+        )
         sides = resolve_dual_side_runtimes(ROOT, resolved.session)
         alignment_references = {
             resolved.session.instance(runtime.arm_instance_id).binding.compatibility_profile
@@ -198,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
         if sha256_file(source_urdf) != alignment_profile.source_urdf_sha256:
             raise ValueError("source-locked NERO URDF hash drifted")
         qualification_path = ROOT / resolved.control_profile.base_qualification.path
-        qualification_profile = load_nero_dual_tabletop_qualification_profile(
+        qualification_profile = load_nero_dual_simulation_startup_profile(
             qualification_path
         )
 
@@ -230,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             physics_hz=resolved.control_profile.physics_hz,
             self_collision_sides=frozenset(),
             wrist_rig_collision_mode="all",
+            workcell_plan=workcell_plan,
         )
         left_names, left_limits = scene.runtime_joint_inventory("left")
         right_names, right_limits = scene.runtime_joint_inventory("right")
