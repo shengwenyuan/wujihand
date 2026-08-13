@@ -33,6 +33,7 @@ class NeroGripperFlangeImportProfile:
     xacro_path: str
     ros_package_name: str
     flange_post_rotation_rpy_rad: Vector3
+    collision_proxy: NeroGripperFlangeCollisionProxy | None
     output_root: str
     robot_name: str
     assumptions: tuple[str, ...]
@@ -49,6 +50,14 @@ class NeroGripperFlangeFacts:
     center_of_mass_m: Vector3
     visual_mesh_uri: str
     collision_mesh_uri: str
+
+
+@dataclass(frozen=True, slots=True)
+class NeroGripperFlangeCollisionProxy:
+    origin_xyz_m: Vector3
+    origin_rpy_rad: Vector3
+    radius_m: float
+    length_m: float
 
 
 def _mapping(value: object, *, field: str) -> Mapping[str, object]:
@@ -91,6 +100,15 @@ def _profile_vector(value: object, *, field: str) -> Vector3:
     result = cast(Vector3, tuple(float(component) for component in value))
     if not all(math.isfinite(component) for component in result):
         raise ValueError(f"{field} must contain finite values")
+    return result
+
+
+def _positive_number(value: object, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be a number")
+    result = float(value)
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError(f"{field} must be positive and finite")
     return result
 
 
@@ -169,6 +187,28 @@ def load_nero_gripper_flange_import_profile(
         )
     ):
         raise ValueError("gripper flange must retain the pinned vendor clocking")
+    collision_proxy_data = data.get("collision_proxy")
+    collision_proxy = None
+    if collision_proxy_data is not None:
+        proxy = _mapping(collision_proxy_data, field="profile.collision_proxy")
+        if proxy.get("shape") != "cylinder":
+            raise ValueError("profile.collision_proxy.shape must be cylinder")
+        collision_proxy = NeroGripperFlangeCollisionProxy(
+            origin_xyz_m=_profile_vector(
+                proxy.get("origin_xyz_m"),
+                field="profile.collision_proxy.origin_xyz_m",
+            ),
+            origin_rpy_rad=_profile_vector(
+                proxy.get("origin_rpy_rad"),
+                field="profile.collision_proxy.origin_rpy_rad",
+            ),
+            radius_m=_positive_number(
+                proxy.get("radius_m"), field="profile.collision_proxy.radius_m"
+            ),
+            length_m=_positive_number(
+                proxy.get("length_m"), field="profile.collision_proxy.length_m"
+            ),
+        )
     return NeroGripperFlangeImportProfile(
         profile_id=_string(data.get("profile_id"), field="profile.profile_id"),
         status=_string(data.get("status"), field="profile.status"),
@@ -182,6 +222,7 @@ def load_nero_gripper_flange_import_profile(
             source.get("ros_package_name"), field="profile.flange_source.ros_package_name"
         ),
         flange_post_rotation_rpy_rad=flange_rotation,
+        collision_proxy=collision_proxy,
         output_root=_project_path(output.get("root"), field="profile.output.root"),
         robot_name=_string(output.get("robot_name"), field="profile.output.robot_name"),
         assumptions=tuple(
@@ -242,6 +283,7 @@ def build_nero_gripper_flange_urdf(
     output: str | Path,
     flange_package_name: str,
     flange_post_rotation_rpy_rad: Vector3,
+    collision_proxy: NeroGripperFlangeCollisionProxy | None = None,
 ) -> NeroGripperFlangeFacts:
     base = ET.parse(Path(base_urdf))
     extension = ET.parse(Path(flange_xacro))
@@ -257,6 +299,27 @@ def build_nero_gripper_flange_urdf(
             raise ValueError(f"unexpected gripper-flange mesh URI: {uri!r}")
         mesh.attrib["filename"] = (
             f"package://{flange_package_name}/{uri.removeprefix(OFFICIAL_MESH_PREFIX)}"
+        )
+    if collision_proxy is not None:
+        for collision in link_copy.findall("collision"):
+            link_copy.remove(collision)
+        collision = ET.SubElement(link_copy, "collision", {"name": "cup_collision_proxy"})
+        ET.SubElement(
+            collision,
+            "origin",
+            {
+                "xyz": _format_vector(collision_proxy.origin_xyz_m),
+                "rpy": _format_vector(collision_proxy.origin_rpy_rad),
+            },
+        )
+        geometry = ET.SubElement(collision, "geometry")
+        ET.SubElement(
+            geometry,
+            "cylinder",
+            {
+                "radius": f"{collision_proxy.radius_m:.17g}",
+                "length": f"{collision_proxy.length_m:.17g}",
+            },
         )
     joint_copy = deepcopy(joint)
     base.getroot().append(link_copy)
@@ -301,6 +364,7 @@ def inspect_nero_gripper_flange_usd(
     *,
     base_facts: NeroUrdfFacts,
     flange: NeroGripperFlangeFacts,
+    collision_proxy: NeroGripperFlangeCollisionProxy | None = None,
 ) -> dict[str, object]:
     """Reject q7 drift and qualify the added fixed flange representation."""
 
@@ -362,11 +426,35 @@ def inspect_nero_gripper_flange_usd(
         value for value in collisions if value.startswith(f"{rigid_bodies[flange.link_name]}/")
     ]
     if len(flange_collisions) != 1:
-        raise RuntimeError("gripper_flange must expose one collision mesh")
+        raise RuntimeError("gripper_flange must expose one collision shape")
     collision_prim = stage.GetPrimAtPath(flange_collisions[0])
-    approximation = str(UsdPhysics.MeshCollisionAPI(collision_prim).GetApproximationAttr().Get())
-    if approximation != "convexHull":
-        raise RuntimeError("gripper_flange collision must use convexHull")
+    if collision_proxy is None:
+        approximation = str(
+            UsdPhysics.MeshCollisionAPI(collision_prim).GetApproximationAttr().Get()
+        )
+        if approximation != "convexHull":
+            raise RuntimeError("gripper_flange collision must use convexHull")
+        collision_description: dict[str, object] = {
+            "type": "mesh",
+            "approximation": approximation,
+        }
+    else:
+        cylinder = UsdGeom.Cylinder(collision_prim)
+        if not cylinder:
+            raise RuntimeError("gripper_flange collision proxy must be a cylinder")
+        radius = float(cylinder.GetRadiusAttr().Get())
+        length = float(cylinder.GetHeightAttr().Get())
+        if not math.isclose(radius, collision_proxy.radius_m, abs_tol=1e-6):
+            raise RuntimeError("gripper_flange collision proxy radius differs from profile")
+        if not math.isclose(length, collision_proxy.length_m, abs_tol=1e-6):
+            raise RuntimeError("gripper_flange collision proxy length differs from profile")
+        collision_description = {
+            "type": "cylinder",
+            "origin_xyz_m": list(collision_proxy.origin_xyz_m),
+            "origin_rpy_rad": list(collision_proxy.origin_rpy_rad),
+            "radius_m": radius,
+            "length_m": length,
+        }
     return {
         "q7_joint_count": len(revolute),
         "rigid_body_paths": dict(sorted(rigid_bodies.items())),
@@ -378,13 +466,14 @@ def inspect_nero_gripper_flange_usd(
             "quaternion_wxyz": list(flange_rotation),
             "mass_kg": mass,
             "collision_path": flange_collisions[0],
-            "collision_approximation": approximation,
+            "collision": collision_description,
         },
         "pinned_nero_representation": "unchanged",
     }
 
 
 __all__ = [
+    "NeroGripperFlangeCollisionProxy",
     "NeroGripperFlangeFacts",
     "NeroGripperFlangeImportProfile",
     "build_nero_gripper_flange_urdf",

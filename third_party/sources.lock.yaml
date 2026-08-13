@@ -147,6 +147,30 @@ sources:
       nero_description.import.json: b42eeadf4414394f7864091f2d8b3a7968399dd5c54d982a3ed8ba0e81489cb6
     asset_trees:
       nero_description: eaa29a46124c9697a53f8765acd3400b4e8d56c5624748f4ad615f083d679e0d
+  - name: agilex-nero-gripper-flange-collision-proxy-isaac-6-0-1-v1
+    kind: generated
+    sha256: a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6
+    generated_at: 2026-08-13
+    generated_by: tools/import_nero_gripper_flange_to_usd.py
+    generator_sha256: 68047459e54a956460d7730950e997b842cd5958c99807a08aae00eeb86bbfde
+    import_adapter: src/wujihand/adapters/simulation/nero_gripper_flange_import.py
+    import_adapter_sha256: 2d75ea5aa532b159e915e138b07050bc1b1aadada4efe3b434f82ac522fb00cc
+    generator_recipe: configs/profiles/agilex_nero_gripper_flange_collision_proxy_isaac_6_0_1_import_v1.yaml
+    generator_recipe_sha256: 2a763ccf78aa0e07db7818936dba36a1205ec7008cdd4ce7314af956d43e74e6
+    base_recipe: configs/profiles/agilex_nero_isaac_6_0_1_import_v1.yaml
+    base_recipe_sha256: 3566450d3f7eb2a6079a39ba554fcf74e9fa9796ea036442a4225a13189f89ec
+    isaac_distribution_version: 6.0.1.0
+    urdf_importer_extension_version: 3.11.2
+    derived_from:
+      - agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+      - agilex-agx-arm-urdf-nero-gripper-flange@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+    inherited_license: MIT
+    local_runtime_path: artifacts/derived/isaac/6.0.1/agilex_nero_gripper_flange_collision_proxy_v1
+    artifacts:
+      nero_description/nero_description.usda: d8ca2ceb58ad57cab0dc521323b560631207ba1838d4be0c1ddd8f85a27d5289
+      nero_description.import.json: 128ea6b7d410cdf1c701ea2c1b6d476829925e88649af5fa69f0fb843eb306be
+    asset_trees:
+      nero_description: a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6
   - name: wuji-hand2-adapter-plate-isaac-6-0-1-v1
     kind: generated
     sha256: 0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e

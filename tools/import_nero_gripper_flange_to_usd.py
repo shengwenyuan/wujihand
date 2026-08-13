@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 from importlib.metadata import version
 import json
 from pathlib import Path
@@ -28,7 +29,14 @@ from wujihand.integrity import sha256_file, sha256_tree
 from wujihand.runtime import ConfigRepository, SourceLock
 
 
-PROFILE_PATH = ROOT / "configs/profiles/agilex_nero_gripper_flange_isaac_6_0_1_import_v1.yaml"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument(
+    "--profile",
+    type=Path,
+    default=ROOT / "configs/profiles/agilex_nero_gripper_flange_isaac_6_0_1_import_v1.yaml",
+)
+ARGS = parser.parse_args()
+PROFILE_PATH = ARGS.profile.resolve()
 PROFILE = load_nero_gripper_flange_import_profile(PROFILE_PATH)
 BASE_RECIPE_PATH = ROOT / PROFILE.base_recipe
 BASE_RECIPE = load_nero_urdf_import_recipe(BASE_RECIPE_PATH)
@@ -81,6 +89,7 @@ try:
         output=expanded_urdf,
         flange_package_name=PROFILE.ros_package_name,
         flange_post_rotation_rpy_rad=PROFILE.flange_post_rotation_rpy_rad,
+        collision_proxy=PROFILE.collision_proxy,
     )
     for uri in (flange_facts.visual_mesh_uri, flange_facts.collision_mesh_uri):
         relative = uri.removeprefix("package://agx_arm_description/agx_arm_urdf/")
@@ -113,6 +122,7 @@ try:
         imported,
         base_facts=load_nero_urdf_facts(BASE_URDF),
         flange=flange_facts,
+        collision_proxy=PROFILE.collision_proxy,
     )
     package_tree_sha256 = sha256_tree(imported.parent)
     imported.parent.replace(final_package)
@@ -136,6 +146,17 @@ try:
         "gripper_flange_clocking": {
             "post_rotation_rpy_rad": list(PROFILE.flange_post_rotation_rpy_rad),
         },
+        "collision_proxy": (
+            None
+            if PROFILE.collision_proxy is None
+            else {
+                "shape": "cylinder",
+                "origin_xyz_m": list(PROFILE.collision_proxy.origin_xyz_m),
+                "origin_rpy_rad": list(PROFILE.collision_proxy.origin_rpy_rad),
+                "radius_m": PROFILE.collision_proxy.radius_m,
+                "length_m": PROFILE.collision_proxy.length_m,
+            }
+        ),
         "output": {
             "usd_path": final_usd.relative_to(ROOT).as_posix(),
             "usd_sha256": sha256_file(final_usd),

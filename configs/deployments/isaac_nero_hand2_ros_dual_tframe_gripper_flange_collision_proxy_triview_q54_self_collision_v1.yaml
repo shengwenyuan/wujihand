@@ -1,0 +1,82 @@
+schema: wujihand.deployment.v2
+deployment_id: isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+session:
+  path: configs/sessions/isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1.yaml
+  expected_id: isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+local_binding_id: workstation2_nv5_ros_v2
+tracking_setup:
+  setup_revision: workstation2_steamvr_standing_tframe_unqualified_v1
+  tracking_frame: vive_tracking
+  qualification_status: pending
+  mapping:
+    path: configs/calibrations/vive_tracker_tframe_workcell_workstation2_candidate_v1.yaml
+    expected_id: vive_tracker_tframe_workcell_workstation2_candidate_v1
+processes:
+  - process_id: vive_source
+    component_id: ros2_vive_dual_tracker_source
+    lifecycle: managed
+    depends_on: []
+  - process_id: glove_source
+    component_id: ros2_wuji_dual_glove_source
+    lifecycle: managed
+    depends_on: []
+  - process_id: isaac_consumer
+    component_id: isaac_nero_hand2_ros_consumer
+    lifecycle: managed
+    depends_on: [vive_source, glove_source]
+sources:
+  - source_id: tracker_left
+    kind: vive_tracker
+    side: left
+    logical_role: operator_left
+    process_id: vive_source
+    local_binding_key: tracker_left
+  - source_id: glove_left
+    kind: wuji_glove
+    side: left
+    logical_role: glove_left
+    process_id: glove_source
+    local_binding_key: glove_left
+  - source_id: tracker_right
+    kind: vive_tracker
+    side: right
+    logical_role: operator_right
+    process_id: vive_source
+    local_binding_key: tracker_right
+  - source_id: glove_right
+    kind: wuji_glove
+    side: right
+    logical_role: glove_right
+    process_id: glove_source
+    local_binding_key: glove_right
+control_bindings:
+  - instance_id: nero_left
+    group_id: arm_joints
+    source_id: tracker_left
+  - instance_id: hand_left
+    group_id: finger_joints
+    source_id: glove_left
+  - instance_id: nero_right
+    group_id: arm_joints
+    source_id: tracker_right
+  - instance_id: hand_right
+    group_id: finger_joints
+    source_id: glove_right
+report_root: artifacts/runs/nv5/tframe-banana-bowl-v2026-8-3-gripper-flange-collision-proxy-self-collision
+root_namespace: wujihand/v1/teleop
+interface_set_id: wujihand_interfaces_dataset_v3
+qos_profile:
+  path: configs/profiles/ros2_jazzy_dual_teleoperation_dataset_qos_v1.yaml
+  expected_id: ros2_jazzy_dual_teleoperation_dataset_qos_v1
+node_bindings:
+  - process_id: vive_source
+    node_name: vive_source
+    remaps: []
+  - process_id: glove_source
+    node_name: glove_source
+    remaps: []
+  - process_id: isaac_consumer
+    node_name: isaac_consumer
+    remaps: []
+execution_owner_process_id: isaac_consumer
+recorder_process_id: null

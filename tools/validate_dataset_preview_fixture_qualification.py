@@ -91,6 +91,21 @@ def _expected_preview_component_source_counts(
                 "nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1.yaml"
             ),
         ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
+        (
+            (
+                "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+                "triview_q54_self_collision_v1"
+            ),
+            (
+                "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_"
+                "triview_q54_self_collision_v1"
+            ),
+            (
+                "configs/assemblies/"
+                "nero_dual_hand2_d405_wrist_rig_tframe_"
+                "gripper_flange_collision_proxy_v1.yaml"
+            ),
+        ): {"left_arm": 9, "left_hand": 26, "right_arm": 9, "right_hand": 26},
     }
     try:
         return known[identity]

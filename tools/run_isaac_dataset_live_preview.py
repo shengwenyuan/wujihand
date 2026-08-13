@@ -302,6 +302,10 @@ def _expected_arm_source_pose_count(
     known = {
         ("model_f6642ce0_v1", "link7"): 8,
         ("model_f6642ce0_gripper_flange_v1", "gripper_flange"): 9,
+        (
+            "model_f6642ce0_gripper_flange_collision_proxy_v1",
+            "gripper_flange",
+        ): 9,
     }
     key = (asset_revision, backend_tool_frame)
     try:

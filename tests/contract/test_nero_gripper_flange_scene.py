@@ -10,6 +10,10 @@ ROOT = Path(__file__).parents[2]
 SESSION = (
     "configs/sessions/isaac_nero_dual_hand2_tframe_gripper_flange_inspection_v2026_8_3_v1.yaml"
 )
+PROXY_SESSION = (
+    "configs/sessions/"
+    "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_qualification_v1.yaml"
+)
 
 
 def test_gripper_flange_source_and_generated_asset_are_locked() -> None:
@@ -49,6 +53,32 @@ def test_adapter_plate_is_a_locked_627_overlay_on_the_83_hand() -> None:
         "generated_hand_body_and_control_asset_remain_v2026_8_3"
         in profile["assumptions"]
     )
+
+
+def test_gripper_flange_collision_proxy_is_parallel_and_locked() -> None:
+    lock = SourceLock.load(ConfigRepository(ROOT))
+    generated = lock.record(
+        "agilex-nero-gripper-flange-collision-proxy-isaac-6-0-1-v1"
+    )
+    resolved = SessionResolver(ROOT).resolve(PROXY_SESSION, verify_artifacts=False)
+
+    assert dict(generated.revision)["sha256"] == generated.expected_tree_hash(
+        "nero_description"
+    )
+    for side in ("left", "right"):
+        arm = resolved.instance(f"nero_{side}")
+        assert arm.asset.asset_id == "agilex_nero_gripper_flange_collision_proxy"
+        assert arm.artifact is not None and arm.artifact.source == generated
+    filter_profile = yaml.safe_load(
+        (
+            ROOT
+            / "configs/profiles/"
+            "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    assert [rule["second_rigid_body_name"] for rule in filter_profile["filtered_pairs"]] == [
+        "link7"
+    ]
 
 
 def test_candidate_session_uses_the_parallel_flange_asset() -> None:

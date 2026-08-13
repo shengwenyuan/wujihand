@@ -1,0 +1,30 @@
+schema: wujihand.backend_binding.v1
+binding_id: agilex_nero_gripper_flange_collision_proxy_f6642ce0_isaac_6_0_1_v1
+asset_id: agilex_nero_gripper_flange_collision_proxy
+asset_revision: model_f6642ce0_gripper_flange_collision_proxy_v1
+asset_side: none
+backend: isaac
+loader: usd
+artifact:
+  source: agilex-nero-gripper-flange-collision-proxy-isaac-6-0-1-v1
+  source_revision: sha256:a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6
+  path: nero_description/nero_description.usda
+resource_trees:
+  - source: agilex-nero-gripper-flange-collision-proxy-isaac-6-0-1-v1
+    source_revision: sha256:a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6
+    path: nero_description
+root: base_link
+namespace_policy: prefix
+frame_map:
+  base_link: base_link
+  link4: link4
+  link5: link5
+  link6: link6
+  link7: link7
+  gripper_flange: gripper_flange
+group_bindings:
+  - group_id: arm_joints
+    joints: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
+    actuators: []
+builder: null
+compatibility_profile: configs/profiles/agilex_nero_7f_link6_geometry_alignment_v1.yaml

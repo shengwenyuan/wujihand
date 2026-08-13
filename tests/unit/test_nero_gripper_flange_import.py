@@ -14,6 +14,10 @@ from wujihand.adapters.simulation.nero_gripper_flange_import import (
 
 ROOT = Path(__file__).parents[2]
 PROFILE = ROOT / "configs/profiles/agilex_nero_gripper_flange_isaac_6_0_1_import_v1.yaml"
+PROXY_PROFILE = ROOT / (
+    "configs/profiles/"
+    "agilex_nero_gripper_flange_collision_proxy_isaac_6_0_1_import_v1.yaml"
+)
 SOURCE = ROOT / "third_party/src/agx_arm_urdf_nero_gripper_flange"
 
 
@@ -25,6 +29,17 @@ def test_flange_profile_keeps_the_base_recipe_and_parallel_output() -> None:
     assert profile.output_root.endswith("agilex_nero_gripper_flange_v1")
     assert profile.robot_name == "nero_description"
     assert profile.flange_post_rotation_rpy_rad == pytest.approx((0.0, 0.0, 0.0))
+    assert profile.collision_proxy is None
+
+
+def test_flange_collision_proxy_matches_the_distal_cup_envelope() -> None:
+    profile = load_nero_gripper_flange_import_profile(PROXY_PROFILE)
+
+    assert profile.output_root.endswith("agilex_nero_gripper_flange_collision_proxy_v1")
+    assert profile.collision_proxy is not None
+    assert profile.collision_proxy.origin_xyz_m == pytest.approx((0.0, 0.0, 0.00625))
+    assert profile.collision_proxy.radius_m == pytest.approx(0.0215)
+    assert profile.collision_proxy.length_m == pytest.approx(0.0115)
 
 
 @pytest.mark.requires_upstream_asset
@@ -93,3 +108,37 @@ def test_expanded_urdf_adds_the_clocked_fixed_flange_without_changing_nero(
     expanded_joint7 = root.find("joint[@name='joint7']/origin")
     assert source_joint7 is not None and expanded_joint7 is not None
     assert expanded_joint7.attrib == source_joint7.attrib
+
+
+@pytest.mark.requires_upstream_asset
+def test_expanded_urdf_replaces_only_the_flange_collision_with_the_cup_proxy(
+    tmp_path: Path,
+) -> None:
+    profile = load_nero_gripper_flange_import_profile(PROXY_PROFILE)
+    xacro = SOURCE / "nero/urdf/nero_with_gripper_flange_description.xacro"
+    base = ROOT / "third_party/src/agx_arm_urdf/nero/urdf/nero_description.urdf"
+    if not xacro.is_file() or not base.is_file():
+        pytest.skip("restore the pinned NERO sources")
+    output = tmp_path / "nero_description.urdf"
+    build_nero_gripper_flange_urdf(
+        base_urdf=base,
+        flange_xacro=xacro,
+        output=output,
+        flange_package_name="agilex_nero_gripper_flange",
+        flange_post_rotation_rpy_rad=(0.0, 0.0, 0.0),
+        collision_proxy=profile.collision_proxy,
+    )
+
+    root = ET.parse(output).getroot()
+    flange = root.find("link[@name='gripper_flange']")
+    assert flange is not None
+    assert flange.find("visual/geometry/mesh") is not None
+    assert flange.find("collision/geometry/mesh") is None
+    cylinder = flange.find("collision/geometry/cylinder")
+    origin = flange.find("collision/origin")
+    assert cylinder is not None and origin is not None
+    assert float(cylinder.attrib["radius"]) == pytest.approx(0.0215)
+    assert float(cylinder.attrib["length"]) == pytest.approx(0.0115)
+    assert tuple(float(value) for value in origin.attrib["xyz"].split()) == pytest.approx(
+        (0.0, 0.0, 0.00625)
+    )

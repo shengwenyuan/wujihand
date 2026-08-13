@@ -185,6 +185,10 @@ def test_preview_arm_pose_count_tracks_the_flange_asset_revision() -> None:
         asset_revision="model_f6642ce0_gripper_flange_v1",
         backend_tool_frame="gripper_flange",
     ) == 9
+    assert _expected_arm_source_pose_count(
+        asset_revision="model_f6642ce0_gripper_flange_collision_proxy_v1",
+        backend_tool_frame="gripper_flange",
+    ) == 9
     with pytest.raises(ValueError, match="not qualified"):
         _expected_arm_source_pose_count(
             asset_revision="model_future",

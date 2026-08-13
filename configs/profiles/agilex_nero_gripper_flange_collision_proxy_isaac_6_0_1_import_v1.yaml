@@ -1,0 +1,28 @@
+schema: wujihand.nero_gripper_flange_import.v1
+profile_id: agilex_nero_gripper_flange_collision_proxy_isaac_6_0_1_import_v1
+status: simulation_candidate_distal_cup_collision_proxy
+base_recipe: configs/profiles/agilex_nero_isaac_6_0_1_import_v1.yaml
+flange_source:
+  lock_id: agilex-agx-arm-urdf-nero-gripper-flange
+  commit: f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  xacro_path: nero/urdf/nero_with_gripper_flange_description.xacro
+  ros_package_name: agilex_nero_gripper_flange
+gripper_flange_clocking:
+  link_name: gripper_flange
+  post_rotation_rpy_rad: [0.0, 0.0, 0.0]
+collision_proxy:
+  shape: cylinder
+  origin_xyz_m: [0.0, 0.0, 0.00625]
+  origin_rpy_rad: [0.0, 0.0, 0.0]
+  radius_m: 0.0215
+  length_m: 0.0115
+output:
+  root: artifacts/derived/isaac/6.0.1/agilex_nero_gripper_flange_collision_proxy_v1
+  robot_name: nero_description
+assumptions:
+  - vendor_visual_mesh_fixed_transform_mass_and_inertia_are_preserved
+  - collision_proxy_is_inset_0_5_mm_from_the_cup_side_and_proximal_surface
+  - collision_proxy_preserves_the_distal_cup_surface_at_positive_z_12_mm
+  - proximal_side_plates_are_visual_only_and_not_duplicated_over_link5_or_link6_collision
+  - pinned_nero_link_geometry_and_joint7_kinematics_remain_unchanged
+  - custom_adapter_is_omitted_as_a_zero_length_non_colliding_placeholder

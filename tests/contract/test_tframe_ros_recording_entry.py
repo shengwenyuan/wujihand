@@ -23,6 +23,11 @@ TFRAME_GRIPPER_FLANGE_SELF_COLLISION = (
     "isaac_nero_hand2_ros_dual_tframe_gripper_flange_triview_q54_"
     "self_collision_v2026_8_3_v1.yaml"
 )
+TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION = (
+    "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
+)
 POLICY = ROOT / "configs/qualifications/isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
 
 
@@ -109,6 +114,39 @@ def test_gripper_flange_entry_only_replaces_scene_owned_flange_facts() -> None:
     )
 
 
+def test_collision_proxy_entry_only_replaces_the_arm_collision_representation() -> None:
+    resolver = RosDeploymentResolver(ROOT)
+    previous = resolver.resolve(
+        TFRAME_GRIPPER_FLANGE_SELF_COLLISION,
+        local_binding=LOCAL,
+        verify_artifacts=False,
+    )
+    current = resolver.resolve(
+        TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION,
+        local_binding=LOCAL,
+        verify_artifacts=False,
+    )
+
+    assert current.deployment.processes == previous.deployment.processes
+    assert current.deployment.sources == previous.deployment.sources
+    assert current.deployment.control_bindings == previous.deployment.control_bindings
+    assert current.deployment.node_bindings == previous.deployment.node_bindings
+    assert current.deployment.qos_profile == previous.deployment.qos_profile
+    assert current.route_plan.routes == previous.route_plan.routes
+    assert current.control_profile == previous.control_profile
+    assert current.session.session.dataset_profile == previous.session.session.dataset_profile
+    assert current.session.assembly.assembly_id == (
+        "nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_collision_proxy_v1"
+    )
+    for side in ("left", "right"):
+        assert current.session.instance(f"nero_{side}").asset.asset_id == (
+            "agilex_nero_gripper_flange_collision_proxy"
+        )
+    assert current.self_collision_profile_id == (
+        "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1"
+    )
+
+
 def test_tframe_record_policy_keeps_task_scene_outside_the_session() -> None:
     policy = load_record_chain_qualification_policy(POLICY)
 
@@ -163,4 +201,5 @@ def test_both_isaac_processes_receive_the_same_task_scene_receipt() -> None:
     assert '"--record-chain-qualification"' in qualifier
     assert '["python3", str(PREVIEW_VALIDATOR), "--run-root", str(run_root)]' in qualifier
     assert "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1" in validator
+    assert "gripper_flange_collision_proxy_" in validator
     assert '"task_scene_and_preview_visual_policy"' in validator

@@ -1,0 +1,24 @@
+schema: wujihand.nero_hand2_self_collision_filtered_pairs.v2
+profile_id: isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1
+status: simulation_only_evidence_based
+source_contract:
+  nero_source: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  nero_isaac_asset: agilex-nero-gripper-flange-collision-proxy-isaac-6-0-1-v1@a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6
+  hand2_source: wuji-description-v2026-8-3@8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  hand2_isaac_asset: wuji-hand2-adapter-plate-isaac-6-0-1-v1@0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+filtered_pairs:
+  - pair_id: nero_gripper_flange_link5_link7_intrinsic_overlap_v1
+    sides: [left, right]
+    first_instance: arm
+    first_rigid_body_name: link5
+    second_instance: arm
+    second_rigid_body_name: link7
+    evidence:
+      observation: reproduced_on_both_static_sides_and_unfiltered_left_j4_j7_sweep
+      maximum_observed_penetration_m: 0.011262226849794388
+      scope: pinned_nero_collision_mesh_only
+assumptions:
+  - root_self_collision_remains_enabled
+  - gripper_flange_proxy_has_no_filtered_pair_with_link5_or_link6
+  - no_nero_hand2_or_hand2_internal_pair_is_filtered
+  - hand2_external_workcell_and_task_object_collision_remains_unfiltered

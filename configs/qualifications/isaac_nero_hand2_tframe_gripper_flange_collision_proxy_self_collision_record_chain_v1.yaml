@@ -1,0 +1,36 @@
+schema: wujihand.wuji_hand2_record_chain_qualification.v1
+qualification_id: isaac_nero_hand2_tframe_gripper_flange_collision_proxy_self_collision_record_chain_v1
+matched_chain:
+  path: configs/qualifications/wuji_hand2_matched_chain_v2026_8_3_v1.yaml
+  expected_id: wuji_hand2_sdk_2026_8_3_description_v2026_8_3_v1
+deployment:
+  path: configs/deployments/isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1.yaml
+  expected_id: isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+assembly:
+  path: configs/assemblies/nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_collision_proxy_v1.yaml
+  expected_id: nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_collision_proxy_v1
+task_scene:
+  path: configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml
+  expected_id: isaac_robolab_banana_bowl_low_table_v2
+description:
+  release: v2026.8.3
+  asset_revision: beta1_description_v2026_8_3
+  roots:
+    left: l_wrist
+    right: r_wrist
+  root_orientation_compensation_quat_wxyz:
+    left: [0.0, 0.7071067811865476, -0.7071067811865475, 0.0]
+    right: [0.0, 0.7071067811865476, 0.7071067811865475, 0.0]
+nero:
+  asset_id: agilex_nero_gripper_flange_collision_proxy
+  binding_id: agilex_nero_gripper_flange_collision_proxy_f6642ce0_isaac_6_0_1_v1
+  profile_id: agilex_nero_q7_provisional_v1
+  attachment:
+    parent_frame: gripper_flange
+    child_frame: hand_base
+    position_m: [0.0, 0.0, 0.012]
+    quat_wxyz: [0.0, 0.0, 1.0, 0.0]
+  assembly_attachment_quat_wxyz_by_side:
+    left: [0.0, 0.0, 1.0, 0.0]
+    right: [0.0, 0.0, 1.0, 0.0]
+required_sdk_processes: [glove_source, isaac_consumer]
