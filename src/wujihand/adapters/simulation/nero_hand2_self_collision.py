@@ -17,6 +17,7 @@ SELF_COLLISION_FILTER_SCHEMA = "wujihand.nero_hand2_self_collision_filtered_pair
 SELF_COLLISION_FILTER_SCHEMA_V2 = "wujihand.nero_hand2_self_collision_filtered_pairs.v2"
 SELF_COLLISION_FILTER_PROFILE_ID = "isaac_nero_hand2_self_collision_filtered_pairs_v1"
 SELF_COLLISION_CONTACT_TARGET_SCHEMA = "wujihand.nero_hand2_self_collision_contact_target.v1"
+SELF_COLLISION_Q7_SWEEP_SCHEMA = "wujihand.nero_hand2_self_collision_q7_sweep.v1"
 
 
 def _mapping(value: object, *, field: str) -> Mapping[str, object]:
@@ -58,6 +59,15 @@ def _finite(value: object, *, field: str, positive: bool = False) -> float:
     result = float(value)
     if not math.isfinite(result) or (positive and result <= 0.0) or result < 0.0:
         raise ValueError(f"{field} must be finite and {'positive' if positive else 'non-negative'}")
+    return result
+
+
+def _signed_finite(value: object, *, field: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} must be numeric")
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"{field} must be finite")
     return result
 
 
@@ -128,6 +138,24 @@ class NeroHand2SelfCollisionContactTargetProfile:
             if target_side == side:
                 return q20
         raise KeyError(side)
+
+
+@dataclass(frozen=True, slots=True)
+class SelfCollisionQ7Waypoint:
+    name: str
+    overrides_rad: tuple[tuple[str, float], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class NeroHand2SelfCollisionQ7SweepProfile:
+    profile_id: str
+    transition_frames: int
+    hold_frames: int
+    limit_tolerance_rad: float
+    maximum_hold_error_rad: float
+    maximum_feedback_envelope_excess_rad: float
+    minimum_expected_joint_range_rad: float
+    waypoints: tuple[SelfCollisionQ7Waypoint, ...]
 
 
 def load_nero_hand2_self_collision_qualification_profile(
@@ -434,6 +462,99 @@ def load_nero_hand2_self_collision_contact_target_profile(
     )
 
 
+def load_nero_hand2_self_collision_q7_sweep_profile(
+    path: str | Path,
+) -> NeroHand2SelfCollisionQ7SweepProfile:
+    raw: Any = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    data = _exact_mapping(
+        raw,
+        expected=frozenset(
+            {
+                "schema",
+                "profile_id",
+                "status",
+                "transition_frames",
+                "hold_frames",
+                "thresholds",
+                "waypoints",
+            }
+        ),
+        field="self-collision q7 sweep profile",
+    )
+    if data["schema"] != SELF_COLLISION_Q7_SWEEP_SCHEMA:
+        raise ValueError("unsupported self-collision q7 sweep schema")
+    if data["status"] != "simulation_only":
+        raise ValueError("self-collision q7 sweep profile must be simulation_only")
+    profile_id = data["profile_id"]
+    if not isinstance(profile_id, str) or not profile_id:
+        raise ValueError("self-collision q7 sweep profile ID must be non-blank")
+    thresholds = _exact_mapping(
+        data["thresholds"],
+        expected=frozenset(
+            {
+                "limit_tolerance_rad",
+                "maximum_hold_error_rad",
+                "maximum_feedback_envelope_excess_rad",
+                "minimum_expected_joint_range_rad",
+            }
+        ),
+        field="self-collision q7 sweep thresholds",
+    )
+    raw_waypoints = data["waypoints"]
+    if not isinstance(raw_waypoints, list) or not raw_waypoints:
+        raise ValueError("self-collision q7 sweep waypoints must be a non-empty list")
+    waypoints: list[SelfCollisionQ7Waypoint] = []
+    for index, raw_waypoint in enumerate(raw_waypoints):
+        waypoint = _exact_mapping(
+            raw_waypoint,
+            expected=frozenset({"name", "overrides_rad"}),
+            field=f"self-collision q7 sweep waypoints[{index}]",
+        )
+        name = waypoint["name"]
+        overrides = _mapping(
+            waypoint["overrides_rad"],
+            field=f"self-collision q7 sweep waypoints[{index}].overrides_rad",
+        )
+        if not isinstance(name, str) or not name or not overrides:
+            raise ValueError("each q7 sweep waypoint must have a name and overrides")
+        values = tuple(
+            sorted(
+                (
+                    joint,
+                    _signed_finite(value, field=f"q7 sweep waypoint {name!r}.{joint}"),
+                )
+                for joint, value in overrides.items()
+            )
+        )
+        waypoints.append(SelfCollisionQ7Waypoint(name=name, overrides_rad=values))
+    if len({waypoint.name for waypoint in waypoints}) != len(waypoints):
+        raise ValueError("self-collision q7 sweep waypoint names must be unique")
+    return NeroHand2SelfCollisionQ7SweepProfile(
+        profile_id=profile_id,
+        transition_frames=_positive_int(data["transition_frames"], field="transition_frames"),
+        hold_frames=_positive_int(data["hold_frames"], field="hold_frames"),
+        limit_tolerance_rad=_finite(
+            thresholds["limit_tolerance_rad"], field="limit_tolerance_rad", positive=True
+        ),
+        maximum_hold_error_rad=_finite(
+            thresholds["maximum_hold_error_rad"],
+            field="maximum_hold_error_rad",
+            positive=True,
+        ),
+        maximum_feedback_envelope_excess_rad=_finite(
+            thresholds["maximum_feedback_envelope_excess_rad"],
+            field="maximum_feedback_envelope_excess_rad",
+            positive=True,
+        ),
+        minimum_expected_joint_range_rad=_finite(
+            thresholds["minimum_expected_joint_range_rad"],
+            field="minimum_expected_joint_range_rad",
+            positive=True,
+        ),
+        waypoints=tuple(waypoints),
+    )
+
+
 def author_isaac_self_collision_filters(
     stage: object,
     *,
@@ -497,15 +618,18 @@ def author_isaac_self_collision_filters(
 __all__ = [
     "NeroHand2SelfCollisionFilterProfile",
     "NeroHand2SelfCollisionQualificationProfile",
+    "NeroHand2SelfCollisionQ7SweepProfile",
     "SELF_COLLISION_FILTER_PROFILE_ID",
     "SELF_COLLISION_FILTER_SCHEMA",
     "SELF_COLLISION_QUALIFICATION_PROFILE_ID",
     "SELF_COLLISION_QUALIFICATION_SCHEMA",
     "SelfCollisionPhaseFrames",
     "SelfCollisionFilteredPair",
+    "SelfCollisionQ7Waypoint",
     "SelfCollisionThresholds",
     "author_isaac_self_collision_filters",
     "load_nero_hand2_self_collision_filter_profile",
     "load_nero_hand2_self_collision_contact_target_profile",
+    "load_nero_hand2_self_collision_q7_sweep_profile",
     "load_nero_hand2_self_collision_qualification_profile",
 ]

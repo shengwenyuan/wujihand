@@ -294,6 +294,25 @@ def _expected_hand_source_pose_count(
         ) from exc
 
 
+def _expected_arm_source_pose_count(
+    *,
+    asset_revision: str,
+    backend_tool_frame: str,
+) -> int:
+    known = {
+        ("model_f6642ce0_v1", "link7"): 8,
+        ("model_f6642ce0_gripper_flange_v1", "gripper_flange"): 9,
+    }
+    key = (asset_revision, backend_tool_frame)
+    try:
+        return known[key]
+    except KeyError as exc:
+        raise ValueError(
+            "operator-preview NERO pose inventory is not qualified for "
+            f"revision={asset_revision!r}, tool_frame={backend_tool_frame!r}"
+        ) from exc
+
+
 def _pose_group_delta(
     reference: tuple[NDArray[np.float64], NDArray[np.float64]],
     current: tuple[NDArray[np.float64], NDArray[np.float64]],
@@ -630,8 +649,17 @@ def main(argv: list[str] | None = None) -> int:
         side: resolved.session.instance(sides_by_name[side].hand_instance_id)
         for side in ("left", "right")
     }
+    arm_instances = {
+        side: resolved.session.instance(sides_by_name[side].arm_instance_id)
+        for side in ("left", "right")
+    }
     expected_component_source_pose_counts = {
-        "left_arm": 8,
+        "left_arm": _expected_arm_source_pose_count(
+            asset_revision=arm_instances["left"].asset.revision,
+            backend_tool_frame=arm_instances["left"].binding.backend_frame(
+                arm_instances["left"].asset.frame_name("tool_flange")
+            ),
+        ),
         "left_hand": _expected_hand_source_pose_count(
             asset_revision=hand_instances["left"].asset.revision,
             side="left",
@@ -639,7 +667,12 @@ def main(argv: list[str] | None = None) -> int:
                 hand_instances["left"].asset.frame_name("base")
             ),
         ),
-        "right_arm": 8,
+        "right_arm": _expected_arm_source_pose_count(
+            asset_revision=arm_instances["right"].asset.revision,
+            backend_tool_frame=arm_instances["right"].binding.backend_frame(
+                arm_instances["right"].asset.frame_name("tool_flange")
+            ),
+        ),
         "right_hand": _expected_hand_source_pose_count(
             asset_revision=hand_instances["right"].asset.revision,
             side="right",

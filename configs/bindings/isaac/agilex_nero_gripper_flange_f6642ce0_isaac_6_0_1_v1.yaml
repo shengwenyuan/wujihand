@@ -27,4 +27,4 @@ group_bindings:
     joints: [joint1, joint2, joint3, joint4, joint5, joint6, joint7]
     actuators: []
 builder: null
-compatibility_profile: null
+compatibility_profile: configs/profiles/agilex_nero_7f_link6_geometry_alignment_v1.yaml

@@ -31,6 +31,7 @@ from wujihand.adapters.simulation.isaac_contact_tracking import (
 from wujihand.adapters.simulation.nero_hand2_self_collision import (
     load_nero_hand2_self_collision_contact_target_profile,
     load_nero_hand2_self_collision_filter_profile,
+    load_nero_hand2_self_collision_q7_sweep_profile,
     load_nero_hand2_self_collision_qualification_profile,
 )
 from wujihand.adapters.simulation.nero_link_geometry_alignment import (
@@ -71,6 +72,16 @@ def _parse_args() -> argparse.Namespace:
         help="Require a pinned q20 fixture to produce Hand2 internal contact during hold.",
     )
     parser.add_argument(
+        "--arm-sweep-profile",
+        type=Path,
+        help="Run the versioned q7 waypoint sweep while both hands remain at rest.",
+    )
+    parser.add_argument(
+        "--arm-sweep-sides",
+        choices=("none", "left", "right", "both"),
+        default="none",
+    )
+    parser.add_argument(
         "--unfiltered",
         action="store_true",
         help="Retain every self-collision pair for the evidence-gathering baseline.",
@@ -92,7 +103,12 @@ def _parse_args() -> argparse.Namespace:
         help="Passing C1 report required by C2/C3 runtime inertial comparison.",
     )
     parser.add_argument("--export-stage", action="store_true")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if (args.arm_sweep_profile is None) != (args.arm_sweep_sides == "none"):
+        parser.error("--arm-sweep-profile and a non-none --arm-sweep-sides are required together")
+    if args.arm_sweep_profile is not None and args.contact_target_profile is not None:
+        parser.error("q7 sweep and q20 contact-target runs are separate qualifications")
+    return args
 
 
 ARGS = _parse_args()
@@ -120,9 +136,14 @@ def _shared_alignment(project_root: Path, resolved: object, sides: object) -> ob
         resolved.instance(runtime.arm_instance_id).binding.compatibility_profile  # type: ignore[union-attr]
         for runtime in sides  # type: ignore[union-attr]
     }
-    if None in references or len(references) != 1:
+    if len(references) != 1:
         raise RuntimeError("both NERO bindings must share one alignment profile")
-    return load_nero_link_geometry_alignment(project_root / cast(str, references.pop()))
+    reference = references.pop()
+    return (
+        None
+        if reference is None
+        else load_nero_link_geometry_alignment(project_root / cast(str, reference))
+    )
 
 
 def _world_transform(stage: object, path: str) -> dict[str, list[float]]:
@@ -435,6 +456,12 @@ def main() -> int:
         if ARGS.contact_target_profile is not None
         else None
     )
+    arm_sweep_profile = (
+        load_nero_hand2_self_collision_q7_sweep_profile(ARGS.arm_sweep_profile)
+        if ARGS.arm_sweep_profile is not None
+        else None
+    )
+    arm_sweep_sides = _enabled_sides(ARGS.arm_sweep_sides)
     scene = DualNeroHand2IsaacScene(
         project_root=project_root,
         resolved=resolved,
@@ -507,6 +534,8 @@ def main() -> int:
     phase_maximum_target_error: dict[str, float] = {}
     phase_maximum_arm_error: dict[str, float] = {}
     phase_maximum_hand_error: dict[str, float] = {}
+    arm_command_samples: dict[str, list[list[float]]] = {"left": [], "right": []}
+    arm_feedback_samples: dict[str, list[list[float]]] = {"left": [], "right": []}
     finite = True
     global_frame = 0
 
@@ -514,6 +543,7 @@ def main() -> int:
         phase: str,
         frames: int,
         target_at: Any,
+        arm_target_at: Any | None = None,
     ) -> None:
         nonlocal global_frame, maximum_target_error, finite
         samples = {"left": [], "right": []}
@@ -523,6 +553,11 @@ def main() -> int:
         for frame in range(frames):
             for side in ("left", "right"):
                 scene.hand_targets[side] = np.asarray(target_at(side, frame, frames)).copy()
+                if arm_target_at is not None:
+                    scene.arm_targets[side] = np.asarray(
+                        arm_target_at(side, frame, frames), dtype=np.float64
+                    ).copy()
+                arm_command_samples[side].append(scene.arm_targets[side].tolist())
             applied = scene.apply_targets()
             tracker.set_frame(phase, global_frame)
             scene.world.step(render=False)
@@ -535,6 +570,7 @@ def main() -> int:
                 phase_maximum_target_error[phase] = max(phase_maximum_target_error[phase], error)
                 arm_indices = np.asarray(scene.partitions[side].arm_indices_q7, dtype=np.int64)
                 hand_indices = np.asarray(scene.partitions[side].hand_indices_q20, dtype=np.int64)
+                arm_feedback_samples[side].append(feedback[arm_indices].tolist())
                 phase_maximum_arm_error[phase] = max(
                     phase_maximum_arm_error[phase],
                     float(np.max(np.abs(feedback[arm_indices] - applied[side][arm_indices]))),
@@ -551,9 +587,6 @@ def main() -> int:
     def constant_rest(side: str, _frame: int, _frames: int) -> np.ndarray[Any, Any]:
         return rest_targets[side]
 
-    def constant_grasp(side: str, _frame: int, _frames: int) -> np.ndarray[Any, Any]:
-        return grasp_targets[side]
-
     step_phase("settle_rest", profile.phases.settle_rest, constant_rest)
     hand_base_after_settle = {
         side: _world_transform(scene.stage, scene.authored[side].config.child_base_link_path)
@@ -561,17 +594,68 @@ def main() -> int:
     }
     step_phase("observe_rest", profile.phases.observe_rest, constant_rest)
 
-    def closing(side: str, frame: int, frames: int) -> np.ndarray[Any, Any]:
-        alpha = 0.5 - 0.5 * math.cos(math.pi * (frame + 1) / frames)
-        return rest_targets[side] + alpha * (grasp_targets[side] - rest_targets[side])
+    sweep_phases: set[str] = set()
+    sweep_hold_phases: set[str] = set()
+    if arm_sweep_profile is None:
 
-    def opening(side: str, frame: int, frames: int) -> np.ndarray[Any, Any]:
-        alpha = 0.5 + 0.5 * math.cos(math.pi * (frame + 1) / frames)
-        return rest_targets[side] + alpha * (grasp_targets[side] - rest_targets[side])
+        def constant_grasp(side: str, _frame: int, _frames: int) -> np.ndarray[Any, Any]:
+            return grasp_targets[side]
 
-    step_phase("close_trajectory", profile.phases.close_trajectory, closing)
-    step_phase("hold_grasp", profile.phases.hold_grasp, constant_grasp)
-    step_phase("open_trajectory", profile.phases.open_trajectory, opening)
+        def closing(side: str, frame: int, frames: int) -> np.ndarray[Any, Any]:
+            alpha = 0.5 - 0.5 * math.cos(math.pi * (frame + 1) / frames)
+            return rest_targets[side] + alpha * (grasp_targets[side] - rest_targets[side])
+
+        def opening(side: str, frame: int, frames: int) -> np.ndarray[Any, Any]:
+            alpha = 0.5 + 0.5 * math.cos(math.pi * (frame + 1) / frames)
+            return rest_targets[side] + alpha * (grasp_targets[side] - rest_targets[side])
+
+        step_phase("close_trajectory", profile.phases.close_trajectory, closing)
+        step_phase("hold_grasp", profile.phases.hold_grasp, constant_grasp)
+        step_phase("open_trajectory", profile.phases.open_trajectory, opening)
+    else:
+        home = {side: scene.initial_arm_targets[side].copy() for side in ("left", "right")}
+        names = {side: scene.arm_profiles[side].layout.names for side in ("left", "right")}
+        targets: dict[str, dict[str, np.ndarray[Any, Any]]] = {}
+        for waypoint in arm_sweep_profile.waypoints:
+            targets[waypoint.name] = {}
+            for side in ("left", "right"):
+                target = home[side].copy()
+                for joint, value in waypoint.overrides_rad:
+                    if joint not in names[side]:
+                        raise RuntimeError(f"q7 sweep references unknown joint {joint!r}")
+                    target[names[side].index(joint)] = value
+                scene.arm_profiles[side].layout.validate_vector(target)
+                if not np.array_equal(target, scene.arm_profiles[side].layout.clamp(target)):
+                    raise RuntimeError(f"q7 sweep waypoint {waypoint.name!r} exceeds limits")
+                targets[waypoint.name][side] = target
+
+        def interpolate(
+            start: Mapping[str, np.ndarray[Any, Any]],
+            end: Mapping[str, np.ndarray[Any, Any]],
+        ) -> Any:
+            def target_at(side: str, frame: int, frames: int) -> np.ndarray[Any, Any]:
+                alpha = 0.5 - 0.5 * math.cos(math.pi * (frame + 1) / frames)
+                return start[side] + alpha * (end[side] - start[side])
+
+            return target_at
+
+        for waypoint in arm_sweep_profile.waypoints:
+            target = {
+                side: (targets[waypoint.name][side] if side in arm_sweep_sides else home[side])
+                for side in ("left", "right")
+            }
+            phases = {
+                "out": (arm_sweep_profile.transition_frames, interpolate(home, target)),
+                "hold": (arm_sweep_profile.hold_frames, interpolate(target, target)),
+                "return": (arm_sweep_profile.transition_frames, interpolate(target, home)),
+                "home": (arm_sweep_profile.hold_frames, interpolate(home, home)),
+            }
+            for suffix, (frames, arm_target_at) in phases.items():
+                phase = f"q7_{waypoint.name}_{suffix}"
+                sweep_phases.add(phase)
+                if suffix in {"hold", "home"}:
+                    sweep_hold_phases.add(phase)
+                step_phase(phase, frames, constant_rest, arm_target_at)
     step_phase("final_rest", profile.phases.final_rest, constant_rest)
     scene.world.pause()
 
@@ -618,22 +702,94 @@ def main() -> int:
         ).get("external_probe_smoke", 0)
         > 0
     ]
-    steady_phases = {"observe_rest", "hold_grasp", "final_rest"}
+    steady_phases = {"observe_rest", "final_rest"} | (
+        set() if arm_sweep_profile is not None else {"hold_grasp"}
+    )
     maximum_steady_target_error = max(phase_maximum_target_error[phase] for phase in steady_phases)
     maximum_steady_arm_error = max(phase_maximum_arm_error[phase] for phase in steady_phases)
     maximum_steady_hand_error = max(phase_maximum_hand_error[phase] for phase in steady_phases)
-    rest_phases = {"observe_rest", "final_rest"}
+    q7_sweep_metrics: dict[str, object] | None = None
+    if arm_sweep_profile is not None:
+        requested_joints = {
+            joint for waypoint in arm_sweep_profile.waypoints for joint, _ in waypoint.overrides_rad
+        }
+        outside_limit_samples = 0
+        maximum_envelope_excess = 0.0
+        side_metrics: dict[str, object] = {}
+        requested_joints_move = True
+        for side in ("left", "right"):
+            commands = np.asarray(arm_command_samples[side], dtype=np.float64)
+            feedback = np.asarray(arm_feedback_samples[side], dtype=np.float64)
+            layout = scene.arm_profiles[side].layout
+            lower = np.asarray(layout.lower, dtype=np.float64)
+            upper = np.asarray(layout.upper, dtype=np.float64)
+            outside_limit_samples += int(
+                np.sum(
+                    np.any(
+                        (feedback < lower - arm_sweep_profile.limit_tolerance_rad)
+                        | (feedback > upper + arm_sweep_profile.limit_tolerance_rad),
+                        axis=1,
+                    )
+                )
+            )
+            command_minimum = np.min(commands, axis=0)
+            command_maximum = np.max(commands, axis=0)
+            feedback_minimum = np.min(feedback, axis=0)
+            feedback_maximum = np.max(feedback, axis=0)
+            envelope_excess = np.maximum(
+                np.maximum(command_minimum - feedback_minimum, 0.0),
+                np.maximum(feedback_maximum - command_maximum, 0.0),
+            )
+            feedback_range = feedback_maximum - feedback_minimum
+            requested_ranges = {
+                joint: float(feedback_range[layout.names.index(joint)])
+                for joint in sorted(requested_joints)
+            }
+            side_moves = side not in arm_sweep_sides or all(
+                value >= arm_sweep_profile.minimum_expected_joint_range_rad
+                for value in requested_ranges.values()
+            )
+            requested_joints_move &= side_moves
+            maximum_envelope_excess = max(maximum_envelope_excess, float(np.max(envelope_excess)))
+            side_metrics[side] = {
+                "joint_names": list(layout.names),
+                "minimum_command_rad": command_minimum.tolist(),
+                "maximum_command_rad": command_maximum.tolist(),
+                "minimum_feedback_rad": feedback_minimum.tolist(),
+                "maximum_feedback_rad": feedback_maximum.tolist(),
+                "feedback_range_rad": feedback_range.tolist(),
+                "requested_joint_ranges_rad": requested_ranges,
+                "maximum_feedback_envelope_excess_rad": float(np.max(envelope_excess)),
+            }
+        q7_sweep_metrics = {
+            "sides": side_metrics,
+            "outside_limit_samples": outside_limit_samples,
+            "maximum_feedback_envelope_excess_rad": maximum_envelope_excess,
+            "maximum_hold_error_rad": max(
+                phase_maximum_arm_error[phase] for phase in sweep_hold_phases
+            ),
+            "requested_joints_move": requested_joints_move,
+        }
+    rest_phases = {"observe_rest", "final_rest"} | sweep_phases
     unexplained_rest_pairs: list[str] = []
     deep_self_pairs: list[str] = []
     cross_side_frames = 0
     hand_contact_pairs: dict[str, list[str]] = {"left": [], "right": []}
     hand_contact_frames: dict[str, int] = {"left": 0, "right": 0}
+    sweep_external_pairs: list[str] = []
     for pair_name, raw_record in contacts.items():
         record = cast(Mapping[str, object], raw_record)
         paths = cast(list[str], record["paths"])
         sides_for_pair = tuple(_pair_side(path) for path in paths)
         phase_frames = cast(Mapping[str, int], record["phase_contact_frames"])
         phase_minimum = cast(Mapping[str, float], record["phase_minimum_separation_m"])
+        if (
+            arm_sweep_profile is not None
+            and any(phase_frames.get(phase, 0) for phase in sweep_phases)
+            and any(path.startswith("/World/Robots/") for path in paths)
+            and any(not path.startswith("/World/Robots/") for path in paths)
+        ):
+            sweep_external_pairs.append(pair_name)
         for side in ("left", "right"):
             prefix = f"/World/Robots/Hand2{side.capitalize()}/"
             if all(path.startswith(prefix) for path in paths):
@@ -699,9 +855,34 @@ def main() -> int:
         "no_cross_side_contact": (
             cross_side_frames <= profile.thresholds.maximum_cross_side_contact_frames
         ),
-        "contact_fixture_reaches_both_hands": (
-            bool(all(hand_contact_frames.values())) if contact_target_profile is not None else True
+        "contact_fixture_reaches_enabled_hands": (
+            all(hand_contact_frames[side] > 0 for side in requested_sides)
+            if contact_target_profile is not None
+            else True
         ),
+        "q7_sweep_feedback_stays_inside_limits": (
+            cast(int, q7_sweep_metrics["outside_limit_samples"]) == 0
+            if q7_sweep_metrics is not None
+            else True
+        ),
+        "q7_sweep_feedback_stays_inside_command_envelope": (
+            cast(float, q7_sweep_metrics["maximum_feedback_envelope_excess_rad"])
+            <= cast(Any, arm_sweep_profile).maximum_feedback_envelope_excess_rad
+            if q7_sweep_metrics is not None
+            else True
+        ),
+        "q7_sweep_hold_error_bounded": (
+            cast(float, q7_sweep_metrics["maximum_hold_error_rad"])
+            <= cast(Any, arm_sweep_profile).maximum_hold_error_rad
+            if q7_sweep_metrics is not None
+            else True
+        ),
+        "q7_sweep_requested_joints_move": (
+            cast(bool, q7_sweep_metrics["requested_joints_move"])
+            if q7_sweep_metrics is not None
+            else True
+        ),
+        "no_robot_external_contact_during_q7_sweep": not sweep_external_pairs,
         "contact_reporting_enabled": bool(contact_api_paths),
         "wrist_rig_inventory_matches_gate": (
             all(
@@ -792,6 +973,16 @@ def main() -> int:
                 "hand2_source": contact_target_profile.hand2_source,
             }
         ),
+        "arm_sweep_profile": (
+            None
+            if arm_sweep_profile is None
+            else {
+                "path": ARGS.arm_sweep_profile.resolve().relative_to(project_root).as_posix(),
+                "sha256": sha256_file(ARGS.arm_sweep_profile),
+                "profile_id": arm_sweep_profile.profile_id,
+                "sides": sorted(arm_sweep_sides),
+            }
+        ),
         "authored_filtered_pairs": [
             {
                 "pair_id": pair_id,
@@ -846,6 +1037,7 @@ def main() -> int:
             "phase_maximum_hand_error_rad": phase_maximum_hand_error,
             "hold_drift_rad": hold_drift,
             "finite": finite,
+            "arm_sweep": q7_sweep_metrics,
         },
         "hand_base_after_settle": hand_base_after_settle,
         "hand_base_final": hand_base_final,
@@ -857,6 +1049,7 @@ def main() -> int:
         "unexplained_rest_pairs": unexplained_rest_pairs,
         "deep_self_pairs": deep_self_pairs,
         "cross_side_contact_frames": cross_side_frames,
+        "q7_sweep_external_contact_pairs": sweep_external_pairs,
         "checks": checks,
     }
     report_path = output_dir / "report.json"
@@ -882,5 +1075,5 @@ except BaseException:  # Isaac fast shutdown can otherwise swallow the traceback
     sys.stdout.flush()
     sys.stderr.flush()
 finally:
-    simulation_app.close()
+    simulation_app.close(exit_code=exit_code)
 raise SystemExit(exit_code)

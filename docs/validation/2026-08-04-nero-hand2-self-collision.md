@@ -95,6 +95,11 @@ Hand2Left/l_base_link collision
 <-> NeroLeft/.../link6/link6_1 collision
 ```
 
+> 版本批注（2026-08-12）：上述 `l_base_link` 是历史链
+> `wuji-description v2026.6.27` 的刚体名称。当前 `v2026.8.3` 已将对应根修改为
+> `l_wrist` / `r_wrist`；不得把旧名称解读为新版漏过滤，也不得跨 Description 版本机械复制
+> filtered pair，必须以当前运行时刚体 inventory 与接触记录为准。
+
 该 pair 共出现 `3558` 个 contact frames，最深 separation 为 `-2.748 mm`，并连续覆盖首次
 越限窗口。最近一次人工动作未再次触发只说明该姿态窗口未命中；保存命令的回放已复现
 contact 与越限的时序关联。

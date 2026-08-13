@@ -10,6 +10,7 @@ from wujihand.adapters.simulation.nero_hand2_self_collision import (
     SELF_COLLISION_QUALIFICATION_PROFILE_ID,
     load_nero_hand2_self_collision_filter_profile,
     load_nero_hand2_self_collision_contact_target_profile,
+    load_nero_hand2_self_collision_q7_sweep_profile,
     load_nero_hand2_self_collision_qualification_profile,
 )
 
@@ -25,6 +26,18 @@ V8_3_FILTER_PROFILE = (
 )
 V8_3_CONTACT_TARGET_PROFILE = (
     ROOT / "configs/profiles/isaac_nero_hand2_self_collision_contact_target_v2026_8_3_v1.yaml"
+)
+GRIPPER_FLANGE_PROFILE = (
+    ROOT
+    / "configs/profiles/isaac_nero_hand2_self_collision_qualification_gripper_flange_v2026_8_3_v1.yaml"
+)
+GRIPPER_FLANGE_Q7_SWEEP = (
+    ROOT
+    / "configs/profiles/isaac_nero_hand2_self_collision_q7_sweep_gripper_flange_v2026_8_3_v1.yaml"
+)
+GRIPPER_FLANGE_FILTER = (
+    ROOT
+    / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_v2026_8_3_v1.yaml"
 )
 
 
@@ -98,6 +111,52 @@ def test_v8_3_contact_target_profile_pins_two_finite_q20_vectors() -> None:
     assert profile.profile_id.endswith("v2026_8_3_v1")
     assert profile.hand2_source.endswith("8271644a78d69ed9a4adcf9165d882c64ad33dfa")
     assert len(profile.target("left")) == len(profile.target("right")) == 20
+
+
+def test_gripper_flange_qualification_profile_pins_new_candidate_assets() -> None:
+    profile = load_nero_hand2_self_collision_qualification_profile(GRIPPER_FLANGE_PROFILE)
+    contract = dict(profile.collision_mesh_contract)
+
+    assert profile.profile_id.endswith("gripper_flange_v2026_8_3_v1")
+    assert contract["nero_isaac_asset"].endswith(
+        "eaa29a46124c9697a53f8765acd3400b4e8d56c5624748f4ad615f083d679e0d"
+    )
+    assert contract["hand2_isaac_asset"].endswith(
+        "0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e"
+    )
+
+
+def test_gripper_flange_q7_sweep_covers_wrist_axes_and_45_degree_j7() -> None:
+    profile = load_nero_hand2_self_collision_q7_sweep_profile(GRIPPER_FLANGE_Q7_SWEEP)
+    waypoints = {waypoint.name: dict(waypoint.overrides_rad) for waypoint in profile.waypoints}
+
+    assert set().union(*(values.keys() for values in waypoints.values())) == {
+        "joint4",
+        "joint5",
+        "joint6",
+        "joint7",
+    }
+    assert waypoints["j7_positive_45_deg"]["joint7"] == pytest.approx(0.7853981633974483)
+    assert waypoints["j7_negative_45_deg"]["joint7"] == pytest.approx(-0.7853981633974483)
+
+
+def test_gripper_flange_filter_contains_only_observed_nero_internal_pairs() -> None:
+    profile = load_nero_hand2_self_collision_filter_profile(GRIPPER_FLANGE_FILTER)
+
+    assert profile.profile_id.endswith("gripper_flange_v2026_8_3_v1")
+    assert len(profile.filtered_pairs) == 3
+    assert all(
+        pair.first_instance == pair.second_instance == "arm"
+        for pair in profile.filtered_pairs
+    )
+    assert {
+        frozenset((pair.first_rigid_body_name, pair.second_rigid_body_name))
+        for pair in profile.filtered_pairs
+    } == {
+        frozenset(("link5", "link7")),
+        frozenset(("link5", "gripper_flange")),
+        frozenset(("link6", "gripper_flange")),
+    }
 
 
 def test_self_collision_filter_rejects_unexplained_and_duplicate_rules(

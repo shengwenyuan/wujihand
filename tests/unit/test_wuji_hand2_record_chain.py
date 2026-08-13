@@ -36,6 +36,17 @@ TFRAME_SELF_COLLISION_DEPLOYMENT = (
     ROOT / "configs/deployments/"
     "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
 )
+TFRAME_GRIPPER_FLANGE_SELF_COLLISION_POLICY = (
+    ROOT
+    / "configs/qualifications/"
+    "isaac_nero_hand2_tframe_gripper_flange_self_collision_record_chain_v2026_8_3_v1.yaml"
+)
+TFRAME_GRIPPER_FLANGE_SELF_COLLISION_DEPLOYMENT = (
+    ROOT
+    / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_triview_q54_"
+    "self_collision_v2026_8_3_v1.yaml"
+)
 
 
 class _Manager:
@@ -194,6 +205,16 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
         (
             TFRAME_SELF_COLLISION_POLICY,
             TFRAME_SELF_COLLISION_DEPLOYMENT,
+            "glove",
+            "live_teleoperation",
+            {
+                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
+                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
+            },
+        ),
+        (
+            TFRAME_GRIPPER_FLANGE_SELF_COLLISION_POLICY,
+            TFRAME_GRIPPER_FLANGE_SELF_COLLISION_DEPLOYMENT,
             "glove",
             "live_teleoperation",
             {

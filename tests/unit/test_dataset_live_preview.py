@@ -7,6 +7,7 @@ import pytest
 
 from tools.run_isaac_dataset_live_preview import _ancestry_tiers
 from tools.run_isaac_dataset_live_preview import _component_path_inventory
+from tools.run_isaac_dataset_live_preview import _expected_arm_source_pose_count
 from tools.run_isaac_dataset_live_preview import _expected_hand_source_pose_count
 from tools.run_isaac_dataset_live_preview import _pose_group_delta
 from tools.run_isaac_dataset_live_preview import _q54_group_ranges
@@ -173,6 +174,47 @@ def test_preview_hand_pose_count_is_fail_closed_by_description_revision() -> Non
             side="right",
             backend_base_frame="r_wrist",
         )
+
+
+def test_preview_arm_pose_count_tracks_the_flange_asset_revision() -> None:
+    assert _expected_arm_source_pose_count(
+        asset_revision="model_f6642ce0_v1",
+        backend_tool_frame="link7",
+    ) == 8
+    assert _expected_arm_source_pose_count(
+        asset_revision="model_f6642ce0_gripper_flange_v1",
+        backend_tool_frame="gripper_flange",
+    ) == 9
+    with pytest.raises(ValueError, match="not qualified"):
+        _expected_arm_source_pose_count(
+            asset_revision="model_future",
+            backend_tool_frame="gripper_flange",
+        )
+
+
+def test_preview_component_inventory_accepts_the_gripper_flange_link() -> None:
+    prefixes = {
+        "left_arm": "/World/Robots/NeroLeft",
+        "left_hand": "/World/Robots/Hand2Left",
+        "right_arm": "/World/Robots/NeroRight",
+        "right_hand": "/World/Robots/Hand2Right",
+    }
+    counts = {"left_arm": 9, "left_hand": 26, "right_arm": 9, "right_hand": 26}
+    source = tuple(
+        f"{prefixes[component]}/link{index}"
+        for component, count in counts.items()
+        for index in range(count)
+    )
+
+    source_by_component, replay_by_component = _component_path_inventory(
+        pose_paths=source,
+        replay_paths=source,
+        component_prefixes=prefixes,
+        expected_source_pose_counts=counts,
+    )
+
+    assert {key: len(value) for key, value in source_by_component.items()} == counts
+    assert {key: len(value) for key, value in replay_by_component.items()} == counts
 
 
 def test_preview_component_pose_delta_is_quaternion_sign_invariant() -> None:

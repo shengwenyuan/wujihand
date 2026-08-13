@@ -1,0 +1,35 @@
+schema: wujihand.nero_hand2_self_collision_qualification.v1
+profile_id: isaac_nero_hand2_self_collision_qualification_gripper_flange_v2026_8_3_v1
+status: simulation_only
+physics_hz: 120
+hand_amplitude_rad: 0.4
+phases:
+  settle_rest_frames: 240
+  observe_rest_frames: 120
+  close_trajectory_frames: 240
+  hold_grasp_frames: 120
+  open_trajectory_frames: 240
+  final_rest_frames: 120
+thresholds:
+  contact_report_threshold_n: 0.0
+  contact_separation_epsilon_m: 0.00005
+  maximum_arm_target_error_rad: 0.08
+  maximum_hand_target_error_rad: 0.25
+  maximum_hold_drift_rad: 0.03
+  maximum_unexplained_rest_penetration_m: 0.0005
+  maximum_any_self_penetration_m: 0.002
+  maximum_unexplained_rest_contact_frames: 3
+  maximum_cross_side_contact_frames: 0
+  transform_translation_tolerance_m: 0.0001
+  transform_rotation_tolerance: 0.0001
+collision_mesh_contract:
+  nero_source: agilex-agx-arm-urdf@f6642ce0d7872c686f29c99e9e10cd23d1d49313
+  nero_isaac_asset: agilex-nero-gripper-flange-isaac-6-0-1-v1@eaa29a46124c9697a53f8765acd3400b4e8d56c5624748f4ad615f083d679e0d
+  hand2_source: wuji-description-v2026-8-3@8271644a78d69ed9a4adcf9165d882c64ad33dfa
+  hand2_isaac_asset: wuji-hand2-adapter-plate-isaac-6-0-1-v1@0b6b26fd744b17c33f5750c8502a620cc6e34d6c53d3b76c8701f09702465c8e
+  workcell_collision: tframe_static_enabled
+  accessory_collision: disabled
+assumptions:
+  - self_collision_applies_to_the_merged_nero_gripper_flange_hand2_q27_articulation
+  - fixed_attachment_interfaces_may_be_filtered_only_from_new_candidate_runtime_contacts
+  - twelve_millimetre_plate_offset_is_a_simulation_candidate_not_a_physical_adapter_measurement

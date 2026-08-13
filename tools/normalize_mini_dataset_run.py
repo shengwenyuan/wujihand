@@ -364,6 +364,15 @@ def _tick_facts(
 
 def _fixture_drift(artifact: RunArtifact) -> tuple[float, float]:
     scene = _mapping(artifact.manifest.get("scene"), field="manifest.scene")
+    declared_raw = _sequence(
+        scene.get("fixed_rigid_body_paths"),
+        field="fixed rigid body paths",
+    )
+    if any(not isinstance(path, str) for path in declared_raw) or len(
+        set(declared_raw)
+    ) != len(declared_raw):
+        raise ValueError("fixed rigid body path declaration differs")
+    declared = set(cast(Sequence[str], declared_raw))
     initial_raw = _sequence(scene.get("fixed_body_states"), field="fixed body initial states")
     final_raw = _sequence(
         artifact.receipt.get("final_fixed_body_states"),
@@ -388,8 +397,12 @@ def _fixture_drift(artifact: RunArtifact) -> tuple[float, float]:
 
     initial = states(initial_raw, field="initial")
     final = states(final_raw, field="final")
-    if not initial or set(initial) != set(final):
+    if set(initial) != set(final):
         raise ValueError("fixed fixture initial/final inventories differ")
+    if set(initial) != declared:
+        raise ValueError("fixed fixture captured inventory differs from declaration")
+    if not initial:
+        return 0.0, 0.0
     translation = 0.0
     rotation = 0.0
     for path in initial:

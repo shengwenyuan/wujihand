@@ -1,0 +1,31 @@
+schema: wujihand.nero_hand2_self_collision_q7_sweep.v1
+profile_id: isaac_nero_hand2_self_collision_q7_sweep_gripper_flange_v2026_8_3_v1
+status: simulation_only
+transition_frames: 180
+hold_frames: 60
+thresholds:
+  limit_tolerance_rad: 0.01
+  maximum_hold_error_rad: 0.12
+  maximum_feedback_envelope_excess_rad: 0.12
+  minimum_expected_joint_range_rad: 0.25
+waypoints:
+  - name: j4_low
+    overrides_rad: {joint4: 1.25}
+  - name: j4_high
+    overrides_rad: {joint4: 1.95}
+  - name: j5_positive
+    overrides_rad: {joint5: 2.10}
+  - name: j5_negative
+    overrides_rad: {joint5: -2.10}
+  - name: j6_positive
+    overrides_rad: {joint6: 0.70}
+  - name: j6_negative
+    overrides_rad: {joint6: -0.60}
+  - name: j7_positive_45_deg
+    overrides_rad: {joint7: 0.7853981633974483}
+  - name: j7_negative_45_deg
+    overrides_rad: {joint7: -0.7853981633974483}
+  - name: combined_positive
+    overrides_rad: {joint4: 1.25, joint5: 2.10, joint6: 0.55, joint7: 0.7853981633974483}
+  - name: combined_negative
+    overrides_rad: {joint4: 1.90, joint5: -2.10, joint6: -0.55, joint7: -0.7853981633974483}

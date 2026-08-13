@@ -570,8 +570,11 @@ def _validate_description_and_nero(
             or hand.artifact is None
         ):
             raise RuntimeError(f"{side.value} Hand2 8.3 identity/root differs")
-        revisions = dict(hand.artifact.source.revision)
-        if revisions.get("tag") != policy.description.release:
+        description_sources = (hand.artifact, *hand.resource_trees)
+        if not any(
+            dict(resource.source.revision).get("tag") == policy.description.release
+            for resource in description_sources
+        ):
             raise RuntimeError(f"{side.value} Hand2 Description version differs")
         if (
             arm.asset.asset_id != policy.nero.asset_id

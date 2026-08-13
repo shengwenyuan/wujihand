@@ -60,7 +60,9 @@ def test_candidate_session_uses_the_parallel_flange_asset() -> None:
         assert arm.asset.frame_name("kinematic_flange") == "link7"
         assert arm.asset.frame_name("tool_flange") == "gripper_flange"
         assert arm.binding.backend_frame("gripper_flange") == "gripper_flange"
-        assert arm.binding.compatibility_profile is None
+        assert arm.binding.compatibility_profile == (
+            "configs/profiles/agilex_nero_7f_link6_geometry_alignment_v1.yaml"
+        )
     arm_to_hand = [
         attachment
         for attachment in resolved.assembly.attachments
