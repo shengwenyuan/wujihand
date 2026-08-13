@@ -1,0 +1,265 @@
+{
+  "design_gates": {
+    "body_and_accessory_rails_same_thickness": true,
+    "bounds_maximum_error_mm": 1.9073486257070726e-07,
+    "cable_relief_clocking_frozen_from_pre_fix_v2": true,
+    "fourfold_body_and_accessory_pattern": true,
+    "nero_d_flat_zero_clocked_to_vendor_cup": true,
+    "nero_radial_m3_pattern_clocked_45_deg": true,
+    "no_d405_bracket_or_side_lug": true,
+    "no_left_right_exports": true,
+    "pre_fix_body_hand2_accessory_geometry_preserved": true,
+    "single_universal_part": true,
+    "thin_stop_shoulder_land_retained": true
+  },
+  "mesh_gate": {
+    "print/core_universal.stl": {
+      "body_count": 1,
+      "bounds_mm": {
+        "max": [
+          31.0,
+          31.0,
+          1.7999999523162842
+        ],
+        "min": [
+          -31.0,
+          -31.0,
+          -11.699999809265137
+        ]
+      },
+      "bytes": 2583584,
+      "degenerate_triangle_count": 0,
+      "extents_mm": [
+        62.0,
+        62.0,
+        13.499999761581421
+      ],
+      "sha256": "64abd1a384f44abffbc20991f862d31c66a804502ec8bf89920f992e2d62673b",
+      "triangles": 51670,
+      "watertight": true,
+      "winding_consistent": true
+    },
+    "reference/core_universal_pre_plug_fix_reference.stl": {
+      "body_count": 1,
+      "bounds_mm": {
+        "max": [
+          31.0,
+          31.0,
+          1.7999999523162842
+        ],
+        "min": [
+          -31.0,
+          -31.0,
+          -9.699999809265137
+        ]
+      },
+      "bytes": 2583584,
+      "degenerate_triangle_count": 0,
+      "extents_mm": [
+        62.0,
+        62.0,
+        11.499999761581421
+      ],
+      "sha256": "9577dd71923bf183a8bf6531940ec1fa611ca4f9af5c8f03259593665ad17bf0",
+      "triangles": 51670,
+      "watertight": true,
+      "winding_consistent": true
+    },
+    "reference/hand_plate_reference.stl": {
+      "body_count": 1,
+      "bounds_mm": {
+        "max": [
+          29.952499389648438,
+          29.952499389648438,
+          4.0
+        ],
+        "min": [
+          -29.952499389648438,
+          -29.952499389648438,
+          0.0
+        ]
+      },
+      "bytes": 112884,
+      "degenerate_triangle_count": 0,
+      "extents_mm": [
+        59.904998779296875,
+        59.904998779296875,
+        4.0
+      ],
+      "sha256": "1d496ff7b11d5e5ac2a8b46a7e797ebcaaecb20056efc79e6b6d1081ec3a6573",
+      "triangles": 2256,
+      "watertight": true,
+      "winding_consistent": true
+    },
+    "visual/core_universal.stl": {
+      "body_count": 1,
+      "bounds_mm": {
+        "max": [
+          31.0,
+          31.0,
+          1.7999999523162842
+        ],
+        "min": [
+          -31.0,
+          -31.0,
+          -11.699999809265137
+        ]
+      },
+      "bytes": 2583584,
+      "degenerate_triangle_count": 0,
+      "extents_mm": [
+        62.0,
+        62.0,
+        13.499999761581421
+      ],
+      "sha256": "64abd1a384f44abffbc20991f862d31c66a804502ec8bf89920f992e2d62673b",
+      "triangles": 51670,
+      "watertight": true,
+      "winding_consistent": true
+    }
+  },
+  "openscad": "OpenSCAD version 2021.01",
+  "parameters_mm": {
+    "accessory_hole_centers": {
+      "east_west": [
+        [
+          -27.0,
+          -10.0
+        ],
+        [
+          -27.0,
+          10.0
+        ],
+        [
+          27.0,
+          -10.0
+        ],
+        [
+          27.0,
+          10.0
+        ]
+      ],
+      "north_south": [
+        [
+          -10.0,
+          -27.0
+        ],
+        [
+          10.0,
+          -27.0
+        ],
+        [
+          -10.0,
+          27.0
+        ],
+        [
+          10.0,
+          27.0
+        ]
+      ]
+    },
+    "accessory_interface": "4_sides_x_2_axial_M3_clearance",
+    "axial_offset_reduction": 6.5,
+    "axial_offset_vendor_flange_to_hand2": 15.9,
+    "center_hub_d": 42.0,
+    "core_thickness": 3.5,
+    "corner_boss_d": 16.0,
+    "diagonal_rib_width": 7.0,
+    "frame_inner_size": 46.0,
+    "frame_outer_size": 62.0,
+    "frame_rail_width": 8.0,
+    "hand_capsule_center_abs_xy": 20.1525,
+    "hand_capsule_key_center_span": 8.0,
+    "hand_capsule_key_depth": 1.8,
+    "hand_capsule_key_width": 5.8,
+    "hand_m3_countersink": "90_deg_d6.4_to_d3.4",
+    "hand_m3_countersink_residual_cylindrical_length": 2.0,
+    "nero_plug_flat_clocking_deg": 0.0,
+    "nero_plug_flat_x": 18.0,
+    "nero_plug_length": 7.8,
+    "nero_print_test_plug_d": 39.6,
+    "nero_radial_hole_clocking_deg": 45.0,
+    "nero_radial_hole_from_mouth": 3.5,
+    "nero_radial_hole_lead_side_material": 2.95,
+    "nero_radial_m3_print_pilot_d": 2.7,
+    "nero_stop_land_height": 0.4,
+    "nero_stop_land_outer_d": 44.5,
+    "v1_axial_offset_vendor_flange_to_hand2": 22.4,
+    "v1_core_thickness": 10.0
+  },
+  "plug_fix_scope_gate": {
+    "added_v2_capsule_lead_vertices": 0,
+    "edit_scope": "nero_male_plug_only_below_z_minus_3.49_mm",
+    "hand2_capsule_lead_vertices_preserved": 21896,
+    "nero_d_flat_envelope_maximum_error_mm": 7.629394538355427e-07,
+    "nero_d_flat_envelope_mm": {
+      "max_x": 18.0,
+      "max_y": 19.799999237060547,
+      "min_x": -19.799999237060547,
+      "min_y": -19.799999237060547
+    },
+    "nero_plug_length_after_mm": 7.8,
+    "nero_plug_length_before_mm": 5.8,
+    "nero_radial_hole_exit_angles_deg": [
+      45.0,
+      135.0,
+      225.0,
+      315.0
+    ],
+    "nero_radial_hole_lead_side_material_after_mm": 2.95,
+    "nero_radial_hole_lead_side_material_before_mm": 0.95,
+    "pre_fix_reference_path": "reference/core_universal_pre_plug_fix_reference.stl",
+    "pre_fix_reference_sha256": "9577dd71923bf183a8bf6531940ec1fa611ca4f9af5c8f03259593665ad17bf0",
+    "removed_v1_side_lug_vertices": [
+      [
+        -16.0,
+        -35.0,
+        3.0
+      ],
+      [
+        -16.0,
+        -28.0,
+        3.0
+      ],
+      [
+        16.0,
+        -35.0,
+        3.0
+      ],
+      [
+        16.0,
+        -28.0,
+        3.0
+      ]
+    ],
+    "unchanged_body_hand2_accessory_hausdorff_mm": 0.0,
+    "unchanged_body_hand2_accessory_vertex_count": 23356,
+    "v1_core_path": "hardware/adapters/nero_hand2_beta1_v1/generated/visual/core_right.stl",
+    "v1_core_sha256": "d636648b8d44c0a06396f227fe8ce9c0dc05015bed7edbc397bbd9596c341b0f"
+  },
+  "powered_motion_authorized": false,
+  "repeatability_gate": {
+    "artifacts": {
+      "print/core_universal.stl": {
+        "identical": true,
+        "sha256": "64abd1a384f44abffbc20991f862d31c66a804502ec8bf89920f992e2d62673b"
+      },
+      "reference/hand_plate_reference.stl": {
+        "identical": true,
+        "sha256": "1d496ff7b11d5e5ac2a8b46a7e797ebcaaecb20056efc79e6b6d1081ec3a6573"
+      }
+    },
+    "enabled": true
+  },
+  "schema": "wujihand.nero_hand2_beta1_universal_metal_v2_generation_result.v2",
+  "source": "hardware/adapters/nero_hand2_beta1_universal_metal_v2/nero_hand2_beta1_universal_metal_v2.scad",
+  "source_sha256": "d99199d752bc7e56f05ac7a72aa790be5f52f26a22a48e88a0d7a51fffb39c97",
+  "status": "metal_intent_candidate_print_test_first",
+  "unresolved_physical_gates": [
+    "current_machine_cup_inner_diameter_roundness_and_thin_stop_shoulder_metrology",
+    "both_hand2_plate_capsules_m3_thread_depth_and_flat_head_fastener_compatibility",
+    "metal_material_process_fillet_fea_fatigue_and_fastener_torque",
+    "accessory_interface_load_case_and_final_camera_bracket",
+    "cable_bend_clearance_on_unpowered_real_hardware"
+  ]
+}

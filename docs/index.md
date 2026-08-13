@@ -99,6 +99,10 @@ Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真
 
 验证文档是带日期的历史证据。其通过结论只适用于文中锁定的代码、配置、资产和环境。
 
+### 2026-08-13
+
+- [NERO—Hand2 Beta1 通用薄型金属芯 V2 定版与验证](validation/2026-08-13-nero-hand2-beta1-universal-metal-v2.md)
+
 ### 2026-08-06
 
 - [确定性 ROS2—Isaac—GUI Qualification](validation/2026-08-06-deterministic-ros-isaac-gui-qualification.md)
