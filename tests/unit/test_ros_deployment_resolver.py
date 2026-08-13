@@ -17,7 +17,8 @@ BANANA_BOWL = (
 LOCAL = ROOT / "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
 TFRAME_SELF_COLLISION = (
     ROOT / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 
 
@@ -63,9 +64,10 @@ def test_ros_resolver_closes_session_owned_self_collision_profile() -> None:
     )
 
     assert resolved.self_collision_profile_id == (
-        "isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1"
+        "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1"
     )
     assert resolved.self_collision_profile_path == (
-        "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1.yaml"
+        "configs/profiles/"
+        "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1.yaml"
     )
     assert len(resolved.self_collision_profile_sha256 or "") == 64

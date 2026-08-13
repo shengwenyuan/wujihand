@@ -18,12 +18,6 @@ from wujihand.adapters.simulation.nero_hand2_self_collision import (
 ROOT = Path(__file__).parents[2]
 PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v1.yaml"
 FILTER_PROFILE = ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v1.yaml"
-V8_3_PROFILE = (
-    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_qualification_v2026_8_3_v1.yaml"
-)
-V8_3_FILTER_PROFILE = (
-    ROOT / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1.yaml"
-)
 V8_3_CONTACT_TARGET_PROFILE = (
     ROOT / "configs/profiles/isaac_nero_hand2_self_collision_contact_target_v2026_8_3_v1.yaml"
 )
@@ -35,9 +29,13 @@ GRIPPER_FLANGE_Q7_SWEEP = (
     ROOT
     / "configs/profiles/isaac_nero_hand2_self_collision_q7_sweep_gripper_flange_v2026_8_3_v1.yaml"
 )
-GRIPPER_FLANGE_FILTER = (
-    ROOT
-    / "configs/profiles/isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_v2026_8_3_v1.yaml"
+COLLISION_PROXY_PROFILE = (
+    ROOT / "configs/profiles/"
+    "isaac_nero_hand2_self_collision_qualification_gripper_flange_collision_proxy_v1.yaml"
+)
+COLLISION_PROXY_FILTER = (
+    ROOT / "configs/profiles/"
+    "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1.yaml"
 )
 
 
@@ -88,23 +86,6 @@ def test_self_collision_filter_freezes_only_observed_nero_pair() -> None:
     assert pair.first_instance == pair.second_instance == "arm"
 
 
-def test_v8_3_self_collision_profiles_include_fixed_attachment_interfaces() -> None:
-    qualification = load_nero_hand2_self_collision_qualification_profile(V8_3_PROFILE)
-    profile = load_nero_hand2_self_collision_filter_profile(V8_3_FILTER_PROFILE)
-
-    assert qualification.profile_id.endswith("v2026_8_3_v1")
-    assert dict(qualification.collision_mesh_contract)["hand2_source"].endswith(
-        "8271644a78d69ed9a4adcf9165d882c64ad33dfa"
-    )
-    assert profile.profile_id.endswith("v2026_8_3_v1")
-    assert len(profile.filtered_pairs) == 3
-    wrist_pairs = profile.filtered_pairs[1:]
-    assert {pair.sides for pair in wrist_pairs} == {("left",), ("right",)}
-    assert all(
-        (pair.first_instance, pair.second_instance) == ("arm", "hand") for pair in wrist_pairs
-    )
-
-
 def test_v8_3_contact_target_profile_pins_two_finite_q20_vectors() -> None:
     profile = load_nero_hand2_self_collision_contact_target_profile(V8_3_CONTACT_TARGET_PROFILE)
 
@@ -140,23 +121,22 @@ def test_gripper_flange_q7_sweep_covers_wrist_axes_and_45_degree_j7() -> None:
     assert waypoints["j7_negative_45_deg"]["joint7"] == pytest.approx(-0.7853981633974483)
 
 
-def test_gripper_flange_filter_contains_only_observed_nero_internal_pairs() -> None:
-    profile = load_nero_hand2_self_collision_filter_profile(GRIPPER_FLANGE_FILTER)
+def test_collision_proxy_profiles_keep_only_the_intrinsic_link5_link7_filter() -> None:
+    qualification = load_nero_hand2_self_collision_qualification_profile(COLLISION_PROXY_PROFILE)
+    profile = load_nero_hand2_self_collision_filter_profile(COLLISION_PROXY_FILTER)
 
-    assert profile.profile_id.endswith("gripper_flange_v2026_8_3_v1")
-    assert len(profile.filtered_pairs) == 3
-    assert all(
-        pair.first_instance == pair.second_instance == "arm"
-        for pair in profile.filtered_pairs
+    assert qualification.profile_id.endswith("gripper_flange_collision_proxy_v1")
+    assert dict(qualification.collision_mesh_contract)["nero_isaac_asset"].endswith(
+        "a077dc4e47033784326e9701f106f0a190bd1bc17b1bd081df2a3a3ac83286b6"
     )
-    assert {
-        frozenset((pair.first_rigid_body_name, pair.second_rigid_body_name))
-        for pair in profile.filtered_pairs
-    } == {
-        frozenset(("link5", "link7")),
-        frozenset(("link5", "gripper_flange")),
-        frozenset(("link6", "gripper_flange")),
-    }
+    assert profile.profile_id.endswith("gripper_flange_collision_proxy_v1")
+    assert len(profile.filtered_pairs) == 1
+    pair = profile.filtered_pairs[0]
+    assert pair.first_instance == pair.second_instance == "arm"
+    assert (pair.first_rigid_body_name, pair.second_rigid_body_name) == (
+        "link5",
+        "link7",
+    )
 
 
 def test_self_collision_filter_rejects_unexplained_and_duplicate_rules(

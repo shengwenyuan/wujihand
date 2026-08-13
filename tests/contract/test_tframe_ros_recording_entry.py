@@ -14,15 +14,6 @@ BASELINE = (
     "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
 )
 TFRAME = "configs/deployments/isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
-TFRAME_SELF_COLLISION = (
-    "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
-)
-TFRAME_GRIPPER_FLANGE_SELF_COLLISION = (
-    "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_triview_q54_"
-    "self_collision_v2026_8_3_v1.yaml"
-)
 TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION = (
     "configs/deployments/"
     "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
@@ -58,83 +49,24 @@ def test_tframe_entry_reuses_the_validated_ros_recording_graph() -> None:
     assert tframe.deployment.tracking_setup.qualification_status == "pending"
 
 
-def test_self_collision_entry_only_changes_session_runtime_policy() -> None:
+def test_collision_proxy_entry_reuses_control_graph_and_enables_current_scene_policy() -> None:
     resolver = RosDeploymentResolver(ROOT)
     baseline = resolver.resolve(TFRAME, local_binding=LOCAL, verify_artifacts=False)
-    enabled = resolver.resolve(
-        TFRAME_SELF_COLLISION,
-        local_binding=LOCAL,
-        verify_artifacts=False,
-    )
-
-    assert enabled.deployment.processes == baseline.deployment.processes
-    assert enabled.deployment.sources == baseline.deployment.sources
-    assert enabled.deployment.control_bindings == baseline.deployment.control_bindings
-    assert enabled.route_plan.routes == baseline.route_plan.routes
-    assert baseline.self_collision_profile_path is None
-    assert enabled.self_collision_profile_id == (
-        "isaac_nero_hand2_self_collision_filtered_pairs_v2026_8_3_v1"
-    )
-    assert enabled.deployment_hash != baseline.deployment_hash
-
-
-def test_gripper_flange_entry_only_replaces_scene_owned_flange_facts() -> None:
-    resolver = RosDeploymentResolver(ROOT)
-    previous = resolver.resolve(
-        TFRAME_SELF_COLLISION,
-        local_binding=LOCAL,
-        verify_artifacts=False,
-    )
-    current = resolver.resolve(
-        TFRAME_GRIPPER_FLANGE_SELF_COLLISION,
-        local_binding=LOCAL,
-        verify_artifacts=False,
-    )
-
-    assert current.deployment.processes == previous.deployment.processes
-    assert current.deployment.sources == previous.deployment.sources
-    assert current.deployment.control_bindings == previous.deployment.control_bindings
-    assert current.deployment.node_bindings == previous.deployment.node_bindings
-    assert current.deployment.qos_profile == previous.deployment.qos_profile
-    assert current.route_plan.routes == previous.route_plan.routes
-    assert current.control_profile == previous.control_profile
-    assert current.session.session.dataset_profile == previous.session.session.dataset_profile
-    assert current.session.assembly.assembly_id == (
-        "nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_candidate_v2026_8_3_v1"
-    )
-    assert len(current.session.instances) == 8
-    assert current.session.instance("nero_left").asset.asset_id == (
-        "agilex_nero_gripper_flange"
-    )
-    assert current.session.instance("nero_right").binding.binding_id == (
-        "agilex_nero_gripper_flange_f6642ce0_isaac_6_0_1_v1"
-    )
-    assert current.self_collision_profile_id == (
-        "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_v2026_8_3_v1"
-    )
-
-
-def test_collision_proxy_entry_only_replaces_the_arm_collision_representation() -> None:
-    resolver = RosDeploymentResolver(ROOT)
-    previous = resolver.resolve(
-        TFRAME_GRIPPER_FLANGE_SELF_COLLISION,
-        local_binding=LOCAL,
-        verify_artifacts=False,
-    )
     current = resolver.resolve(
         TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION,
         local_binding=LOCAL,
         verify_artifacts=False,
     )
 
-    assert current.deployment.processes == previous.deployment.processes
-    assert current.deployment.sources == previous.deployment.sources
-    assert current.deployment.control_bindings == previous.deployment.control_bindings
-    assert current.deployment.node_bindings == previous.deployment.node_bindings
-    assert current.deployment.qos_profile == previous.deployment.qos_profile
-    assert current.route_plan.routes == previous.route_plan.routes
-    assert current.control_profile == previous.control_profile
-    assert current.session.session.dataset_profile == previous.session.session.dataset_profile
+    assert current.deployment.processes == baseline.deployment.processes
+    assert current.deployment.sources == baseline.deployment.sources
+    assert current.deployment.control_bindings == baseline.deployment.control_bindings
+    assert current.deployment.node_bindings == baseline.deployment.node_bindings
+    assert current.deployment.qos_profile == baseline.deployment.qos_profile
+    assert current.route_plan.routes == baseline.route_plan.routes
+    assert current.control_profile == baseline.control_profile
+    assert current.session.session.dataset_profile == baseline.session.session.dataset_profile
+    assert baseline.self_collision_profile_path is None
     assert current.session.assembly.assembly_id == (
         "nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_collision_proxy_v1"
     )
@@ -145,6 +77,7 @@ def test_collision_proxy_entry_only_replaces_the_arm_collision_representation() 
     assert current.self_collision_profile_id == (
         "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1"
     )
+    assert current.deployment_hash != baseline.deployment_hash
 
 
 def test_tframe_record_policy_keeps_task_scene_outside_the_session() -> None:

@@ -28,24 +28,15 @@ TFRAME_POLICY = (
 TFRAME_DEPLOYMENT = (
     ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
 )
-TFRAME_SELF_COLLISION_POLICY = (
+TFRAME_PROXY_POLICY = (
     ROOT / "configs/qualifications/"
-    "isaac_nero_hand2_tframe_self_collision_record_chain_v2026_8_3_v1.yaml"
+    "isaac_nero_hand2_tframe_gripper_flange_collision_proxy_"
+    "self_collision_record_chain_v1.yaml"
 )
-TFRAME_SELF_COLLISION_DEPLOYMENT = (
+TFRAME_PROXY_DEPLOYMENT = (
     ROOT / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_triview_q54_self_collision_v2026_8_3_v1.yaml"
-)
-TFRAME_GRIPPER_FLANGE_SELF_COLLISION_POLICY = (
-    ROOT
-    / "configs/qualifications/"
-    "isaac_nero_hand2_tframe_gripper_flange_self_collision_record_chain_v2026_8_3_v1.yaml"
-)
-TFRAME_GRIPPER_FLANGE_SELF_COLLISION_DEPLOYMENT = (
-    ROOT
-    / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_triview_q54_"
-    "self_collision_v2026_8_3_v1.yaml"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 
 
@@ -203,18 +194,8 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
             },
         ),
         (
-            TFRAME_SELF_COLLISION_POLICY,
-            TFRAME_SELF_COLLISION_DEPLOYMENT,
-            "glove",
-            "live_teleoperation",
-            {
-                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
-                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
-            },
-        ),
-        (
-            TFRAME_GRIPPER_FLANGE_SELF_COLLISION_POLICY,
-            TFRAME_GRIPPER_FLANGE_SELF_COLLISION_DEPLOYMENT,
+            TFRAME_PROXY_POLICY,
+            TFRAME_PROXY_DEPLOYMENT,
             "glove",
             "live_teleoperation",
             {
