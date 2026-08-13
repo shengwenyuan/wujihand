@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guard Hand2 Hardware Boundary"
+  short_description: "Keep Hand2 real hardware isolated from simulation"
+  default_prompt: "Use $guard-hand2-hardware-boundary to design or review this Hand2 real-hardware change with strict simulator separation and the project 85% response-rate floor."

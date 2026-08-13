@@ -1,28 +1,35 @@
 # 015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划
 
-- 状态：设计完成，待实施；当前不授权真机运动、参数写入或固件升级
-- 日期：2026-08-11
+- 状态：实施中；右手 H0–H3 已在限定台架范围通过，H4、左手和真实遥操作尚未开始
+- 日期：2026-08-11 至 2026-08-13
 - 官方软件基线：Wuji SDK / Wuji Studio / Wuji CLI `2026.8.3`
 - 设备范围：左右 Wuji Hand2 Beta1；先单手、后双手，先独立台架、后 NERO
-- 当前真机证据：双手已到货，但本仓库仍为零真机资格验证、零 Sim→Real 结论
+- 当前真机证据：双手已到货；右手 H0/H1 通过，H2 通信项按项目 `85%` 下限关闭，H3 五个 S1 轴串行自动检查与人工观察通过；长期热平衡、H4、左手和 Sim→Real 尚未关闭
 - 后续预埋：Glove + Tracker + 双 NERO + 双 Hand2 真机遥操作与数据采集；本计划不实现该业务链
 - 依据：2026-08-11 通过官方 `wuji-docs` MCP 读取的 Hand2、SDK、Studio、CLI 文档
+- 实施边界：[guard-hand2-hardware-boundary](../skills/guard-hand2-hardware-boundary/SKILL.md)
+- 实施状态与证据：[docs/real-hardware/](real-hardware/index.md)
 
 ## 0. 结论
 
 真机调试应继续留在当前仓库，但不能并入 Isaac runner，也不能给现有仿真入口增加含糊的
 `--real` 开关。正确关系是：
 
-1. 复用 Glove source、ROS 2 typed envelope、canonical hand observation、retarget、q20 layout 和
-   `JointCommandSupervisor`；
-2. 仿真和真机分别实现独立 execution port、adapter、安全状态机、配置和 Deployment；
-3. 同一个 control tick 只生成一份不可变的 supervised q20 decision，再由明确选择的 backend 执行；
-4. 真机 executor 是唯一命令写入者，Studio、CLI、诊断脚本和 recorder 不得成为第二个 command owner；
-5. 真机 readback、通信、温度、电压、错误码等证据独立保存，只向共同录制层投影可比较字段；
-6. 当前仿真主线和历史 Deployment 保持不变，真机链从独立、默认只读的入口开始。
+1. 当前设备 bring-up 先建立可独立拆出的 `wujihand-hand2-hardware` 内部 package，不依赖
+   Glove、ROS2、Isaac、NERO 或 dataset；
+2. 后续真实遥操作阶段再复用 Glove source、ROS2 typed envelope、canonical hand observation、
+   retarget、q20 layout 和 `JointCommandSupervisor`；
+3. 仿真和真机分别实现独立 execution port、adapter、安全状态机、配置和 Deployment；
+4. 真机按 host/device timestamp、sequence 和 command correlation 组织事件，不伪造或复用仿真
+   control/physics/render tick 对齐；
+5. 真机 executor 是唯一命令写入者，Studio、CLI、诊断脚本和 recorder 不得成为第二个 command owner；
+6. 当前 bring-up 只写独立 hardware journal、diagnostics 和 qualification receipt，不接入仿真
+   recorder；
+7. 当前仿真主线和历史 Deployment 保持不变，真机链从独立、默认只读的入口开始。
 
-完成本计划不等于完成双臂真机采集。它先建立 Hand2 真机可信执行后端；未来再把该后端与真实
-NERO、Tracker、Glove、D405 和 dataset gate 组合。
+当前设备调试的收口点是左右 Hand2 独立 bring-up，不是双臂真机采集。之后另立 ROS2 + Glove
+真实 Hand2 遥操作需求；该链稳定后，才评估复用现有采集基础设施并与真实 NERO、Tracker、D405
+和 dataset gate 组合。
 
 ## 1. 官方软件与推荐测试方法
 
@@ -67,6 +74,9 @@ Wuji CLI 只读发现/握手
   在线关节 Gate。
 - 位置单位是 rad，速度是 rad/s，effort 是 A；不得与 Isaac drive 参数混用。
 - SDK 8.3 的 joint diagnostics 和 communication summary 应进入 preflight 与运行证据。
+- 当前右手固定栈采用 `85%`（含）作为项目 response-rate 下限；低于它才阻断，timeout/transport/
+  `comm_diag` counter 保留 receipt 但不独立叠加 Gate。该值不是 Wuji 官方指标，软件、硬件、网络或
+  side 变化后必须重新评估。
 - Studio 的 Hand2 共享连接是可读写的，多客户端可能相互覆盖命令或参数；正式 SDK 运动测试前
   必须关闭 Studio 的写入会话并确认单一 command owner。
 - CLI 若遇到 Studio 占有直接会话，可能退化为只读；这可用于观察，但不能当作 SDK 写入已被隔离的
@@ -94,91 +104,91 @@ Wuji CLI 只读发现/握手
 
 ## 3. 与现有仿真主线的架构关系
 
-### 3.1 唯一控制核心、两个执行后端
+### 3.1 当前独立 bring-up，未来复用控制核心
 
 ```mermaid
 flowchart LR
-    A["Glove source / replay"] --> B["ROS 2 HandObservationEnvelope"]
-    B --> C["CanonicalHandObservation"]
-    C --> D["SDK 8.3 retarget"]
-    D --> E["JointCommandSupervisor"]
-    E --> F["不可变 supervised q20 decision"]
-    F --> G["Isaac execution port"]
-    F --> H["Hand2 hardware safety gate"]
-    H --> I["Wuji SDK execution port"]
-    G --> J["backend-neutral control/feedback trace"]
-    I --> J
-    I --> K["hardware-only diagnostics/logs"]
-    J --> L["ROS bag / dataset recorder"]
-    K --> L
+    A["当前：CLI / Studio / bench script"] --> B["可拆分 Hand2 hardware package"]
+    B --> C["SDK state / diagnostics / command"]
+    C --> D["hardware event journal + receipt"]
+    E["未来：Glove ROS2 source"] --> F["CanonicalHandObservation"]
+    F --> G["retarget + JointCommandSupervisor"]
+    G --> H["supervised q20 decision"]
+    H --> I["thin integration shim"]
+    I --> B
+    H --> J["Isaac execution port"]
+    D -. "更后续评估复用" .-> K["real teleop recorder"]
 ```
 
-必须复用：
+当前 bring-up 必须保持：
+
+- SDK adapter、readback、diagnostics、安全状态机和 journal 位于独立内部 package；
+- package 只认识真实设备协议、host/device 时间、sequence、command correlation 和硬件事件；
+- package 不导入 ROS2、canonical controller、Isaac、仿真 Session 或 dataset；
+- 设备探针和台架脚本在没有 Isaac、Glove、Tracker、NERO、D405 时可以完整运行。
+
+未来真实遥操作必须复用：
 
 - `CanonicalHandObservation` 及 ROS↔canonical 转换；
 - 当前 Glove source 的 lifecycle、identity、sequence、timestamp 和 freshness 语义；
 - SDK 8.3 retarget 与左右 q20 layout；
-- `JointCommandSupervisor` 的有限值、关节范围、速率、stale、hold/disarm 语义；
-- replay、qualification trace 和现有 recording/checksum 基础设施。
+- `JointCommandSupervisor` 的有限值、关节范围、速率、stale、hold/disarm 语义。
+
+上述复用通过薄 integration shim 完成，不把 ROS2/application 类型带进 hardware package。现有
+recording/checksum 只能在真实遥操作事件稳定后按组件逐项评估；当前 bring-up 不复用其 runtime。
 
 必须隔离：
 
-- Isaac articulation、physics tick、contact、drive `kp/kv`；
+- Isaac articulation、control/physics/render tick、contact、drive `kp/kv`；
 - Hand2 SDK connection、enable/disable、MIT `kp/kd`、effort limit、diagnostics 和 watchdog；
 - 仿真 reset 与真机 fault/origin/estop；
 - 仿真 Asset/Binding 与真机 serial/IP/firmware/origin；
 - 仿真 qualification 与真机 qualification 的通过结论。
 
-当前 `GloveHand2SimulationController` 中的 canonical→retarget→supervisor 逻辑应中性化为唯一
-Hand2 application controller；允许保留兼容 wrapper，不允许复制一份长期分叉的
-`GloveHand2RealController`。当前 `ports/hand_command.py` 含有历史右手 layout 假设，不能直接扩展为
-双手真机 port；应先建立显式 side + layout revision 的新 contract。
+当前 bring-up 不以重构 `GloveHand2SimulationController` 为前置条件。进入真实遥操作阶段时，再把
+其中 canonical→retarget→supervisor 逻辑中性化为唯一 Hand2 application controller；允许保留兼容
+wrapper，不允许复制长期分叉的 `GloveHand2RealController`。当前 `ports/hand_command.py` 含历史
+右手 layout 假设，不能直接扩展为双手真机 port；后续 integration shim 必须使用显式 side + layout
+revision contract。
 
 ### 3.2 目标目录结构
 
 以下为实施目标，不表示这些文件已存在：
 
 ```text
-src/wujihand/
-  domain/
-    hand2_control.py                 # backend-neutral q20 decision/feedback
-    hand2_hardware.py                # 无 SDK import 的身份、诊断与安全状态值对象
-  ports/
-    hand2_execution.py               # 仿真/真机共同的最小执行契约
-    hand2_hardware.py                # readback、diagnostics、arm/disable/estop 契约
-  application/
-    teleoperation/
-      glove_hand2.py                 # 中性化后的唯一 retarget + supervisor controller
-    qualification/
-      hand2_hardware.py              # H0-H5 Gate 与报告编排
-  adapters/
-    simulation/
-      hand2_execution.py             # 包裹现有 Isaac 执行实现
-    hardware/
-      wuji_hand2/
-        __init__.py
-        sdk_client.py                # SdkManager/connect 生命周期
-        identity.py                  # SN/IP/side/hw/firmware 校验
-        mapping.py                   # nid <-> canonical q20，拒绝位置猜测
-        readonly.py                  # joint_states/diagnostics/comm_diag
-        executor.py                  # 单一 writer、watchdog、enable/disable/estop
-        evidence.py                  # SDK/device log 与只读 snapshot
-  runtime/
-    hardware/
-      wuji_hand2_preflight.py
-      wuji_hand2_bench.py
-      wuji_hand2_compare.py
+packages/
+  wujihand-hand2-hardware/
+    pyproject.toml                    # 独立依赖和测试边界
+    src/wujihand_hand2_hardware/
+      __init__.py
+      api.py                          # 小而稳定的公开 facade
+      types.py                        # identity/state/diagnostic/command/event
+      sdk_client.py                   # SdkManager/connect 生命周期
+      mapping.py                      # nid/label 与 SDK 20 关节协议
+      readonly.py                     # joint_states/diagnostics/comm_diag/logs
+      safety.py                       # 状态机、watchdog、fault Gate
+      executor.py                     # 单一 writer、enable/disable/estop
+      journal.py                      # bring-up 事件与 receipt；不依赖 dataset
+    tests/
+      unit/
+      contract/
+
+src/wujihand/                         # 后续真实 teleop integration 才修改
+  domain/hand2_control.py             # backend-neutral q20 decision/feedback
+  ports/hand2_execution.py
+  adapters/hardware/
+    wuji_hand2_package.py             # package <-> domain/port 薄转换
 
 ros2/
-  wujihand_interfaces/msg/
+  wujihand_interfaces/msg/            # 后续 REAL_TELEOP_INTEGRATION
     Hand2ControlTrace.msg            # 只发布，不作为外部无监督 command input
     Hand2HardwareState.msg
     Hand2HardwareDiagnostics.msg
-  wujihand_ros2/wujihand_ros2/nodes/
-    hand2_hardware_executor.py        # 唯一 SDK command owner
-  wujihand_ros2/launch/
-    hand2_real_bench.launch.py
-    hand2_sim_real_compare.launch.py
+  wujihand_hand2_hardware/           # 单独 ROS package，包裹 SDK package
+    wujihand_hand2_hardware/
+      executor_node.py               # 唯一 SDK command owner
+    launch/
+      hand2_real_bench.launch.py
 
 tools/
   preflight_wuji_hand2_hardware.py
@@ -189,10 +199,15 @@ tools/
 依赖方向必须通过 import contract test 固定：
 
 ```text
-domain / ports / application  -X-> Isaac / rclpy / wuji_sdk
-simulation adapter            -X-> wuji_sdk
-hardware adapter              -X-> Isaac / USD / simulation clock
+wujihand_hand2_hardware       -X-> wujihand / rclpy / Isaac / USD / dataset
+main-repo integration shim    -> wujihand_hand2_hardware + domain/ports
+ROS hardware package          -> integration shim + wujihand_interfaces
+simulation adapter            -X-> wuji_sdk / hardware package
 ```
+
+hardware package 仅依赖 Python 基础库、`wuji_sdk` 和自身值对象；不解析主仓库五层仿真配置。这样
+package 可在未来连同 contract tests 独立发布或迁出，而 retarget/canonical/supervisor 仍由主仓库保持
+唯一实现。
 
 ### 3.3 配置与 Deployment 结构
 
@@ -217,11 +232,13 @@ configs/local/                                  # Git 忽略
 
 portable 配置只写 schema、SDK/API/layout 和安全策略；serial、实际 IP、MAC、固件 readback、硬件版、
 零位状态、校准 URDF 本地路径等写入 `configs/local/` 和 qualification receipt。Glove 的 Studio 8.3
-用户校准 URDF 只在进入 teleoperation Gate 时检查 side/hash，不是 Hand2 真机模型，也不是 H0/H1
+用户校准 URDF 只在进入后续 teleoperation Gate 时检查 side/hash，不是 Hand2 真机模型，也不是 H0/H1
 只读连接的依赖。
 
-Deployment 必须显式声明 `backend: simulation` 或 `backend: wuji_hand2_hardware`，且 schema 禁止同时
-出现 Isaac drive 与硬件 MIT 参数。禁止自动发现后选择目标、禁止从仿真配置推导真机参数。
+hardware package 接收已解析的 typed config，不导入主仓库 resolver。当前 bring-up CLI 直接读取专用
+hardware/local profile；进入 ROS2 teleop 后，Deployment 才显式声明
+`backend: wuji_hand2_hardware`。其 schema 禁止出现 Isaac drive 字段；禁止自动发现后选择目标、禁止从
+仿真配置推导真机参数。
 
 ## 4. 分阶段实施计划
 
@@ -241,19 +258,19 @@ Deployment 必须显式声明 `backend: simulation` 或 `backend: wuji_hand2_har
 
 通过标准：serial/IP/side/firmware 唯一且一致；网络无地址冲突；无非预期写入；日志可导出。
 
-### H1：控制核心中性化与无设备验证
+### H1：内部 hardware package 与无设备验证
 
-目标：先证明新增硬件边界不会污染已通过的 Isaac 主线。
+目标：建立不依赖主仓库 application/runtime 的 SDK 依赖岛，并证明它不会触达 Isaac 主线。
 
-1. 用固定 canonical fixture 冻结当前左右 q20 decision 作为重构 oracle；
-2. 中性化 `GloveHand2SimulationController`，输出不可变 supervised decision；
-3. 新建 execution/hardware ports 和 SDK adapter 骨架；
-4. 用 fake SDK 覆盖断连、少关节、错误 side、错 serial、NaN、stale、fault、超温/欠压、通信丢包；
-5. 建立 `disconnected -> read_only -> armed -> enabled -> faulted/estopped` 状态机；
-6. 验证未显式 arm 时永不调用 `enable` 或 `joint_command().send()`；
-7. 跑完现有仿真、Glove、ROS 2 record 回归，历史 Deployment 输出不变。
+1. 初始化 `packages/wujihand-hand2-hardware` 的独立 `pyproject.toml`、facade、值对象和 tests；
+2. 建立 SDK client、`nid`/label mapping、read-only、safety、executor 和 event journal 边界；
+3. 用 fake SDK 覆盖断连、少关节、错误 side、错 serial、NaN、stale、fault、超温/欠压、通信丢包；
+4. 建立 `disconnected -> read_only -> armed -> enabled -> faulted/estopped` 状态机；
+5. 验证未显式 arm 时永不调用 `enable` 或 `joint_command().send()`；
+6. 建立 dependency/import Gate，拒绝 `wujihand`、ROS、Isaac、USD、dataset import；
+7. 验证 package 的 read-only CLI 与测试可在无 Isaac、无 ROS、无设备环境运行。
 
-通过标准：sim-only 环境无需安装 `wuji_sdk`；hardware-only 环境无需 Isaac；现有仿真入口行为不变。
+通过标准：hardware package 可独立构建/测试；只依赖 `wuji_sdk` 和自身类型；本阶段不修改仿真代码。
 
 ### H2：SDK 8.3 单手只读资格验证
 
@@ -267,8 +284,8 @@ Deployment 必须显式声明 `backend: simulation` 或 `backend: wuji_hand2_har
 6. 测试拔除网络/进程退出后的可控断连，不做运行中热插拔电源；
 7. 导出 SDK/设备日志和机器环境 snapshot。
 
-通过标准：左右分别连续稳定读回；无未知错误；通信摘要在冻结门槛内；退出后连接释放；零写入。
-门槛数值在首轮 readback 后冻结，不能凭仿真或经验预填。
+通过标准：左右分别连续稳定读回；无未知错误；response rate 不低于冻结门槛；退出后连接释放；
+零写入。当前仅右手完成，冻结门槛为项目 `85%`；通信计数作为观测证据。左手不得继承该结论。
 
 ### H3：单手、单关节、有界运动
 
@@ -287,45 +304,47 @@ command owner。
 
 通过标准：方向/单位/零位无歧义；超时和故障可靠停止；无参数漂移；每个动作有 receipt 和视频。
 
-### H4：单手 20 关节脚本与数字孪生对照
+右手实施状态（2026-08-13）：限定 `right-s1-flexion-v1` 已完成 thumb/index/middle/ring/pinky 五个
+S1 轴串行往返，自动检查与操作者可见性观察均通过；证据与适用边界见
+[`docs/real-hardware/2026-08-12-wuji-hand2-right-h3-development.md`](real-hardware/2026-08-12-wuji-hand2-right-h3-development.md)。
+这不等于 H4、S2/S3/S4、多关节同步、闭合抓取或负载通过。
 
-目标：验证一只手的全关节映射，不引入 Glove 和 NERO。
+### H4：单手 20 关节独立台架脚本
 
-- 执行张开、分指、逐指屈伸和四组对指的低速脚本；
-- 同步驱动/回放 Isaac Hand2 8.3，比较 commanded、supervised、sim observed 和 real observed q20；
+目标：验证一只手的全关节映射，不引入 Glove、ROS2、Isaac、NERO 或 dataset。
+
+- 用 hardware package 自带脚本执行张开、分指、逐指屈伸和四组对指的低速命令；
+- 只比较 attempted command、SDK result 和真实 observed state，不同步驱动数字孪生；
 - 检查每个 `nid`、关节方向、范围、跟踪误差、迟滞、抖动、温升与通信健康；
-- 左右手分别验收；不把镜像关系当作相同 mapping 的证据。
+- 左右手分别验收；不把镜像关系当作相同 mapping 的证据；
+- 全程写 hardware event journal、diagnostics 和 receipt，不启动 rosbag/episode recorder。
 
-通过标准：无串指/错向；跟踪误差和抖动门槛由安全样本冻结；诊断无持续恶化。
+通过标准：无串指/错向；跟踪误差和抖动门槛由安全样本冻结；诊断无持续恶化；hardware package
+可以在无主仓库仿真 runtime 的环境独立复验。H0-H4 通过即表示“设备调试阶段”收口。
 
-### H5：Glove 单手、再双手遥操作
+### T0：后续 ROS2 真机集成（另立需求）
 
-目标：在 NERO 不运动的条件下验证真实 Hand2 遥操作。
+目标：复用现有 ROS2 输入流程，但不复用仿真 tick 和 executor。
 
-- 复用当前 Studio 8.3 calibrated 用户左右 URDF、SDK 8.3 retarget 和 canonical pipeline；
+- 建立 main-repo integration shim 和独立 `wujihand_hand2_hardware` ROS package；
+- 中性化唯一 canonical→retarget→supervisor controller，不复制 real-only controller；
+- ROS hardware executor 成为唯一 SDK command owner；
+- 使用 `INPUT_OBSERVED`、`DECISION_PRODUCED`、`COMMAND_ATTEMPTED`、`COMMAND_ACCEPTED/FAILED`、
+  `HARDWARE_STATE_OBSERVED`、`DIAGNOSTIC_OBSERVED` 和 `SAFETY_TRANSITION` 等事件；
+- 事件按 host/device timestamp、sequence 和 command correlation 关联，不填 simulation tick；
+- 验证默认仿真入口继续零真机发现和写入。
+
+### T1：后续 Glove 单手、再双手遥操作（另立需求）
+
+- 复用 Studio 8.3 calibrated 用户左右 URDF、SDK 8.3 retarget 和 canonical pipeline；
 - preflight 校验用户、side、URDF hash、Glove serial、Hand2 serial、SDK/firmware 和 q20 layout；
-- 先单手完成张开、握拳、逐指和四组对指；再做双手并发；
-- 保留 input→retarget→supervisor→attempted command→ack/readback 的完整 trace；
-- stale、低 confidence、网络异常或任一硬件 Gate 失败时 hold/disable，禁止继续发送旧命令；
-- NERO 保持断电或由物理隔离确保不运动。
+- 先单手完成张开、握拳、逐指和四组对指，再做双手并发；
+- stale、低 confidence、网络异常或任一硬件 Gate 失败时 hold/disable；
+- NERO 保持断电或物理隔离；不在该阶段引入仿真 recorder 或训练 episode。
 
-通过标准：五指和对指映射正确；无持续抖动、错误镜像或跨手串扰；双手通信和控制周期稳定。
+### D0：未来真实遥操作数据采集（仅预埋）
 
-### H6：真实 NERO 集成前的 Sim→Real 收口
-
-目标：把 Hand2 真机后端标记为可被上层组合，但仍不直接开始数据采集。
-
-- 固定左右手硬件 compatibility receipt；
-- 对同一 Glove/replay 输入比较仿真和真机 q20，解释而非掩盖机械/软皮/零位差异；
-- 验证仿真、真机、sim-real compare 三个入口互不自动发现或误写设备；
-- 确认真实 NERO executor 有独立安全 Gate，Hand2 通过不授权机械臂运动；
-- 产出面向上层的稳定 `Hand2ExecutionPort` 和 ROS 2 observed/diagnostic topics。
-
-通过标准：真机 Hand2 可以作为显式 backend 被组合；默认仿真入口保持零真机访问。
-
-### H7：未来真实遥操作数据采集（仅预埋）
-
-后续另立需求，目标链为：
+真实 teleop 事件链稳定后另立需求，目标链为：
 
 ```text
 Glove + Tracker
@@ -336,17 +355,23 @@ Glove + Tracker
   -> integrity gate -> quality gate -> dataset release
 ```
 
-本计划只要求前置接口可承载该链，不新增真实 NERO 控制、不启动 D405、不采集训练 episode。
+当前计划只要求 hardware package 事件可以被未来 integration shim 投影到该链，不新增真实 NERO
+控制、不启动 D405、不采集训练 episode，也不要求同步运行 Isaac。届时逐项评估复用现有 manifest、
+checksum、integrity/quality gate；仿真 truth 和 tick 对齐逻辑不复用。
 
-## 5. 真机遥操作采集的预埋契约
+## 5. 真机事件与遥操作采集的预埋契约
 
-未来 recorder 必须同时保存以下因果事实：
+当前 hardware journal 和未来 ROS2/recorder 使用相同的因果事件结构，但不是同一个 runtime。每个
+事件至少保存 `event_id`、event kind、side/serial、host monotonic time、可用的 device
+timestamp/sequence、command correlation id、safety state 和 payload schema revision。
+
+未来 recorder 必须保存以下因果事实：
 
 | 层级 | 必须保存 |
 |---|---|
 | 输入 | Glove canonical observation、Tracker pose、identity、sequence、device/host timestamp、confidence |
 | 决策 | retarget q20、supervised q20、限幅/拒绝/hold 原因、safety state |
-| 执行 | attempted command、SDK send/ack 结果、command owner、control tick |
+| 执行 | attempted command、SDK send/result、command owner、command correlation id、host/device time |
 | 反馈 | observed q20、velocity、effort、电压、温度、status/error、communication summary |
 | 身份 | Hand2 serial/side/hw/firmware、SDK wheel、Glove serial/校准 URDF hash、layout revision |
 | 视觉/机械臂 | D405 frame identity、NERO command/readback、安全事件；在后续需求中实现 |
@@ -355,7 +380,9 @@ Glove + Tracker
 
 - hardware-only 诊断保留独立 topic，不伪装成仿真 contact 或 rigid-body truth；
 - 真实数据不得生成虚假的 Isaac ground-truth topic；
+- 不要求 input、command 和 feedback 一一同 tick；保留原始事件后按因果 ID/时间离线关联；
 - input、decision、attempted command、ack/readback 必须分开，不能只存“最终 q”；
+- 当前 H0-H4 只写 package 自带 journal/receipt，不启动现有 rosbag、episode 或 dataset runtime；
 - qualification run 默认 `qualification_only=true`、`dataset_eligible=false`；
 - 只有真实任务完成度、视野、动作多样性、抖动、手指参与度和完整性 Gate 通过后才能提升数据资格；
 - 紧急停止、通信异常、设备 fault 或人工接管必须成为可见 safety event，并切断 episode eligibility；
@@ -389,6 +416,7 @@ artifacts/validation/wuji-hand2-hardware-<date>/
     logs/
   right/
     ...
+  events.jsonl                    # host/device time + sequence + correlation
   commands.jsonl                  # H3 以后才存在
   safety_events.jsonl
   checksums.sha256
@@ -401,37 +429,40 @@ serial/side/IP/hw/firmware、q20 layout revision、操作者、command owner、�
 
 ## 8. Definition of Done
 
-本计划完成需要同时满足：
+当前设备调试阶段（H0-H4）完成需要同时满足：
 
 - 左右 Hand2 在 CLI/Studio/SDK 三侧身份一致；
 - SDK 8.3 只读状态、joint diagnostics、comm diagnostics 和日志导出可重复；
 - q20↔`nid` 左右 mapping 有 contract test，少/重/未知关节 fail closed；
-- backend-neutral controller 已中性化，现有 Isaac/ROS 2/record 回归无行为漂移；
-- 真机 adapter 不依赖 Isaac，仿真 adapter 不依赖 `wuji_sdk`；
+- `wujihand-hand2-hardware` 可独立构建/测试，公开 facade 稳定且无主仓库/ROS/Isaac/dataset import；
 - arm/enable/disable/estop/watchdog/fault 状态机通过 fake SDK 和真机受控测试；
-- 左右单关节、全关节脚本、Glove 单手/双手资格验证通过；
-- sim、real、compare 三个入口显式分离，默认仿真运行零真机访问；
+- 左右单关节和全关节独立脚本资格验证通过；
+- hardware journal 保留 host/device 时间、sequence、command correlation 和 safety transition；
+- 当前仿真/ROS2/record 代码未成为 bring-up 依赖，默认仿真运行零真机访问；
 - 所有真机参数都来自受控 readback/官方依据，不复用 Isaac drive 值；
-- Beta1 无触觉、不可用电流判断接触、零位/软皮限制在报告和 Gate 中长期可见；
-- 上层真实 NERO + Hand2 + record 所需的状态、诊断和因果 trace contract 已冻结，但未被误标为
-  数据集可用。
+- Beta1 无触觉、不可用电流判断接触、零位/软皮限制在报告和 Gate 中长期可见。
+
+T0/T1/D0 不属于当前 DoD。它们分别要求 ROS2/canonical 集成、真实 Glove 遥操作和真实双臂数据
+采集，必须在后续需求中独立验收，不能由 H0-H4 通过自动继承。
 
 ## 9. 开发顺序、难度与首个工作包
 
-建议顺序是 `H0 -> H1 -> H2 -> H3 -> H4 -> H5 -> H6`。不要先写完整真机 teleop launch 再补
-只读和安全层，也不要在双手/双臂系统中首次验证 joint mapping。
+当前只推进 `H0 -> H1 -> H2 -> H3 -> H4`。收口后再按独立需求推进 `T0 -> T1`；真实 teleop
+事件链稳定后才推进 `D0`。不要先写真机 teleop launch，也不要在双手/双臂系统中首次验证 joint
+mapping。
 
 | 工作包 | 难度 | 主要风险 |
 |---|---|---|
 | H0 官方工具基线 | 低 | 工具会话竞争、设备身份记错 |
-| H1 核心中性化 + fake SDK | 中 | 仿真主线行为漂移、历史 layout 假设 |
+| H1 内部 hardware package + fake SDK | 中 | SDK 依赖泄漏、历史 layout 假设、可拆包性 |
 | H2 双手只读 adapter | 中 | `nid` 映射、在线关节变化、通信诊断门槛 |
 | H3 单关节运动 | 中高 | 真机参数、零位/方向、watchdog 与急停 |
-| H4-H5 全手/Glove | 中高 | 串指、抖动、stale、双设备带宽与 command ownership |
-| H6 上层组合收口 | 中 | 把 Hand2 通过误扩张为 NERO/数据集通过 |
+| H4 全手独立脚本 | 中高 | 串指、抖动、温升与双设备身份 |
+| T0-T1 ROS2/Glove（后续） | 中高 | 事件时间、stale、双设备带宽与 command ownership |
+| D0 真实采集（更后续） | 高 | 把硬件/teleop 通过误扩张为数据质量通过 |
 
-首个可提交工作包应只覆盖 H0-H2：官方 CLI/Studio 基线、controller 中性化、fake SDK、只读 adapter、
-左右设备 receipt。H3 必须作为后续单独的显式真机运动变更，便于审查和轻量撤回。
+当前首个真机实现提交覆盖公共 H1 package 与右手 H0–H3 限定台架验收；不修改仿真 controller、
+ROS2 或 dataset。H4、左手和后续真实遥操作继续作为独立需求，便于审查和轻量撤回。
 
 ## 10. 官方依据
 
