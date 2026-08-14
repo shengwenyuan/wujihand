@@ -1,6 +1,12 @@
 """Fail-closed Wuji Hand2 Beta1 hardware bring-up."""
 
-from .api import H2_SEQUENCE_WAIVER_ID, bench_joint_sequence, monitor_temperature, qualify_readonly
+from .api import (
+    H2_SEQUENCE_WAIVER_ID,
+    H4_SEQUENCE_SCOPE_ID,
+    bench_joint_sequence,
+    monitor_temperature,
+    qualify_readonly,
+)
 from .types import (
     DeviceTarget,
     JointMotionStep,
@@ -12,6 +18,7 @@ from .types import (
 
 __all__ = [
     "H2_SEQUENCE_WAIVER_ID",
+    "H4_SEQUENCE_SCOPE_ID",
     "DeviceTarget",
     "JointMotionStep",
     "JointSequencePolicy",

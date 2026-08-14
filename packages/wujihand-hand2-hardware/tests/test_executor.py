@@ -6,13 +6,16 @@ from fakes import FakeClock, FakeMotionClient, FakeMotionSession, target
 from wujihand_hand2_hardware.executor import (
     H2_SEQUENCE_WAIVER_ID,
     H3_SEQUENCE_PROFILE,
+    H4_SEQUENCE_PROFILE,
+    H4_SEQUENCE_SCOPE_ID,
     run_joint_sequence,
 )
-from wujihand_hand2_hardware.mapping import H3_S1_SEQUENCE_LABELS
+from wujihand_hand2_hardware.mapping import H3_S1_SEQUENCE_LABELS, H4_Q20_SEQUENCE_LABELS
 from wujihand_hand2_hardware.types import (
     JointMotionStep,
     JointSequencePolicy,
     MotionPlan,
+    MotionReport,
 )
 
 
@@ -32,12 +35,23 @@ def policy(
     )
 
 
+def h4_policy(*, delta_rad: float = 0.12) -> JointSequencePolicy:
+    return JointSequencePolicy(
+        profile_name=H4_SEQUENCE_PROFILE,
+        steps=tuple(
+            JointMotionStep(joint_label=label, delta_rad=delta_rad)
+            for label in H4_Q20_SEQUENCE_LABELS
+        ),
+        idle_sleep_s=0.01,
+    )
+
+
 def run(
     tmp_path: Path,
     session: FakeMotionSession,
     *,
     confirm: bool = True,
-):
+) -> tuple[MotionReport, FakeClock]:
     clock = FakeClock()
 
     def confirmation(plan: MotionPlan) -> bool:
@@ -49,7 +63,7 @@ def run(
         target(),
         policy(),
         tmp_path / "run",
-        waiver_id=H2_SEQUENCE_WAIVER_ID,
+        scope_id=H2_SEQUENCE_WAIVER_ID,
         confirm=confirmation,
         client=FakeMotionClient(session),
         monotonic=clock.monotonic,
@@ -91,6 +105,89 @@ def test_s1_sequence_is_serial_bounded_and_returns_to_baseline(tmp_path: Path) -
     ]
 
 
+def test_h4_q20_sequence_is_serial_and_uses_every_one_hot_mask(tmp_path: Path) -> None:
+    session = FakeMotionSession()
+    clock = FakeClock()
+    confirmed_steps = 0
+
+    def confirmation(plan: MotionPlan) -> bool:
+        nonlocal confirmed_steps
+        confirmed_steps = len(plan.steps)
+        return True
+
+    report = run_joint_sequence(
+        target(),
+        h4_policy(),
+        tmp_path / "run",
+        scope_id=H4_SEQUENCE_SCOPE_ID,
+        confirm=confirmation,
+        client=FakeMotionClient(session),
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert report.automatic_checks_passed
+    assert confirmed_steps == 20
+    assert len(session.enabled_masks) == 20
+    assert [mask.index(1) for mask in session.enabled_masks] == list(range(20))
+    assert all(sum(mask) == 1 for mask in session.enabled_masks)
+    assert all(len(command) == 20 for command in session.commands)
+    assert session.enabled_mask == [0] * 20
+    assert all(abs(position) <= 1e-12 for position in session.positions)
+    assert [
+        result["preview"]["nid"] for result in report.summary["step_results"]
+    ] == [1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 21, 22, 23, 24]
+
+
+def test_h4_guarded_limit_rejects_before_command_stream(tmp_path: Path) -> None:
+    session = FakeMotionSession()
+    session.positions[1] = 0.65
+    clock = FakeClock()
+    report = run_joint_sequence(
+        target(),
+        h4_policy(),
+        tmp_path / "run",
+        scope_id=H4_SEQUENCE_SCOPE_ID,
+        confirm=lambda plan: True,
+        client=FakeMotionClient(session),
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert not report.automatic_checks_passed
+    assert any("outside the guarded envelope" in failure for failure in report.failures)
+    assert not session.commands
+    assert "open_command_stream" not in session.call_order
+
+
+def test_h4_rejects_h3_scope_before_confirmation_or_connection(tmp_path: Path) -> None:
+    session = FakeMotionSession()
+    clock = FakeClock()
+    confirmed = False
+
+    def confirmation(plan: MotionPlan) -> bool:
+        nonlocal confirmed
+        del plan
+        confirmed = True
+        return True
+
+    report = run_joint_sequence(
+        target(),
+        h4_policy(),
+        tmp_path / "run",
+        scope_id=H2_SEQUENCE_WAIVER_ID,
+        confirm=confirmation,
+        client=FakeMotionClient(session),
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert not report.automatic_checks_passed
+    assert not confirmed
+    assert not session.call_order
+    assert not session.closed
+
+
 def test_empty_line_confirmation_is_before_any_connection_or_write(tmp_path: Path) -> None:
     session = FakeMotionSession()
     report, _ = run(tmp_path, session, confirm=False)
@@ -101,7 +198,16 @@ def test_empty_line_confirmation_is_before_any_connection_or_write(tmp_path: Pat
     assert not session.closed
 
 
-def test_hot_device_is_rejected_before_write(tmp_path: Path) -> None:
+def test_previously_rejected_operating_temperature_is_accepted(tmp_path: Path) -> None:
+    session = FakeMotionSession(temperature_c=58.0)
+    report, _ = run(tmp_path, session)
+
+    assert report.automatic_checks_passed
+
+
+def test_device_at_relaxed_temperature_ceiling_is_rejected_before_write(
+    tmp_path: Path,
+) -> None:
     session = FakeMotionSession(temperature_c=65.0)
     report, _ = run(tmp_path, session)
 
@@ -145,7 +251,7 @@ def test_motion_rejects_response_below_project_floor(tmp_path: Path) -> None:
         target(),
         policy(),
         tmp_path / "run",
-        waiver_id=H2_SEQUENCE_WAIVER_ID,
+        scope_id=H2_SEQUENCE_WAIVER_ID,
         confirm=lambda plan: True,
         client=FakeMotionClient(session),
         monotonic=clock.monotonic,
@@ -179,7 +285,7 @@ def test_keyboard_interrupt_disables_whole_hand(tmp_path: Path) -> None:
     assert session.enabled_mask == [0] * 20
 
 
-def test_wrong_waiver_never_confirms_connects_or_writes(tmp_path: Path) -> None:
+def test_wrong_scope_never_confirms_connects_or_writes(tmp_path: Path) -> None:
     session = FakeMotionSession()
     clock = FakeClock()
     confirmed = False
@@ -194,7 +300,7 @@ def test_wrong_waiver_never_confirms_connects_or_writes(tmp_path: Path) -> None:
         target(),
         policy(),
         tmp_path / "run",
-        waiver_id="WRONG",
+        scope_id="WRONG",
         confirm=confirmation,
         client=FakeMotionClient(session),
         monotonic=clock.monotonic,
@@ -214,7 +320,7 @@ def test_delta_above_sequence_ceiling_never_connects(tmp_path: Path) -> None:
         target(),
         policy(delta_rad=0.16),
         tmp_path / "run",
-        waiver_id=H2_SEQUENCE_WAIVER_ID,
+        scope_id=H2_SEQUENCE_WAIVER_ID,
         confirm=lambda plan: True,
         client=FakeMotionClient(session),
         monotonic=clock.monotonic,

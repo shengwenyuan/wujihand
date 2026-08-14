@@ -13,14 +13,16 @@ from typing import Protocol
 
 from .journal import MotionArtifacts
 from .mapping import (
-    H3_DESCRIPTION_LIMIT_MARGIN_RAD,
     H3_MAX_DELTA_RAD,
     H3_S1_SEQUENCE_LABELS,
+    H4_MAX_DELTA_RAD,
+    H4_Q20_SEQUENCE_LABELS,
     Q20_DESCRIPTION_NAMES,
     Q20_INDEX_BY_LABEL,
     Q20_LOWER_RAD,
     Q20_NIDS,
     Q20_UPPER_RAD,
+    SEQUENCE_DESCRIPTION_LIMIT_MARGIN_RAD,
 )
 from .qualification import run_readonly_qualification
 from .safety import MotionLifecycle
@@ -44,6 +46,29 @@ from .types import (
 
 H2_SEQUENCE_WAIVER_ID = "H2-WAIVER-20260812-RIGHT-S1-SEQUENCE"
 H3_SEQUENCE_PROFILE = "right-s1-flexion-v1"
+H4_SEQUENCE_SCOPE_ID = "H4-RIGHT-Q20-ISOLATION-V1"
+H4_SEQUENCE_PROFILE = "right-q20-isolation-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class _SequenceScope:
+    scope_id: str
+    labels: tuple[str, ...]
+    maximum_delta_rad: float
+
+
+_SEQUENCE_SCOPES = {
+    H3_SEQUENCE_PROFILE: _SequenceScope(
+        scope_id=H2_SEQUENCE_WAIVER_ID,
+        labels=H3_S1_SEQUENCE_LABELS,
+        maximum_delta_rad=H3_MAX_DELTA_RAD,
+    ),
+    H4_SEQUENCE_PROFILE: _SequenceScope(
+        scope_id=H4_SEQUENCE_SCOPE_ID,
+        labels=H4_Q20_SEQUENCE_LABELS,
+        maximum_delta_rad=H4_MAX_DELTA_RAD,
+    ),
+}
 
 
 class MotionSession(ReadOnlySession, Protocol):
@@ -273,8 +298,8 @@ def _make_preview(
     index = Q20_INDEX_BY_LABEL[step.joint_label]
     baseline_position = baseline.positions_rad[index]
     target_position = baseline_position + step.delta_rad
-    lower = Q20_LOWER_RAD[index] + H3_DESCRIPTION_LIMIT_MARGIN_RAD
-    upper = Q20_UPPER_RAD[index] - H3_DESCRIPTION_LIMIT_MARGIN_RAD
+    lower = Q20_LOWER_RAD[index] + SEQUENCE_DESCRIPTION_LIMIT_MARGIN_RAD
+    upper = Q20_UPPER_RAD[index] - SEQUENCE_DESCRIPTION_LIMIT_MARGIN_RAD
     if not lower <= baseline_position <= upper:
         raise MotionRejected(
             f"baseline q{index}={baseline_position:.6f} rad is outside the guarded envelope"
@@ -648,22 +673,30 @@ def _post_disable_result(
     }
 
 
-def _validate_scope(target: DeviceTarget, policy: JointSequencePolicy, waiver_id: str) -> None:
+def _validate_scope(
+    target: DeviceTarget,
+    policy: JointSequencePolicy,
+    scope_id: str,
+) -> _SequenceScope:
     if target.side is not Side.RIGHT:
-        raise MotionRejected("the H3 sequence authorizes the right hand only")
-    if waiver_id != H2_SEQUENCE_WAIVER_ID:
-        raise MotionRejected("limited H2 sequence waiver id does not match")
-    if policy.profile_name != H3_SEQUENCE_PROFILE:
-        raise MotionRejected(f"the H3 sequence authorizes profile {H3_SEQUENCE_PROFILE} only")
+        raise MotionRejected("bounded joint sequences authorize the right hand only")
+    scope = _SEQUENCE_SCOPES.get(policy.profile_name)
+    if scope is None:
+        raise MotionRejected(f"unknown joint sequence profile {policy.profile_name!r}")
+    if scope_id != scope.scope_id:
+        raise MotionRejected(f"scope id does not authorize profile {policy.profile_name}")
     labels = tuple(step.joint_label for step in policy.steps)
-    if labels != H3_S1_SEQUENCE_LABELS:
-        raise MotionRejected(f"the H3 sequence requires ordered joints {H3_S1_SEQUENCE_LABELS}")
+    if labels != scope.labels:
+        raise MotionRejected(
+            f"profile {policy.profile_name} requires ordered joints {scope.labels}"
+        )
     for step in policy.steps:
-        if step.delta_rad <= 0 or step.delta_rad > H3_MAX_DELTA_RAD:
+        if step.delta_rad <= 0 or step.delta_rad > scope.maximum_delta_rad:
             raise MotionRejected(
                 f"{step.joint_label} delta {step.delta_rad:.6f} rad is outside (0, "
-                f"{H3_MAX_DELTA_RAD:.6f}]"
+                f"{scope.maximum_delta_rad:.6f}]"
             )
+    return scope
 
 
 def run_joint_sequence(
@@ -671,7 +704,7 @@ def run_joint_sequence(
     policy: JointSequencePolicy,
     output_dir: Path,
     *,
-    waiver_id: str,
+    scope_id: str,
     confirm: Confirmation,
     on_ready: ReadyCallback | None = None,
     on_step: StepCallback | None = None,
@@ -688,9 +721,9 @@ def run_joint_sequence(
     summary: dict[str, JsonValue] = {}
     artifacts.manifest(
         {
-            "schema_revision": "hand2_h3_joint_sequence_v1",
+            "schema_revision": "hand2_joint_sequence_v2",
             "mode": "bounded_sequential_motion",
-            "purpose": "right_s1_mapping_sequence",
+            "purpose": "right_hand_joint_mapping_sequence",
             "target": {
                 "serial": target.serial,
                 "address": target.address,
@@ -700,13 +733,13 @@ def run_joint_sequence(
                 "expected_sdk": target.expected_sdk,
             },
             "policy": asdict(policy),
-            "limited_h2_waiver_id": waiver_id,
+            "scope_id": scope_id,
             "command_capability": True,
             "operator_confirmation": "single_empty_line_before_connect",
         }
     )
     try:
-        _validate_scope(target, policy, waiver_id)
+        _validate_scope(target, policy, scope_id)
         plan = _make_plan(target, policy)
         summary["plan"] = plan.as_json()
         artifacts.event(

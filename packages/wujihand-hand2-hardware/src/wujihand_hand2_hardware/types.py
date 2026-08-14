@@ -9,6 +9,7 @@ from typing import Any, TypeAlias
 # SDK objects while allowing ordinary homogeneous Python containers.
 JsonValue: TypeAlias = Any
 PROJECT_MINIMUM_RESPONSE_RATE_PCT = 85.0
+PROJECT_MOTION_MAX_TEMPERATURE_C = 65.0
 
 
 class Side(str, Enum):
@@ -267,7 +268,7 @@ class JointSequencePolicy:
     command_rate_hz: float = 100.0
     stale_timeout_s: float = 0.1
     idle_sleep_s: float = 0.0001
-    max_temperature_c: float = 58.0
+    max_temperature_c: float = PROJECT_MOTION_MAX_TEMPERATURE_C
     max_temperature_rise_c: float = 1.0
     max_baseline_span_rad: float = 0.005
     max_baseline_velocity_rad_s: float = 0.02
@@ -310,15 +311,15 @@ class JointSequencePolicy:
         if not all(math.isfinite(value) for value in numeric):
             raise ValueError("motion policy values must be finite")
         if self.preflight_duration_s < 30.0 or self.warmup_s < 4.0:
-            raise ValueError("H3 requires at least 30 s preflight and 4 s warm-up")
+            raise ValueError("joint sequence requires at least 30 s preflight and 4 s warm-up")
         if self.baseline_s < 1.0 or self.ready_hold_s < 2.0:
-            raise ValueError("H3 baseline and ready hold are too short")
+            raise ValueError("joint sequence baseline and ready hold are too short")
         if self.inter_step_hold_s < 0.5 or self.pre_enable_hold_s < 0.1:
-            raise ValueError("H3 baseline and pre-enable hold are too short")
+            raise ValueError("joint sequence inter-step and pre-enable hold are too short")
         if self.ramp_s < 1.0 or self.return_s < 1.0:
-            raise ValueError("H3 outbound and return ramps must each be at least 1 s")
+            raise ValueError("joint sequence ramps must each be at least 1 s")
         if self.hold_s < 0 or self.hold_s > 0.5 or self.settle_s < 0.5 or self.post_disable_s < 0.5:
-            raise ValueError("H3 hold/settle duration is outside the pilot envelope")
+            raise ValueError("joint sequence hold/settle duration is outside the pilot envelope")
         if not 1.0 <= self.command_rate_hz <= 100.0:
             raise ValueError("command_rate_hz must be between 1 and 100")
         if (

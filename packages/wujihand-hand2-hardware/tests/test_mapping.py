@@ -1,5 +1,8 @@
 from wujihand_hand2_hardware.mapping import (
+    H3_MINIMUM_TARGET_FRACTION,
     H3_S1_SEQUENCE_LABELS,
+    H4_MINIMUM_TARGET_FRACTION,
+    H4_Q20_SEQUENCE_LABELS,
     Q20_DESCRIPTION_NAMES,
     Q20_LABELS,
     Q20_NIDS,
@@ -37,3 +40,10 @@ def test_h3_s1_sequence_mapping_is_explicit() -> None:
         "r_ring_finger_mcp_flex",
         "r_pinky_mcp_flex",
     ]
+
+
+def test_h4_sequence_covers_q20_in_protocol_order() -> None:
+    assert H4_Q20_SEQUENCE_LABELS == Q20_LABELS
+    assert len(H4_Q20_SEQUENCE_LABELS) == 20
+    assert H3_MINIMUM_TARGET_FRACTION == 0.05
+    assert H4_MINIMUM_TARGET_FRACTION == 0.01

@@ -6,17 +6,29 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .api import H2_SEQUENCE_WAIVER_ID, bench_joint_sequence, monitor_temperature, qualify_readonly
-from .executor import H3_SEQUENCE_PROFILE
-from .mapping import H3_S1_SEQUENCE_LABELS, H3_SEQUENCE_DEFAULT_DELTA_RAD
+from .api import (
+    H2_SEQUENCE_WAIVER_ID,
+    H4_SEQUENCE_SCOPE_ID,
+    bench_joint_sequence,
+    monitor_temperature,
+    qualify_readonly,
+)
+from .executor import H3_SEQUENCE_PROFILE, H4_SEQUENCE_PROFILE
+from .mapping import (
+    H3_MINIMUM_TARGET_FRACTION,
+    H3_S1_SEQUENCE_LABELS,
+    H3_SEQUENCE_DEFAULT_DELTA_RAD,
+    H4_MINIMUM_TARGET_FRACTION,
+    H4_Q20_SEQUENCE_LABELS,
+)
 from .types import (
+    PROJECT_MINIMUM_RESPONSE_RATE_PCT,
     DeviceTarget,
     JointMotionStep,
     JointSequencePolicy,
     MotionPlan,
     MotionPreview,
     QualificationPolicy,
-    PROJECT_MINIMUM_RESPONSE_RATE_PCT,
     Side,
     TemperatureSample,
 )
@@ -53,9 +65,23 @@ def _parser() -> argparse.ArgumentParser:
     monitor.add_argument("--max-temperature-c", type=float)
 
     motion = common("bench-joint-sequence")
-    motion.add_argument("--profile", choices=[H3_SEQUENCE_PROFILE], required=True)
+    motion.add_argument(
+        "--profile",
+        choices=[H3_SEQUENCE_PROFILE, H4_SEQUENCE_PROFILE],
+        required=True,
+    )
     motion.add_argument("--delta-rad", type=float, default=H3_SEQUENCE_DEFAULT_DELTA_RAD)
-    motion.add_argument("--waiver-id", choices=[H2_SEQUENCE_WAIVER_ID], required=True)
+    scope = motion.add_mutually_exclusive_group(required=True)
+    scope.add_argument(
+        "--scope-id",
+        choices=[H2_SEQUENCE_WAIVER_ID, H4_SEQUENCE_SCOPE_ID],
+    )
+    scope.add_argument(
+        "--waiver-id",
+        dest="scope_id",
+        choices=[H2_SEQUENCE_WAIVER_ID],
+        help="compatibility alias for the H3 limited waiver",
+    )
     motion.add_argument("--preflight-duration-s", type=float, default=30.0)
     motion.set_defaults(warmup_s=4.0, stale_timeout_s=0.1)
     return parser
@@ -74,11 +100,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not sys.stdin.isatty():
             print("FAIL: bench-joint-sequence requires an interactive terminal")
             return 1
+        labels = (
+            H3_S1_SEQUENCE_LABELS
+            if args.profile == H3_SEQUENCE_PROFILE
+            else H4_Q20_SEQUENCE_LABELS
+        )
         motion_policy = JointSequencePolicy(
             profile_name=args.profile,
             steps=tuple(
                 JointMotionStep(joint_label=label, delta_rad=args.delta_rad)
-                for label in H3_S1_SEQUENCE_LABELS
+                for label in labels
             ),
             preflight_duration_s=args.preflight_duration_s,
             warmup_s=args.warmup_s,
@@ -88,7 +119,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_baseline_velocity_rad_s=0.1,
             non_target_tolerance_rad=0.1,
             return_tolerance_rad=0.12,
-            minimum_target_fraction=0.05,
+            minimum_target_fraction=(
+                H3_MINIMUM_TARGET_FRACTION
+                if args.profile == H3_SEQUENCE_PROFILE
+                else H4_MINIMUM_TARGET_FRACTION
+            ),
             minimum_response_rate_pct=args.minimum_response_rate_pct,
         )
 
@@ -100,6 +135,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(
                 f"Response rate below {motion_policy.minimum_response_rate_pct:.0f}% blocks motion; "
                 "other communication counters are recorded only."
+            )
+            print(
+                f"MCU temperature >= {motion_policy.max_temperature_c:.0f} C or a "
+                f"+{motion_policy.max_temperature_rise_c:.0f} C rise blocks motion."
             )
             print("Motion-quality thresholds use the relaxed bring-up acceptance profile.")
             print("After Enter, a >=34 s read-only gate runs before motion can start.")
@@ -134,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 target,
                 motion_policy,
                 args.output_dir,
-                waiver_id=args.waiver_id,
+                scope_id=args.scope_id,
                 confirm=confirm,
                 on_ready=ready,
                 on_step=show_step,

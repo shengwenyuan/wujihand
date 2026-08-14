@@ -1,10 +1,10 @@
 # 015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划
 
-- 状态：实施中；右手 H0–H3 已在限定台架范围通过，H4-A-dev 已通过、H4-live 待验收；左手和真实遥操作尚未开始
-- 日期：2026-08-11 至 2026-08-13
+- 状态：实施中；右手 H0–H3 已通过，H4-A live 部分完成、全 20 轴待验收；官方 SDK example 右手遥操作效果正常；左手与项目 ROS2 真机遥操作尚未开始
+- 日期：2026-08-11 至 2026-08-14
 - 官方软件基线：Wuji SDK / Wuji Studio / Wuji CLI `2026.8.3`
 - 设备范围：左右 Wuji Hand2 Beta1；先单手、后双手，先独立台架、后 NERO
-- 当前真机证据：双手已到货；右手 H0/H1 通过，H2 通信项按项目 `85%` 下限关闭，H3 五个 S1 轴串行自动检查与人工观察通过；H4-A 仅完成静态开发，长期热平衡、H4-live、左手和 Sim→Real 尚未关闭
+- 当前真机证据：双手已到货；右手 H0/H1 通过，H2 通信项按项目 `85%` 下限关闭，H3 五个 S1 轴通过；H4-A 已取得部分逐轴 receipt；2026-08-14 官方 SDK example 的右 Glove→校准 URDF→右 Hand2 功能链由操作者确认正常；长期热平衡、H4-A 全 20 轴、左手和项目 Sim→Real 尚未关闭
 - 后续预埋：Glove + Tracker + 双 NERO + 双 Hand2 真机遥操作与数据采集；本计划不实现该业务链
 - 依据：2026-08-11 通过官方 `wuji-docs` MCP 读取的 Hand2、SDK、Studio、CLI 文档
 - 实施边界：[guard-hand2-hardware-boundary](../skills/guard-hand2-hardware-boundary/SKILL.md)
@@ -314,14 +314,18 @@ S1 轴串行往返，自动检查与操作者可见性观察均通过；证据�
 目标：验证一只手的全关节映射，不引入 Glove、ROS2、Isaac、NERO 或 dataset。
 
 - H4-A 先用 hardware package 自带脚本串行验收全部 20 轴，每次只使能一个关节；
-- H4-A live 冻结方向与隔离事实后，H4-B 才执行张开、分指、逐指屈伸和四组对指的低速命令；
+- H4-A live 继续冻结 20 轴方向与隔离事实；它只审计 mapping，不作为跟踪性能 benchmark；
+- 功能手型不再在 hardware package 内另写 H4-B executor，改用固定版本的官方 SDK teleoperation
+  example 与人工张开、分指、屈伸、对指观察；官方 example 对 MIT/effort 的写入必须记录，且不能与
+  H4-A 同时成为 command owner；
 - 只比较 attempted command、SDK result 和真实 observed state，不同步驱动数字孪生；
 - 检查每个 `nid`、关节方向、范围、跟踪误差、迟滞、抖动、温升与通信健康；
 - 左右手分别验收；不把镜像关系当作相同 mapping 的证据；
 - 全程写 hardware event journal、diagnostics 和 receipt，不启动 rosbag/episode recorder。
 
-通过标准：无串指/错向；跟踪误差和抖动门槛由安全样本冻结；诊断无持续恶化；hardware package
-可以在无主仓库仿真 runtime 的环境独立复验。H0-H4 通过即表示“设备调试阶段”收口。
+通过标准：H4-A 无串指/错向、20 轴均有非零 readback 并经人工确认；官方 example 的功能手型由
+操作者确认正常；诊断无持续恶化；hardware package 可在无主仓库仿真 runtime 的环境独立复验。
+H0-H4 通过即表示“设备调试阶段”收口，但不表示项目 ROS2 真机遥操作已完成。
 
 右手详细实施计划见
 [`docs/real-hardware/wuji-hand2-right-h4-full-joint-bench.md`](real-hardware/wuji-hand2-right-h4-full-joint-bench.md)。

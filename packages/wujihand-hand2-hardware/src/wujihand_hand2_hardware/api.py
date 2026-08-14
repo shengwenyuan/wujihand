@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .executor import (
     H2_SEQUENCE_WAIVER_ID,
+    H4_SEQUENCE_SCOPE_ID,
     Confirmation,
     MotionClient,
     ReadyCallback,
@@ -145,7 +146,7 @@ def bench_joint_sequence(
     policy: JointSequencePolicy,
     output_dir: Path,
     *,
-    waiver_id: str,
+    scope_id: str,
     confirm: Confirmation,
     on_ready: ReadyCallback | None = None,
     on_step: StepCallback | None = None,
@@ -155,7 +156,7 @@ def bench_joint_sequence(
         target,
         policy,
         output_dir,
-        waiver_id=waiver_id,
+        scope_id=scope_id,
         confirm=confirm,
         on_ready=on_ready,
         on_step=on_step,
@@ -165,6 +166,7 @@ def bench_joint_sequence(
 
 __all__ = [
     "H2_SEQUENCE_WAIVER_ID",
+    "H4_SEQUENCE_SCOPE_ID",
     "bench_joint_sequence",
     "monitor_temperature",
     "qualify_readonly",
