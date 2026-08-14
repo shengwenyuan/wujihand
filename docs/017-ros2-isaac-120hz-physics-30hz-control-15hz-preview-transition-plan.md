@@ -1,6 +1,6 @@
 # 017：ROS2—Isaac 120/30/15 正式调度与高质量 Preview 迁移计划
 
-- 状态：已实施；正式采集、Tracker 遮挡恢复和 bundle 闭环已通过，性能余量继续优化
+- 状态：基础 120/30/15 已实施；正式采集、Tracker 遮挡恢复和 bundle 闭环已通过，多视角 operator UI 待实施
 - 日期：2026-08-13
 - 基线：`2953abb`，已清理过渡链路的 T-frame + NERO gripper flange collision proxy + Hand2 Beta1 v2026.8.3
 - 上游：[014：Dual NERO T 型架 Isaac + ROS2 Record 并列场景开发计划](014-dual-nero-t-frame-isaac-ros2-record-scene-development-plan.md)
@@ -158,6 +158,31 @@ preview 继续使用独立进程和独立 CPU affinity，目标从 20 Hz 改为 
 800×500 全 Gate 通过后，才允许在同一视觉 profile 下试验 960×600；最终只冻结一个通过资格的
 分辨率。画质验收至少包含：双手轮廓清晰、拇指可见、对指间隙可辨、黑手不丢失立体感、T-frame
 与 NERO 边界可分辨，并且 A→B→A 相同状态仍能确定性回放。
+
+### 7.1 T-frame 多视角 operator UI
+
+主操作视角不改为 top view，继续沿用第三路 scene D435 的斜向姿态和观察角度，重点覆盖操作桌面。
+D435 的安装位置迁到 AgileX T-frame 粉色相机连接件附近；最终位置必须依据该连接件的 USD/CAD
+安装面和 GUI 覆盖范围可视化标定后，冻结为命名 Workcell frame。UI 主视角与 D435 共用该版本化
+位姿，但允许保持独立的 preview 分辨率、光照和渲染质量。D435 外参变化必须更新对应
+Workcell/camera provenance，并重新关闭离线 replay 的图像身份与覆盖 Gate。
+
+同一被动 preview 进程提供四个画面，不创建额外 physics 或控制入口：
+
+- 主画面：D435 同姿态的操作桌视角，`800×500 @ 15 Hz`，保持当前高质量 preview；
+- 左、右手画面：分别锁定到两侧 NERO 末端 `gripper_flange` 的 preview-only 相机，使用显式完整
+  旋转冻结画面 roll，保证手指始终指向画面上方；
+- 全景画面：保留当前初始化斜向视角，同时观察 T-frame、双 NERO、双 Hand2 和操作桌。
+
+四路共享同一份已注入场景状态和 USD 资产，每路使用独立 camera/render product。第一版只按
+分辨率和刷新率分级，继续共享 Minimal Rendering、抗锯齿、柔和环境光以及关闭阴影/AO 的策略；
+手部画面建议从 `400×300 @ 15 Hz` 起步，全景从 `480×300 @ 5 Hz` 或按需刷新起步。未到刷新周期
+的 render product 必须暂停更新并复用上一帧，不能让四路在每个 Kit tick 无条件渲染。
+
+多视角验收仍以主画面 `15 Hz ±5%`、零 missed period、总 render transaction p99 不高于
+`55 ms`、单次硬上限低于 `66.67 ms` 为准；同时要求 control/IK `30 Hz`、physics `120 Hz`、q54、
+录制和三路离线数据图像不退化。若预算不足，优先降低全景刷新率，其次降低手部画面分辨率，不降低
+主画面刷新率，也不改变 physics/control 标准。
 
 ## 8. 验收 Gate
 

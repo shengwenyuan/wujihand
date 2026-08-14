@@ -18,12 +18,15 @@
 | 公共 H1 | 通过 | 独立 `wujihand-hand2-hardware` package 和只读资格验证路径已建立；未接入仿真主线 |
 | 右手 H2 | **通信项关闭；长期热平衡未关闭** | 当前固定栈接受 `85%`（含）response 下限；约 497 s 的 `+5 °C` 长时温升事实仍保留 |
 | 右手 H3 | **限定范围通过** | 五个 S1 轴按 thumb→pinky 串行完成，自动检查通过，操作者确认看到了预期效果；S2/S3/S4 与全手动作未覆盖 |
+| 右手 H4 | **H4-A-dev 通过；live 待验收** | 0.5.0 的 20 关节逐轴 profile 已完成本地/远端离线验证；尚无 S2/S3/S4 真机方向结论 |
 | 左手 | 未开始 | 不能继承右手结论 |
 
 右手详细结果见
-[2026-08-12：Hand2 Beta1 右手 H0–H2 只读资格验证](2026-08-12-wuji-hand2-right-h0-h2-validation.md)。
+[Hand2 Beta1 右手 H0–H2 只读资格验证](wuji-hand2-right-h0-h2-validation.md)。
 H3 限定豁免、实现、验证与 live 交接见
-[2026-08-12：Hand2 Beta1 右手 H3 运动映射开发与 live 记录](2026-08-12-wuji-hand2-right-h3-development.md)。
+[Hand2 Beta1 右手 H3 有界运动与 live 记录](wuji-hand2-right-h3-bounded-motion.md)。
+H4 分段、开发边界与 live Gate 见
+[Hand2 Beta1 右手 H4 全关节台架计划](wuji-hand2-right-h4-full-joint-bench.md)。
 
 ## 长期边界
 

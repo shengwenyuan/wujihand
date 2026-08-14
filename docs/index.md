@@ -5,11 +5,14 @@
 
 ## 当前边界
 
-截至 2026-08-11，已验证主线是：真实 Wuji Glove + VIVE Tracker 输入，经 ROS2 与
+截至 2026-08-12，已验证主线是：真实 Wuji Glove + VIVE Tracker 输入，经 ROS2 与
 Isaac Sim 6.0.1 驱动仿真 NERO + Wuji Hand 2，并完成遥操作采集、回放和数据导出。
-这里的 HIL 指输入设备接入仿真。左右 Wuji Hand 2 Beta1 真机均已到货，但尚未在本仓库
-完成真机资格验证或形成 Sim→Real 结论。历史文档中的“物理 Hand 2”若未明确写真机，指
-保留刚体、碰撞和驱动的 physics-enabled 仿真资产。
+这里的 HIL 指输入设备接入仿真。左右 Wuji Hand 2 Beta1 真机均已到货；右手 H0/H1 已通过，H2
+通信项按当前固定栈的项目 `85%` 下限关闭，长期热平衡仍未关闭。右手 H3 五指 S1 串行自动检查与
+人工观察已通过；H4-A 的 20 关节逐轴入口已完成静态开发和远端离线验收，尚未进行 live。左手尚未
+开始，当前仍无 Sim→Real 结论。历史文档中的
+“物理 Hand 2”若未
+明确写真机，指保留刚体、碰撞和驱动的 physics-enabled 仿真资产。
 
 默认双 NERO、ROS2、D405 与数据集业务入口仍固定为 `wuji-sdk==2026.7.21 +
 wuji-description v2026.6.27`。并列的 `SDK 2026.8.3 + Description v2026.8.3` Hand2 Beta1
@@ -29,7 +32,13 @@ Deployment 复用该链。T-frame 首轮仍为 `qualification_only=true`、`data
 [013：Wuji SDK + Description v2026.8.3 / Hand2 Beta1 同版链阶段一计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)。
 Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真实遥操作采集预埋见
 [015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划](015-wuji-hand2-beta1-real-hardware-bringup-and-teleoperation-data-plan.md)；
-该计划从只读资格验证开始，不授权当前仿真入口访问或控制真机。
+该计划从只读资格验证开始，不授权当前仿真入口访问或控制真机。实施状态和真机证据见
+[真机开发文档入口](real-hardware/index.md)。
+当前 NERO 实机杯形母座已由操作者核对为固定版本 AgileX `gripper_flange` 外形；面向
+Hand2 Beta1 与 D405 的 V1 主转接芯、原四胶囊孔法兰盘、同轴轴向定位及独立相机副接口
+要求见
+[016：NERO—Wuji Hand2 Beta1 V1 法兰与 D405 集成需求](016-nero-hand2-beta1-physical-flange-and-d405-integration-requirements.md)。
+历史 `Ry(+90°)` 仍只用于旧仿真复现，不代表新的真机实体姿态。
 
 ## 当前主要入口
 
@@ -40,6 +49,7 @@ Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真
 - [ROS2—Isaac 三目 q54 mini 数据集](components/ros2-isaac-triview-q54-mini-dataset.md)
 - [NERO + Hand 2 + Wuji Glove 仿真全流程](guides/nero-hand2-glove-simulation-flow.md)
 - [最新确定性 ROS2—Isaac—GUI Qualification](validation/2026-08-06-deterministic-ros-isaac-gui-qualification.md)
+- [真机开发文档入口](real-hardware/index.md)
 
 ## 全局基线与版本化计划
 
@@ -61,6 +71,9 @@ Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真
 - [013：Wuji SDK + Description v2026.8.3 / Hand2 Beta1 同版链阶段一计划](013-wuji-description-v2026-8-3-hand2-beta1-phase1-upgrade-plan.md)
 - [014：Dual NERO T 型架 Isaac + ROS2 Record 并列场景开发计划](014-dual-nero-t-frame-isaac-ros2-record-scene-development-plan.md)
 - [015：Wuji Hand2 Beta1 真机 Bring-up、仿真解耦与遥操作采集预埋计划](015-wuji-hand2-beta1-real-hardware-bringup-and-teleoperation-data-plan.md)
+- [016：NERO—Wuji Hand2 Beta1 V1 法兰与 D405 集成需求](016-nero-hand2-beta1-physical-flange-and-d405-integration-requirements.md)
+- [017：ROS2—Isaac 120/30/15 正式调度与高质量 Preview 迁移计划](017-ros2-isaac-120hz-physics-30hz-control-15hz-preview-transition-plan.md)
+- [NERO—Hand2 Beta1 V1 转接件 CAD 与 Isaac 验证](validation/2026-08-13-nero-hand2-beta1-adapter-v1.md)
 
 ## Components
 
@@ -80,6 +93,13 @@ Hand2 Beta1 真机阶段的架构、安全 Gate、官方工具路径和未来真
 - [NERO + Hand 2 + Wuji Glove 仿真全流程](guides/nero-hand2-glove-simulation-flow.md)
 - [VIVE Tracker NV-1 资格验证指南](guides/vive-tracker-qualification.md)
 - [Workstation2 双 Wuji Glove 直连网络配置](guides/workstation2-dual-wuji-glove-network.md)
+
+## Real Hardware
+
+- [真机开发文档入口](real-hardware/index.md)
+- [Hand2 Beta1 右手 H0–H2 只读资格验证](real-hardware/wuji-hand2-right-h0-h2-validation.md)
+- [Hand2 Beta1 右手 H3 有界运动与 live 记录](real-hardware/wuji-hand2-right-h3-bounded-motion.md)
+- [Hand2 Beta1 右手 H4 全关节台架计划](real-hardware/wuji-hand2-right-h4-full-joint-bench.md)
 
 ## Decisions
 
