@@ -54,7 +54,7 @@ def test_capture_phase_stamp_stays_on_rational_grid_after_long_float_drift() -> 
         scheduled_capture_stamp_ns(
             activation_stamp_ns=activation_stamp_ns,
             capture_rate_hz=30.0,
-            control_tick_id=1,
+            control_tick_id=0,
         )
         == 933_333_333
     )
@@ -62,7 +62,7 @@ def test_capture_phase_stamp_stays_on_rational_grid_after_long_float_drift() -> 
         scheduled_capture_stamp_ns(
             activation_stamp_ns=activation_stamp_ns,
             capture_rate_hz=30.0,
-            control_tick_id=1097,
+            control_tick_id=548,
         )
         == 19_200_000_000
     )
@@ -70,7 +70,7 @@ def test_capture_phase_stamp_stays_on_rational_grid_after_long_float_drift() -> 
 
 @pytest.mark.parametrize(
     ("rate_hz", "tick_id"),
-    ((0.0, 1), (29.5, 1), (30.0, 0), (30.0, -1)),
+    ((0.0, 0), (29.5, 0), (30.0, -1)),
 )
 def test_capture_phase_stamp_rejects_non_d405_grid(
     rate_hz: float,
@@ -140,7 +140,7 @@ def test_pose_history_samples_only_the_frozen_30_hz_capture_phase() -> None:
     observed = [
         (tick, substep)
         for tick in range(6)
-        for substep in range(2)
+        for substep in range(4)
         if _is_capture_phase(
             profile,
             control_tick_id=tick,
@@ -148,7 +148,7 @@ def test_pose_history_samples_only_the_frozen_30_hz_capture_phase() -> None:
         )
     ]
 
-    assert observed == [(1, 1), (3, 1), (5, 1)]
+    assert observed == [(tick, 3) for tick in range(6)]
 
 
 def test_completed_frame_sink_moves_host_copy_off_writer_callback() -> None:

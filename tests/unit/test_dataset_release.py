@@ -30,7 +30,7 @@ PROFILE_PATH = "configs/profiles/isaac_nero_hand2_q54_dataset_v1.yaml"
 
 def _frame(index: int, phase: SimulationFramePhase) -> SimulationStateFrame:
     value = float(index if phase is SimulationFramePhase.PRE_ACTION else index + 1)
-    simulation_time = (index + (phase is SimulationFramePhase.POST_ACTION)) / 60.0
+    simulation_time = (index + (phase is SimulationFramePhase.POST_ACTION)) / 30.0
     return SimulationStateFrame.create(
         run_id="episode-001",
         episode_id="episode-001",
@@ -38,7 +38,7 @@ def _frame(index: int, phase: SimulationFramePhase) -> SimulationStateFrame:
         tick_id=index,
         phase=phase,
         simulation_time_s=simulation_time,
-        physics_boundary_index=2 * index + (2 if phase is SimulationFramePhase.POST_ACTION else 0),
+        physics_boundary_index=4 * index + (4 if phase is SimulationFramePhase.POST_ACTION else 0),
         q54_rad=(value,) * 54,
         qdot54_rad_s=(0.0,) * 54,
         rigid_bodies=(),
@@ -55,8 +55,8 @@ def _tick(index: int) -> ControlTickFacts:
         run_id="episode-001",
         control_index=index,
         tick_id=index,
-        simulation_time_before_s=index / 60.0,
-        simulation_time_after_s=(index + 1) / 60.0,
+        simulation_time_before_s=index / 30.0,
+        simulation_time_after_s=(index + 1) / 30.0,
         pre_feedback_q54_rad=(float(index),) * 54,
         applied_target_q54_rad=(float(index) + 0.5,) * 54,
         post_feedback_q54_rad=(float(index + 1),) * 54,
@@ -64,10 +64,10 @@ def _tick(index: int) -> ControlTickFacts:
     )
     return ControlTickFacts(
         transition=transition,
-        tick_time_ns=1_000_000_000 + index * 16_666_667,
+        tick_time_ns=1_000_000_000 + index * 33_333_333,
         schedule_slot=index,
         missed_control_periods_before_tick=0,
-        physics_substep_indices=(2 * index, 2 * index + 1),
+        physics_substep_indices=tuple(range(4 * index, 4 * index + 4)),
         route_fact_keys=REQUIRED_ROUTE_FACTS,
         source_epochs=(
             SourceEpochFact("tracker_left", "tracker-left-p1", 1),
@@ -97,7 +97,7 @@ def _boundary(event: DatasetEpisodeEvent, final: int) -> DatasetEpisodeBoundary:
         host_time_ns=100 + tuple(DatasetEpisodeEvent).index(event),
         control_index=final if indexed else None,
         tick_id=final if indexed else None,
-        simulation_time_s=(final + 1) / 60.0 if indexed else None,
+        simulation_time_s=(final + 1) / 30.0 if indexed else None,
         recorder_ready=True,
         inputs_ready=True,
         references_ready=True,
@@ -165,12 +165,25 @@ def test_missing_q21_is_quality_only_but_inconsistent_schedule_mask_is_hard() ->
     assert decision.quality_grade == "D"
 
 
+def test_non_monotonic_host_time_is_a_hard_failure() -> None:
+    facts, profile = _episode()
+    bad_tick = replace(facts.ticks[1], tick_time_ns=facts.ticks[0].tick_time_ns)
+
+    decision = validate_episode_release(
+        replace(facts, ticks=(facts.ticks[0], bad_tick, *facts.ticks[2:])),
+        profile,
+    )
+
+    assert decision.passed is False
+    assert decision.rejection_reasons == ("host_time_reversed_or_duplicated",)
+
+
 def _declare_one_schedule_miss(
     facts: NormalizedEpisodeFacts,
     *,
     control_index: int,
 ) -> NormalizedEpisodeFacts:
-    period_ns = 16_666_667
+    period_ns = 33_333_333
     ticks = tuple(
         replace(
             tick,
@@ -187,7 +200,7 @@ def _declare_one_schedule_miss(
     return replace(facts, ticks=ticks)
 
 
-def test_isolated_schedule_miss_within_budget_is_usable_warning() -> None:
+def test_isolated_schedule_miss_is_a_quality_warning() -> None:
     facts, profile = _episode(count=240)
 
     decision = validate_episode_release(
@@ -207,7 +220,7 @@ def test_isolated_schedule_miss_within_budget_is_usable_warning() -> None:
     assert gate.observed["missed_fraction"] == pytest.approx(1.0 / 241.0)
 
 
-def test_schedule_miss_above_old_fraction_budget_is_quality_only() -> None:
+def test_schedule_miss_above_grade_a_threshold_remains_releasable() -> None:
     facts, profile = _episode(count=100)
 
     decision = validate_episode_release(
@@ -219,6 +232,10 @@ def test_schedule_miss_above_old_fraction_budget_is_quality_only() -> None:
     assert decision.grade == "usable_with_warnings"
     assert decision.quality_grade == "B"
     assert decision.rejection_reasons == ()
+    assert decision.warning_reasons == (
+        "control_schedule_gap_quality_downgrade",
+        "control_rate_out_of_range",
+    )
 
 
 def test_source_epoch_change_fails_closed() -> None:

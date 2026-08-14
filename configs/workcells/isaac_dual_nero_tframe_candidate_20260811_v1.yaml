@@ -50,12 +50,12 @@ mounts:
     frame: tframe_shoulder_center
     transform:
       position_m: [0.104, 0.0, 0.0]
-      quat_wxyz: [0.5, -0.5, 0.5, -0.5]
+      quat_wxyz: [0.0, 0.7071067811865476, 0.0, 0.7071067811865476]
   - mount_id: tframe_negative_x_shoulder_mount
     frame: tframe_shoulder_center
     transform:
       position_m: [-0.104, 0.0, 0.0]
-      quat_wxyz: [0.5, 0.5, -0.5, -0.5]
+      quat_wxyz: [0.7071067811865476, 0.0, -0.7071067811865476, 0.0]
 entities:
   - entity_id: ground
     frame: world

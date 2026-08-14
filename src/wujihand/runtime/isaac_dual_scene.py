@@ -169,6 +169,31 @@ class SceneDatasetStateSnapshot:
         )
 
 
+def expand_dataset_state_for_operator_preview(
+    *,
+    dataset_snapshot: SceneDatasetStateSnapshot,
+    link_snapshots: tuple[SceneKinematicLinkSnapshot, ...],
+) -> SceneDatasetStateSnapshot:
+    """Expand recorded truth with the full, unrecorded operator link inventory."""
+
+    return SceneDatasetStateSnapshot(
+        q54_rad=dataset_snapshot.q54_rad,
+        qdot54_rad_s=dataset_snapshot.qdot54_rad_s,
+        rigid_bodies=dataset_snapshot.rigid_bodies,
+        kinematic_links=tuple(
+            KinematicLinkTruth(
+                side=item.side,
+                logical_link_id=item.logical_link_id,
+                prim_path=item.prim_path,
+                position_m=item.position_m,
+                quat_wxyz=item.quat_wxyz,
+                valid=True,
+            )
+            for item in link_snapshots
+        ),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SceneReplaySnapshot:
     """Post-physics visual state sufficient for paused camera replay."""
@@ -830,6 +855,7 @@ class DualNeroHand2IsaacScene:
         q54_profile: Q54JointProfile,
         q27_by_side: Mapping[str, npt.NDArray[np.float64]],
         qdot27_by_side: Mapping[str, npt.NDArray[np.float64]],
+        link_snapshots: tuple[SceneKinematicLinkSnapshot, ...] | None = None,
     ) -> SceneDatasetStateSnapshot:
         """Read and freeze all variable simulator truth without hashing it."""
 
@@ -862,17 +888,25 @@ class DualNeroHand2IsaacScene:
                     valid=True,
                 )
             )
-        links = tuple(
-            KinematicLinkTruth(
-                side=item.side,
-                logical_link_id=item.logical_link_id,
-                prim_path=item.prim_path,
-                position_m=item.position_m,
-                quat_wxyz=item.quat_wxyz,
-                valid=True,
+        link_snapshots = link_snapshots or self.kinematic_link_snapshots()
+        snapshots_by_path = {item.prim_path: item for item in link_snapshots}
+        if not set(self.dataset_kinematic_link_paths.values()) <= set(snapshots_by_path):
+            raise RuntimeError("dataset kinematic-link inventory drifted")
+        links: list[KinematicLinkTruth] = []
+        for (side, logical_link_id), path in sorted(
+            self.dataset_kinematic_link_paths.items()
+        ):
+            item = snapshots_by_path[path]
+            links.append(
+                KinematicLinkTruth(
+                    side=side,
+                    logical_link_id=logical_link_id,
+                    prim_path=item.prim_path,
+                    position_m=item.position_m,
+                    quat_wxyz=item.quat_wxyz,
+                    valid=True,
+                )
             )
-            for item in self.kinematic_link_snapshots()
-        )
         q54 = q54_profile.assemble_from_q27(
             left_q27_rad=tuple(float(value) for value in q27_by_side["left"]),
             right_q27_rad=tuple(float(value) for value in q27_by_side["right"]),
@@ -885,32 +919,24 @@ class DualNeroHand2IsaacScene:
             q54_rad=q54,
             qdot54_rad_s=qdot54,
             rigid_bodies=tuple(bodies),
-            kinematic_links=links,
+            kinematic_links=tuple(links),
         )
 
     def operator_preview_state_snapshot(
         self,
         *,
         dataset_snapshot: SceneDatasetStateSnapshot,
+        link_snapshots: tuple[SceneKinematicLinkSnapshot, ...] | None = None,
     ) -> SceneDatasetStateSnapshot:
         """Expand one dataset snapshot with all links for the unrecorded GUI topic."""
 
-        links = tuple(
-            KinematicLinkTruth(
-                side=item.side,
-                logical_link_id=item.logical_link_id,
-                prim_path=item.prim_path,
-                position_m=item.position_m,
-                quat_wxyz=item.quat_wxyz,
-                valid=True,
-            )
-            for item in self.operator_preview_link_snapshots()
-        )
-        return SceneDatasetStateSnapshot(
-            q54_rad=dataset_snapshot.q54_rad,
-            qdot54_rad_s=dataset_snapshot.qdot54_rad_s,
-            rigid_bodies=dataset_snapshot.rigid_bodies,
-            kinematic_links=links,
+        return expand_dataset_state_for_operator_preview(
+            dataset_snapshot=dataset_snapshot,
+            link_snapshots=(
+                link_snapshots
+                if link_snapshots is not None
+                else self.operator_preview_link_snapshots()
+            ),
         )
 
     def create_dataset_state_frame(

@@ -29,7 +29,7 @@ from wujihand.runtime import (
 
 DATASET_PREVIEW_CPU_AFFINITY = "16-27"
 DATASET_AUXILIARY_CPU_AFFINITY = "28-31"
-DATASET_QUALIFICATION_CONTROL_FRAMES = 1080
+DATASET_QUALIFICATION_CONTROL_FRAMES = 660
 DATASET_QUALIFICATION_SOURCE_FRAMES = 2400
 DATASET_QUALIFICATION_PROFILE = "dataset_preview_e2e_aba_v1"
 
@@ -276,7 +276,7 @@ def _processes(context: object) -> list[object]:
     actions.append(consumer_action)
     if split_dataset_preview:
         # Dataset RGB remains offline.  This second Isaac process is a passive
-        # latest-state operator view, isolated from the 120/60 Hz owner.
+        # latest-state operator view, isolated from the 120/30 Hz owner.
         preview_command = [
             consumer.executable,
             str(project_root / "tools/run_isaac_dataset_live_preview.py"),
@@ -427,7 +427,11 @@ def generate_launch_description() -> LaunchDescription:
             ),
             DeclareLaunchArgument(
                 "deployment",
-                default_value=("configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"),
+                default_value=(
+                    "configs/deployments/"
+                    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+                    "triview_q54_self_collision_v1.yaml"
+                ),
             ),
             DeclareLaunchArgument(
                 "local_runtime_binding",
@@ -445,7 +449,9 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument(
                 "record_chain_qualification",
                 default_value=(
-                    "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
+                    "configs/qualifications/"
+                    "isaac_nero_hand2_tframe_gripper_flange_collision_proxy_"
+                    "self_collision_record_chain_v1.yaml"
                 ),
             ),
             OpaqueFunction(function=_processes),

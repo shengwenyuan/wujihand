@@ -59,7 +59,6 @@ from wujihand.domain import (
 from wujihand.dataset import (
     DatasetEpisodeLifecycle,
     EpisodeReadiness,
-    MiniDatasetProfile,
     Q54RuntimeInventory,
     load_mini_dataset_profile,
 )
@@ -112,15 +111,16 @@ from wujihand.runtime.wuji_hand2_record_chain import (
     resolve_record_chain_workcell_plan,
 )
 
-DEFAULT_DEPLOYMENT = ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_live_v2.yaml"
+DEFAULT_DEPLOYMENT = ROOT / (
+    "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
+)
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv5_ros_v2.yaml"
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
 OBLIQUE_CAMERA_EYE_FRAME = "simulation_nominal_camera_oblique_eye"
 OBLIQUE_CAMERA_TARGET_FRAME = "simulation_nominal_camera_oblique_target"
 SCREENSHOT_CAMERA_PRIM_PATH = "/OmniverseKit_Persp"
-CONTROL_HZ = 60
-RENDER_HZ = 20
-CONTROL_TICKS_PER_CAPTURE = 2
 GUI_MAXIMUM_CATCH_UP_TICKS = 2
 GUI_BLOCK_ON_RENDER = False
 VIEWPORT_WIDTH = 800
@@ -128,11 +128,10 @@ VIEWPORT_HEIGHT = 500
 ISAAC_RENDERER = "MinimalRendering"
 ISAAC_RECORDING_RENDERER = "RayTracedLighting"
 ISAAC_MINIMAL_SHADING_MODE = 2
-ISAAC_CPU_THREAD_LIMIT_CAP = 32
+ISAAC_CPU_THREAD_LIMIT_CAP = 14
 PYTHON_GC_POLICY = "collect_and_freeze_during_control_v1"
 CAMERA_CAPTURE_EXECUTION = "paused_post_control_replay_v1"
 OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"
-OPERATOR_PREVIEW_CONTROL_INTERVAL = CONTROL_HZ // RENDER_HZ
 OPERATOR_PREVIEW_MAX_KINEMATIC_LINKS = 128
 
 
@@ -150,6 +149,29 @@ class _RecordingPublishBatch:
     scene_states: tuple[SceneRigidBodyState, ...]
     dataset_states: tuple[SimulationStateFrame, ...]
     operator_preview_state: SimulationStateFrame | None
+
+
+class _StageTimings:
+    def __init__(self) -> None:
+        self._samples: dict[str, list[int]] = {}
+
+    def observe(self, counters: Counter[str], name: str, duration_ns: int) -> None:
+        self._samples.setdefault(name, []).append(duration_ns)
+        counters[f"{name}_total_ns"] += duration_ns
+        counters[f"{name}_max_ns"] = max(counters[f"{name}_max_ns"], duration_ns)
+
+    def to_mapping(self) -> dict[str, object]:
+        return {
+            name: {
+                "samples": len(values),
+                "mean_ms": sum(values) / len(values) / 1_000_000,
+                "max_ms": max(values) / 1_000_000,
+                "p95_ms": float(np.percentile(values, 95)) / 1_000_000,
+                "p99_ms": float(np.percentile(values, 99)) / 1_000_000,
+            }
+            for name, values in sorted(self._samples.items())
+            if values
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -408,7 +430,7 @@ class _RecordingPublishContext:
 
 
 class _RecordingPublisherWorker:
-    """Publish immutable recording batches outside the 60 Hz control thread."""
+    """Publish immutable recording batches outside the control thread."""
 
     _STOP = object()
 
@@ -596,7 +618,7 @@ def parse_args() -> argparse.Namespace:
         "--frames",
         type=int,
         default=0,
-        help="Bounded 60 Hz control ticks; zero runs until the app closes.",
+        help="Bounded 30 Hz control ticks; zero runs until the app closes.",
     )
     parser.add_argument(
         "--cpu-affinity",
@@ -697,11 +719,6 @@ if RESOLVED.session.session.backend != "isaac":
     raise SystemExit("NV-5 ROS consumer requires an Isaac Session")
 if RESOLVED.control_profile.physics_hz != 120:
     raise SystemExit("NV-5.1 requires exactly 120 Hz physics")
-if RESOLVED.control_profile.physics_hz % CONTROL_HZ != 0:
-    raise SystemExit("physics_hz must be divisible by control_hz")
-if CONTROL_HZ % RENDER_HZ != 0:
-    raise SystemExit("control_hz must be divisible by render_hz")
-
 HAND_REVISIONS = {
     instance.asset.revision
     for instance in RESOLVED.session.instances
@@ -709,7 +726,7 @@ HAND_REVISIONS = {
 }
 REQUIRES_MATCHED_CHAIN = HAND_REVISIONS == {"beta1_description_v2026_8_3"}
 if REQUIRES_MATCHED_CHAIN != (ARGS.chain_preflight is not None):
-    raise SystemExit("Description 8.3 requires --chain-preflight and historical entries forbid it")
+    raise SystemExit("the formal Description 8.3 entry requires --chain-preflight")
 CHAIN_PREFLIGHT: Mapping[str, object] | None = None
 WORKCELL_PLAN = None
 if ARGS.chain_preflight is not None:
@@ -724,11 +741,17 @@ if ARGS.chain_preflight is not None:
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(f"record-chain runtime preflight failed: {exc}") from exc
 
-DATASET_PROFILE: MiniDatasetProfile | None = None
 dataset_profile_ref = RESOLVED.session.session.dataset_profile
-if dataset_profile_ref is not None:
-    DATASET_PROFILE = load_mini_dataset_profile(ROOT, dataset_profile_ref.path)
-DATASET_MODE = DATASET_PROFILE is not None
+if dataset_profile_ref is None:
+    raise SystemExit("the formal ROS consumer requires a dataset timing profile")
+DATASET_PROFILE = load_mini_dataset_profile(ROOT, dataset_profile_ref.path)
+if DATASET_PROFILE.profile_id != dataset_profile_ref.expected_id:
+    raise SystemExit("resolved dataset timing profile identity differs")
+DATASET_MODE = True
+CONTROL_HZ = DATASET_PROFILE.control_hz
+RENDER_HZ = DATASET_PROFILE.gui_preview_hz
+CONTROL_TICKS_PER_CAPTURE = CONTROL_HZ // DATASET_PROFILE.policy_fps
+OPERATOR_PREVIEW_CONTROL_INTERVAL = CONTROL_HZ // RENDER_HZ
 DATASET_RECORDING = DATASET_MODE and ARGS.recording_enabled
 DATASET_SOURCE_MODE = DatasetSourceMode(ARGS.dataset_source_mode)
 DATASET_ELIGIBLE = DATASET_SOURCE_MODE is DatasetSourceMode.LIVE_TELEOPERATION
@@ -777,8 +800,15 @@ ACTIVE_ISAAC_RENDERER = (
 
 PHYSICS_SUBSTEPS_PER_CONTROL = RESOLVED.control_profile.physics_hz // CONTROL_HZ
 CONTROL_TICKS_PER_RENDER = CONTROL_HZ // RENDER_HZ
-if PHYSICS_SUBSTEPS_PER_CONTROL != 2 or CONTROL_TICKS_PER_RENDER != 3:
-    raise SystemExit("NV-5.1 requires 120/60/20 physics-control-render scheduling")
+if (
+    RESOLVED.control_profile.physics_hz % CONTROL_HZ != 0
+    or CONTROL_HZ % RENDER_HZ != 0
+    or CONTROL_HZ % DATASET_PROFILE.policy_fps != 0
+    or PHYSICS_SUBSTEPS_PER_CONTROL != 4
+    or CONTROL_TICKS_PER_RENDER != 2
+    or CONTROL_TICKS_PER_CAPTURE != 1
+):
+    raise SystemExit("NV-5.1 requires 120/30/15/30 scheduling")
 
 SIDES = resolve_dual_side_runtimes(ROOT, RESOLVED.session)
 alignment_references = {
@@ -1017,7 +1047,7 @@ def _render_without_simulation_advance(
     camera_render_due: bool,
     counters: Counter[str],
 ) -> tuple[SimulationCameraFrame, ...]:
-    """Service rendering without charging it to a 60 Hz control tick."""
+    """Service rendering without charging it to a control tick."""
 
     simulation_time_s = _simulation_time_s(scene)
     started_ns = time.monotonic_ns()
@@ -1129,7 +1159,7 @@ def _replay_camera_frames(
             camera_capture.observe_completed_substep(
                 control_tick_id=state.control_tick_id,
                 physics_substep_index=state.physics_substep_index,
-                physics_substep_ordinal=1,
+                physics_substep_ordinal=PHYSICS_SUBSTEPS_PER_CONTROL - 1,
                 simulation_time_s=state.simulation_time_s,
             )
         )
@@ -1421,6 +1451,7 @@ def main() -> int:
     camera_transform_broadcaster: TransformBroadcaster | None = None
     camera_static_transform_broadcaster: StaticTransformBroadcaster | None = None
     counters: Counter[str] = Counter()
+    stage_timings = _StageTimings()
     current_run_root: Path | None = None
     current_run_id: str | None = None
     if ARGS.recording_enabled:
@@ -1728,11 +1759,7 @@ def main() -> int:
                     )
                     counters["dataset.pre_state_reused"] += 1
                 duration_ns = time.monotonic_ns() - dataset_state_start_ns
-                counters["dataset.pre_state_total_ns"] += duration_ns
-                counters["dataset.pre_state_max_ns"] = max(
-                    counters["dataset.pre_state_max_ns"],
-                    duration_ns,
-                )
+                stage_timings.observe(counters, "dataset.pre_state", duration_ns)
             control_start_ns = time.monotonic_ns()
             result = application.cycle.step(
                 feedback_q7_rad={
@@ -1742,6 +1769,8 @@ def main() -> int:
                 now_ns=tick_ns,
             )
             control_end_ns = time.monotonic_ns()
+            stage_timings.observe(counters, "control.snapshot", snapshot_end_ns - snapshot_start_ns)
+            stage_timings.observe(counters, "control.solve", control_end_ns - control_start_ns)
             arm_steps = {labelled.side: labelled.step for labelled in result.arm_steps}
             hand_steps = {labelled.side.value: labelled.step for labelled in result.hand_steps}
             route_command_start_ns = time.monotonic_ns()
@@ -1784,14 +1813,11 @@ def main() -> int:
                     f"{side}.hand.{hand_step.rejection_reason or hand_step.decision.reason}"
                 ] += 1
             route_command_duration_ns = time.monotonic_ns() - route_command_start_ns
-            counters["ros.route_command_total_ns"] += route_command_duration_ns
-            counters["ros.route_command_max_ns"] = max(
-                counters["ros.route_command_max_ns"],
-                route_command_duration_ns,
-            )
+            stage_timings.observe(counters, "ros.route_command", route_command_duration_ns)
             apply_start_ns = time.monotonic_ns()
             applied_targets = scene.apply_targets()
             apply_end_ns = time.monotonic_ns()
+            stage_timings.observe(counters, "control.apply", apply_end_ns - apply_start_ns)
             simulation_time_before_s = _simulation_time_s(scene)
             physics_start_ns = time.monotonic_ns()
             physics_substep_indices: list[int] = []
@@ -1814,11 +1840,7 @@ def main() -> int:
                 world_step_start_ns = time.monotonic_ns()
                 scene.world.step(render=False)
                 world_step_duration_ns = time.monotonic_ns() - world_step_start_ns
-                counters["physics.world_step_total_ns"] += world_step_duration_ns
-                counters["physics.world_step_max_ns"] = max(
-                    counters["physics.world_step_max_ns"],
-                    world_step_duration_ns,
-                )
+                stage_timings.observe(counters, "physics.world_step", world_step_duration_ns)
                 physics_substep_end_ns.append(time.monotonic_ns())
                 physics_substep_sim_time_s = _simulation_time_s(scene)
                 physics_substep_sim_times_s.append(physics_substep_sim_time_s)
@@ -1833,13 +1855,10 @@ def main() -> int:
                         )
                     )
                     camera_observe_duration_ns = time.monotonic_ns() - camera_observe_start_ns
-                    counters["camera.observe_total_ns"] += camera_observe_duration_ns
-                    counters["camera.observe_max_ns"] = max(
-                        counters["camera.observe_max_ns"],
-                        camera_observe_duration_ns,
-                    )
+                    stage_timings.observe(counters, "camera.observe", camera_observe_duration_ns)
                 completed_physics_steps += 1
             physics_end_ns = time.monotonic_ns()
+            stage_timings.observe(counters, "physics.tick", physics_end_ns - physics_start_ns)
             simulation_time_after_s = _simulation_time_s(scene)
             if render_due or (ARGS.gui and camera_render_due):
                 # World.step(render=True) advances by rendering_dt and therefore
@@ -1855,81 +1874,21 @@ def main() -> int:
                 )
                 if render_due:
                     completed_renders += 1
-            post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
-            if self_collision_q27_probe is not None:
-                self_collision_q27_probe.observe(post_feedback, applied_targets)
             post_dataset_frame: _DeferredDatasetState | None = None
             operator_preview_state: _DeferredDatasetState | None = None
             operator_preview_due = bool(
                 ARGS.external_preview_required
                 and (scheduled_tick.control_index + 1) % OPERATOR_PREVIEW_CONTROL_INTERVAL == 0
             )
-            if dataset_candidate_tick or operator_preview_due:
-                if DATASET_PROFILE is None:
-                    raise RuntimeError("dataset profile is missing")
-                dataset_state_start_ns = time.monotonic_ns()
-                post_dataset_snapshot = scene.dataset_state_snapshot(
-                    q54_profile=DATASET_PROFILE.q54,
-                    q27_by_side=post_feedback,
-                    qdot27_by_side={
-                        side: scene.feedback_qdot27(side) for side in ("left", "right")
-                    },
-                )
-                post_state = _DeferredDatasetState(
-                    run_id=current_run_id or "",
-                    control_index=scheduled_tick.control_index,
-                    phase=SimulationFramePhase.POST_ACTION,
-                    simulation_time_s=simulation_time_after_s,
-                    physics_boundary_index=completed_physics_steps,
-                    snapshot=post_dataset_snapshot,
-                )
-                duration_ns = time.monotonic_ns() - dataset_state_start_ns
-                if dataset_candidate_tick:
-                    post_dataset_frame = post_state
-                    counters["dataset.post_state_total_ns"] += duration_ns
-                    counters["dataset.post_state_max_ns"] = max(
-                        counters["dataset.post_state_max_ns"],
-                        duration_ns,
-                    )
-                    previous_post_dataset_state = post_dataset_frame
-                if operator_preview_due:
-                    preview_snapshot_start_ns = time.monotonic_ns()
-                    preview_snapshot = scene.operator_preview_state_snapshot(
-                        dataset_snapshot=post_dataset_snapshot,
-                    )
-                    operator_preview_state = _DeferredDatasetState(
-                        run_id=post_state.run_id,
-                        control_index=post_state.control_index,
-                        phase=post_state.phase,
-                        simulation_time_s=post_state.simulation_time_s,
-                        physics_boundary_index=post_state.physics_boundary_index,
-                        snapshot=preview_snapshot,
-                    )
-                    preview_duration_ns = time.monotonic_ns() - preview_snapshot_start_ns
-                    counters["operator_preview.snapshot_total_ns"] += preview_duration_ns
-                    counters["operator_preview.snapshot_max_ns"] = max(
-                        counters["operator_preview.snapshot_max_ns"],
-                        preview_duration_ns,
-                    )
-            if camera_render_due and not ARGS.gui:
-                replay_snapshot_start_ns = time.monotonic_ns()
-                replay_snapshot = scene.camera_replay_snapshot(
-                    q27_by_side=post_feedback,
-                )
-                replay_snapshot_duration_ns = time.monotonic_ns() - replay_snapshot_start_ns
-                counters["camera.replay_snapshot_total_ns"] += replay_snapshot_duration_ns
-                counters["camera.replay_snapshot_max_ns"] = max(
-                    counters["camera.replay_snapshot_max_ns"],
-                    replay_snapshot_duration_ns,
-                )
-                camera_replay_states.append(
-                    _CameraReplayState(
-                        control_tick_id=scheduled_tick.control_index,
-                        physics_substep_index=physics_substep_indices[-1],
-                        simulation_time_s=simulation_time_after_s,
-                        scene=replay_snapshot,
-                    )
-                )
+            trace_time_ns = time.monotonic_ns()
+            completed_frames += 1
+            stage_timings.observe(counters, "control.tick", trace_time_ns - tick_ns)
+            scheduler.complete(completed_ns=trace_time_ns)
+
+            post_control_start_ns = time.monotonic_ns()
+            post_feedback = {side: scene.feedback_q27(side) for side in ("left", "right")}
+            if self_collision_q27_probe is not None:
+                self_collision_q27_probe.observe(post_feedback, applied_targets)
             route_feedback_start_ns = time.monotonic_ns()
             for arm_labelled in result.arm_steps:
                 side = arm_labelled.side
@@ -1962,13 +1921,83 @@ def main() -> int:
                     joint_names=scene.hand_profiles[side].layout.names,
                     feedback_publishers=feedback_publishers,
                 )
-            route_feedback_duration_ns = time.monotonic_ns() - route_feedback_start_ns
-            counters["ros.route_feedback_total_ns"] += route_feedback_duration_ns
-            counters["ros.route_feedback_max_ns"] = max(
-                counters["ros.route_feedback_max_ns"],
-                route_feedback_duration_ns,
+            stage_timings.observe(
+                counters,
+                "ros.route_feedback",
+                time.monotonic_ns() - route_feedback_start_ns,
             )
-            trace_time_ns = time.monotonic_ns()
+            if dataset_candidate_tick or operator_preview_due:
+                if DATASET_PROFILE is None:
+                    raise RuntimeError("dataset profile is missing")
+                dataset_state_start_ns = time.monotonic_ns()
+                link_snapshots = (
+                    scene.operator_preview_link_snapshots()
+                    if operator_preview_due
+                    else None
+                )
+                post_dataset_snapshot = scene.dataset_state_snapshot(
+                    q54_profile=DATASET_PROFILE.q54,
+                    q27_by_side=post_feedback,
+                    qdot27_by_side={
+                        side: scene.feedback_qdot27(side) for side in ("left", "right")
+                    },
+                    link_snapshots=link_snapshots,
+                )
+                post_state = _DeferredDatasetState(
+                    run_id=current_run_id or "",
+                    control_index=scheduled_tick.control_index,
+                    phase=SimulationFramePhase.POST_ACTION,
+                    simulation_time_s=simulation_time_after_s,
+                    physics_boundary_index=completed_physics_steps,
+                    snapshot=post_dataset_snapshot,
+                )
+                duration_ns = time.monotonic_ns() - dataset_state_start_ns
+                if dataset_candidate_tick:
+                    post_dataset_frame = post_state
+                    stage_timings.observe(counters, "dataset.post_state", duration_ns)
+                    previous_post_dataset_state = post_dataset_frame
+                if operator_preview_due:
+                    if link_snapshots is None:
+                        raise RuntimeError("operator preview link snapshot is missing")
+                    preview_snapshot_start_ns = time.monotonic_ns()
+                    preview_snapshot = scene.operator_preview_state_snapshot(
+                        dataset_snapshot=post_dataset_snapshot,
+                        link_snapshots=link_snapshots,
+                    )
+                    operator_preview_state = _DeferredDatasetState(
+                        run_id=post_state.run_id,
+                        control_index=post_state.control_index,
+                        phase=post_state.phase,
+                        simulation_time_s=post_state.simulation_time_s,
+                        physics_boundary_index=post_state.physics_boundary_index,
+                        snapshot=preview_snapshot,
+                    )
+                    stage_timings.observe(
+                        counters,
+                        "operator_preview.snapshot",
+                        time.monotonic_ns() - preview_snapshot_start_ns,
+                    )
+            if camera_render_due and not ARGS.gui:
+                replay_snapshot_start_ns = time.monotonic_ns()
+                replay_snapshot = scene.camera_replay_snapshot(
+                    q27_by_side=post_feedback,
+                )
+                replay_snapshot_duration_ns = time.monotonic_ns() - replay_snapshot_start_ns
+                stage_timings.observe(
+                    counters,
+                    "camera.replay_snapshot",
+                    replay_snapshot_duration_ns,
+                )
+                camera_replay_states.append(
+                    _CameraReplayState(
+                        control_tick_id=scheduled_tick.control_index,
+                        physics_substep_index=physics_substep_indices[-1],
+                        simulation_time_s=simulation_time_after_s,
+                        scene=replay_snapshot,
+                    )
+                )
+
+            publish_context: _RecordingPublishContext | None = None
             if (
                 recording_publisher_worker is not None
                 and current_run_id is not None
@@ -2026,18 +2055,10 @@ def main() -> int:
                         active_hand_sources=active_hand_sources,
                     )
                     context_build_duration_ns = time.monotonic_ns() - context_build_start_ns
-                    counters["recording.context_build_total_ns"] += context_build_duration_ns
-                    counters["recording.context_build_max_ns"] = max(
-                        counters["recording.context_build_max_ns"],
+                    stage_timings.observe(
+                        counters,
+                        "recording.context_build",
                         context_build_duration_ns,
-                    )
-                    enqueue_start_ns = time.monotonic_ns()
-                    recording_publisher_worker.submit(publish_context)
-                    enqueue_duration_ns = time.monotonic_ns() - enqueue_start_ns
-                    counters["recording.enqueue_total_ns"] += enqueue_duration_ns
-                    counters["recording.enqueue_max_ns"] = max(
-                        counters["recording.enqueue_max_ns"],
-                        enqueue_duration_ns,
                     )
                 except Exception as exc:
                     recording_failure_reason = _bounded_reason(exc)
@@ -2047,8 +2068,23 @@ def main() -> int:
                         file=sys.stderr,
                         flush=True,
                     )
-            completed_frames += 1
-            scheduler.complete(completed_ns=time.monotonic_ns())
+            if publish_context is not None:
+                try:
+                    enqueue_start_ns = time.monotonic_ns()
+                    recording_publisher_worker.submit(publish_context)
+                    stage_timings.observe(
+                        counters,
+                        "recording.enqueue",
+                        time.monotonic_ns() - enqueue_start_ns,
+                    )
+                except Exception as exc:
+                    recording_failure_reason = _bounded_reason(exc)
+                    counters["recording.trace_failures"] += 1
+            stage_timings.observe(
+                counters,
+                "post_control.bookkeeping",
+                time.monotonic_ns() - post_control_start_ns,
+            )
             if dataset_lifecycle is not None and recording_failure_reason is not None:
                 failure_reason = f"dataset_fact_publish_failed:{recording_failure_reason}"
                 break
@@ -2082,7 +2118,7 @@ def main() -> int:
                             )
                         )
                         print(
-                            "DATASET EPISODE READY: next complete 60 Hz tick is candidate k0",
+                            "DATASET EPISODE READY: next complete 30 Hz tick is candidate k0",
                             flush=True,
                         )
                 elif last_event is DatasetEpisodeEvent.READY:
@@ -2314,6 +2350,7 @@ def main() -> int:
                         closed_ns=closed_ns,
                         readiness=readiness,
                         counters=counters,
+                        stage_timings=stage_timings,
                         tracker_inputs=tracker_inputs,
                         hand_inputs=hand_inputs,
                         executor_metrics=asdict(executor_worker.metrics),
@@ -2393,6 +2430,7 @@ def main() -> int:
         "completed_renders": completed_renders,
         "readiness": readiness,
         "counters": dict(counters),
+        "stage_timing": stage_timings.to_mapping(),
         "synthetic_d405_wrist_rigs": {
             "materialized_sides": [item.side for item in scene.wrist_rigs],
             "camera_prims": [item.camera_prim_path for item in scene.wrist_rigs],
@@ -2960,7 +2998,7 @@ def _run_manifest_payload(
             "source_mode": DATASET_SOURCE_MODE.value,
             "dataset_eligible": DATASET_ELIGIBLE,
             "policy_fps": DATASET_PROFILE.policy_fps,
-            "selection": "relative_even_control_index_no_interpolation_v1",
+            "selection": "relative_all_control_index_no_interpolation_v1",
             "observation_phase": "pre_action",
             "q54_runtime_inventory": q54_runtime_inventory.to_mapping(),
             "dynamic_object_inventory": dict(scene.dataset_dynamic_object_paths),
@@ -3126,7 +3164,7 @@ def _run_manifest_payload(
                 "pre-apply and post-step q27 feedback",
                 "raw stage timestamps",
                 "control deadline, slot and missed-period count",
-                "two physics substep indices, host times and simulation times",
+                "four physics substep indices, host times and simulation times",
                 "target-effective simulation interval and render index",
                 "Workcell dynamic rigid-body state",
                 (
@@ -3202,6 +3240,7 @@ def _run_receipt_payload(
     closed_ns: int,
     readiness: dict[str, object],
     counters: Counter[str],
+    stage_timings: _StageTimings,
     tracker_inputs: dict[str, RosTrackerInputAdapter],
     hand_inputs: dict[HandSide, RosHandObservationInputAdapter],
     executor_metrics: dict[str, object],
@@ -3255,6 +3294,7 @@ def _run_receipt_payload(
         "recording_failure_reason": recording_failure_reason,
         "readiness": readiness,
         "controller_health": dict(counters),
+        "stage_timing": stage_timings.to_mapping(),
         "input_health": {
             **{
                 f"tracker_{side}": {
@@ -3278,6 +3318,8 @@ def _run_receipt_payload(
             None
             if dataset_lifecycle is None
             else {
+                "profile_id": DATASET_PROFILE.profile_id,
+                "profile_sha256": DATASET_PROFILE.file_sha256,
                 "events": [boundary.to_mapping() for boundary in dataset_lifecycle.boundaries],
                 "lifecycle_closed": bool(
                     dataset_lifecycle.boundaries

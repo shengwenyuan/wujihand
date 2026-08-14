@@ -1,4 +1,4 @@
-"""Atomic, deterministic writers for read-only derived episode artifacts."""
+"""Atomic, deterministic writers for current 30 Hz alignment artifacts."""
 
 from __future__ import annotations
 
@@ -14,37 +14,13 @@ from wujihand.domain.recording import validate_run_id
 
 from .alignment import (
     ALIGNMENT_SCHEMA,
-    LEGACY_ALIGNMENT_SCHEMA,
-    PREVIOUS_ALIGNMENT_SCHEMA,
     AlignmentFrame,
     ExactAlignment,
     _alignment_digest,
 )
 
 
-ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v3"
-PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v2"
-LEGACY_ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v1"
-
-
-def _legacy_frame_mapping(frame: AlignmentFrame) -> dict[str, object]:
-    row = frame.to_mapping()
-    for key in (
-        "temporal_continuity",
-        "missing_control_periods_before",
-        "temporal_segment_index",
-        "gap_before_row",
-        "transition_valid",
-    ):
-        row.pop(key)
-    return row
-
-
-def _previous_frame_mapping(frame: AlignmentFrame) -> dict[str, object]:
-    row = frame.to_mapping()
-    row.pop("gap_before_row")
-    row.pop("transition_valid")
-    return row
+ALIGNMENT_ARTIFACT_SCHEMA: Final = "wujihand.dataset_alignment_artifact.v4"
 
 
 def _sha256(path: Path) -> str:
@@ -57,13 +33,7 @@ def _sha256(path: Path) -> str:
 
 def _json_bytes(value: object) -> bytes:
     return (
-        json.dumps(
-            value,
-            sort_keys=True,
-            indent=2,
-            allow_nan=False,
-        )
-        + "\n"
+        json.dumps(value, sort_keys=True, indent=2, allow_nan=False) + "\n"
     ).encode("utf-8")
 
 
@@ -109,7 +79,7 @@ def load_alignment_artifact(
     *,
     expected_run_id: str | None = None,
 ) -> ExactAlignment:
-    """Load and re-derive one exact alignment artifact without trusting its manifest."""
+    """Load and re-derive one current alignment artifact."""
 
     raw_root = Path(alignment_root)
     if raw_root.is_symlink():
@@ -117,27 +87,19 @@ def load_alignment_artifact(
     root = raw_root.resolve()
     if not root.is_dir():
         raise ValueError("alignment root must be a directory")
-    legacy_expected_files = {
+    expected_files = {
         "checksums.sha256",
         "frames.jsonl",
+        "gap_ticks.json",
         "manifest.json",
-        "odd_ticks.json",
     }
-    current_expected_files = {*legacy_expected_files, "gap_ticks.json"}
     actual_files = {path.name for path in root.iterdir() if path.is_file()}
-    if (
-        frozenset(actual_files)
-        not in {frozenset(legacy_expected_files), frozenset(current_expected_files)}
-        or any(path.is_symlink() for path in root.iterdir())
-    ):
+    if actual_files != expected_files or any(path.is_symlink() for path in root.iterdir()):
         raise ValueError("alignment artifact file inventory differs")
     if not _verify_checksums(root):
         raise ValueError("alignment artifact checksums differ")
 
     manifest_value = _load_json(root / "manifest.json", field="alignment manifest")
-    if not isinstance(manifest_value, dict):
-        raise ValueError("alignment manifest must be a mapping")
-    manifest = cast(dict[str, object], manifest_value)
     manifest_keys = frozenset(
         {
             "schema",
@@ -150,255 +112,154 @@ def load_alignment_artifact(
             "files",
         }
     )
-    artifact_schema = manifest.get("schema")
-    if frozenset(manifest) != manifest_keys or artifact_schema not in {
-        ALIGNMENT_ARTIFACT_SCHEMA,
-        PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA,
-        LEGACY_ALIGNMENT_ARTIFACT_SCHEMA,
-    }:
+    if not isinstance(manifest_value, dict) or frozenset(manifest_value) != manifest_keys:
         raise ValueError("alignment manifest schema or keys differ")
-    legacy = artifact_schema == LEGACY_ALIGNMENT_ARTIFACT_SCHEMA
-    previous = artifact_schema == PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA
-    expected_inventory = legacy_expected_files if legacy else current_expected_files
-    if actual_files != expected_inventory:
-        raise ValueError("alignment artifact inventory does not match its schema")
+    manifest = cast(dict[str, object], manifest_value)
+    if manifest.get("schema") != ALIGNMENT_ARTIFACT_SCHEMA:
+        raise ValueError("alignment manifest schema or keys differ")
     run_id = validate_run_id(manifest.get("run_id"))
     if expected_run_id is not None and run_id != validate_run_id(expected_run_id):
         raise ValueError("alignment and expected run IDs differ")
-    if manifest.get("selection") != "relative_even_control_index_no_interpolation_v1":
+    if manifest.get("selection") != "relative_all_control_index_no_interpolation_v1":
         raise ValueError("alignment selection contract differs")
     if manifest.get("fps") != 30:
         raise ValueError("alignment fps must be 30")
     frame_count = manifest.get("frame_count")
     source_count = manifest.get("source_transition_count")
-    if type(frame_count) is not int or frame_count <= 0:
-        raise ValueError("alignment frame_count must be positive")
-    if type(source_count) is not int or source_count <= 0:
-        raise ValueError("alignment source_transition_count must be positive")
+    if type(frame_count) is not int or frame_count <= 0 or source_count != frame_count:
+        raise ValueError("alignment frame/source counts must be equal and positive")
     digest = manifest.get("alignment_digest_sha256")
     if not isinstance(digest, str) or len(digest) != 64 or any(
         char not in "0123456789abcdef" for char in digest
     ):
         raise ValueError("alignment digest must be a lowercase SHA-256")
 
-    material_names = (
-        ("frames.jsonl", "odd_ticks.json")
-        if legacy
-        else ("frames.jsonl", "odd_ticks.json", "gap_ticks.json")
-    )
+    material_names = ("frames.jsonl", "gap_ticks.json")
     files = manifest.get("files")
     if not isinstance(files, dict) or frozenset(files) != frozenset(material_names):
         raise ValueError("alignment manifest material file inventory differs")
     for name in material_names:
         entry = files[name]
-        if not isinstance(entry, dict) or frozenset(entry) != {"sha256", "bytes"}:
-            raise ValueError(f"alignment manifest file entry differs: {name}")
         path = root / name
-        if entry.get("sha256") != _sha256(path) or entry.get("bytes") != path.stat().st_size:
+        if (
+            not isinstance(entry, dict)
+            or frozenset(entry) != {"sha256", "bytes"}
+            or entry.get("sha256") != _sha256(path)
+            or entry.get("bytes") != path.stat().st_size
+        ):
             raise ValueError(f"alignment manifest file metadata differs: {name}")
 
     frames: list[AlignmentFrame] = []
-    try:
-        frame_lines = (root / "frames.jsonl").read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise ValueError("alignment frame table cannot be read") from exc
-    for line_number, line in enumerate(frame_lines, start=1):
+    for line_number, line in enumerate(
+        (root / "frames.jsonl").read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
         if not line:
             raise ValueError("alignment frame table must not contain blank rows")
         try:
             value = json.loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"alignment frame line {line_number} is invalid") from exc
-        frames.append(
-            AlignmentFrame.from_mapping(value, field=f"frames[{line_number}]")
-        )
+        frames.append(AlignmentFrame.from_mapping(value, field=f"frames[{line_number}]"))
     if len(frames) != frame_count:
         raise ValueError("alignment frame count differs")
     if tuple(frame.dataset_frame_index for frame in frames) != tuple(range(frame_count)):
         raise ValueError("alignment frame indices must be contiguous from zero")
+    first = frames[0].source_control_index
+    expected_source_indices = tuple(range(first, first + frame_count))
+    if tuple(frame.source_control_index for frame in frames) != expected_source_indices:
+        raise ValueError("alignment source indices must map one-to-one in order")
     if any(
         current.simulation_time_s <= previous.simulation_time_s
         for previous, current in zip(frames, frames[1:], strict=False)
     ):
         raise ValueError("alignment simulation time must be strictly increasing")
 
-    odd_value = _load_json(root / "odd_ticks.json", field="alignment odd tick sidecar")
-    if not isinstance(odd_value, dict) or frozenset(odd_value) != {
+    gap_value = _load_json(root / "gap_ticks.json", field="alignment control gap sidecar")
+    if not isinstance(gap_value, dict) or frozenset(gap_value) != {
         "schema",
         "run_id",
         "purpose",
-        "control_indices",
+        "gaps",
     }:
-        raise ValueError("alignment odd tick sidecar schema or keys differ")
+        raise ValueError("alignment control gap sidecar schema or keys differ")
     if (
-        odd_value.get("schema")
-        != (
-            LEGACY_ALIGNMENT_SCHEMA
-            if legacy
-            else PREVIOUS_ALIGNMENT_SCHEMA
-            if previous
-            else ALIGNMENT_SCHEMA
-        )
-        or odd_value.get("run_id") != run_id
-        or odd_value.get("purpose") != "unselected_60hz_transition_audit"
+        gap_value.get("schema") != ALIGNMENT_SCHEMA
+        or gap_value.get("run_id") != run_id
+        or gap_value.get("purpose") != "missed_control_period_gap_mask"
+        or not isinstance(gap_value.get("gaps"), list)
     ):
-        raise ValueError("alignment odd tick sidecar identity differs")
-    odd_raw = odd_value.get("control_indices")
-    if not isinstance(odd_raw, list) or any(type(item) is not int or item < 0 for item in odd_raw):
-        raise ValueError("alignment odd control indices must be non-negative integers")
-    odd_indices = tuple(cast(list[int], odd_raw))
-
-    gap_ticks: tuple[tuple[int, int], ...] = ()
-    if not legacy:
-        gap_value = _load_json(
-            root / "gap_ticks.json",
-            field="alignment control gap sidecar",
-        )
-        if not isinstance(gap_value, dict) or frozenset(gap_value) != {
-            "schema",
-            "run_id",
-            "purpose",
-            "gaps",
+        raise ValueError("alignment control gap sidecar identity differs")
+    parsed_gaps: list[tuple[int, int]] = []
+    for index, value in enumerate(cast(list[object], gap_value["gaps"])):
+        if not isinstance(value, dict) or frozenset(value) != {
+            "control_index",
+            "missing_control_periods_before",
         }:
-            raise ValueError("alignment control gap sidecar schema or keys differ")
+            raise ValueError(f"alignment control gap {index} differs")
+        control_index = value.get("control_index")
+        missing = value.get("missing_control_periods_before")
         if (
-            gap_value.get("schema")
-            != (PREVIOUS_ALIGNMENT_SCHEMA if previous else ALIGNMENT_SCHEMA)
-            or gap_value.get("run_id") != run_id
-            or gap_value.get("purpose")
-            != "missed_control_period_gap_mask"
+            type(control_index) is not int
+            or type(missing) is not int
+            or control_index not in expected_source_indices
+            or missing <= 0
         ):
-            raise ValueError("alignment control gap sidecar identity differs")
-        gap_raw = gap_value.get("gaps")
-        if not isinstance(gap_raw, list):
-            raise ValueError("alignment control gaps must be a list")
-        parsed_gaps: list[tuple[int, int]] = []
-        for index, value in enumerate(gap_raw):
-            if not isinstance(value, dict) or frozenset(value) != {
-                "control_index",
-                "missing_control_periods_before",
-            }:
-                raise ValueError(f"alignment control gap {index} differs")
-            control_index = value.get("control_index")
-            missing = value.get("missing_control_periods_before")
-            if (
-                type(control_index) is not int
-                or type(missing) is not int
-                or control_index < 0
-                or missing <= 0
-            ):
-                raise ValueError(f"alignment control gap {index} values differ")
-            parsed_gaps.append((control_index, missing))
-        gap_ticks = tuple(parsed_gaps)
-        if (
-            tuple(sorted(gap_ticks)) != gap_ticks
-            or len({index for index, _ in gap_ticks}) != len(gap_ticks)
-        ):
-            raise ValueError("alignment control gaps must be unique and ordered")
+            raise ValueError(f"alignment control gap {index} values differ")
+        parsed_gaps.append((control_index, missing))
+    gap_ticks = tuple(parsed_gaps)
+    if tuple(sorted(gap_ticks)) != gap_ticks or len(dict(gap_ticks)) != len(gap_ticks):
+        raise ValueError("alignment control gaps must be unique and ordered")
 
-    first = frames[0].source_control_index
-    expected_selected = tuple(first + 2 * index for index in range(frame_count))
-    if tuple(frame.source_control_index for frame in frames) != expected_selected:
-        raise ValueError("alignment selected source indices are not relative-even")
-    expected_odd = tuple(first + 2 * index + 1 for index in range(source_count // 2))
-    if odd_indices != expected_odd:
-        raise ValueError("alignment odd tick audit differs")
-    source_indices = tuple(
-        sorted((*expected_selected, *odd_indices))
-    )
-    if len(source_indices) != source_count or source_indices != tuple(
-        range(first, first + source_count)
-    ):
-        raise ValueError("alignment source transition closure differs")
-    last = source_indices[-1]
-    if any(index < first or index > last for index, _ in gap_ticks):
-        raise ValueError("alignment control gap is outside the source range")
     missing_by_index = dict(gap_ticks)
-    previous_selected: int | None = None
     expected_segment = 0
     for frame_index, frame in enumerate(frames):
-        first_covered = (
-            frame.source_control_index
-            if previous_selected is None
-            else previous_selected + 1
-        )
-        missing_before = sum(
-            missing_by_index.get(index, 0)
-            for index in range(first_covered, frame.source_control_index + 1)
-        )
-        if previous_selected is not None and missing_before > 0:
+        missing_before = missing_by_index.get(frame.source_control_index, 0)
+        if frame_index > 0 and missing_before > 0:
             expected_segment += 1
+        expected_transition_valid = (
+            frame_index + 1 < len(frames)
+            and missing_by_index.get(frames[frame_index + 1].source_control_index, 0) == 0
+        )
         if (
             frame.missing_control_periods_before != missing_before
             or frame.temporal_continuity != (missing_before == 0)
             or frame.temporal_segment_index != expected_segment
+            or frame.gap_before_row != (missing_before > 0)
+            or frame.transition_valid != expected_transition_valid
         ):
             raise ValueError("alignment frame gap mask closure differs")
-        if not legacy and not previous:
-            expected_transition_valid = (
-                frame_index + 1 < len(frames)
-                and frames[frame_index + 1].missing_control_periods_before == 0
-            )
-            if (
-                frame.gap_before_row != (missing_before > 0)
-                or frame.transition_valid != expected_transition_valid
-            ):
-                raise ValueError("alignment transition mask closure differs")
-        previous_selected = frame.source_control_index
+
     payload: dict[str, object] = {
-        "schema": (
-            LEGACY_ALIGNMENT_SCHEMA
-            if legacy
-            else PREVIOUS_ALIGNMENT_SCHEMA
-            if previous
-            else ALIGNMENT_SCHEMA
-        ),
+        "schema": ALIGNMENT_SCHEMA,
         "run_id": run_id,
         "source_first_control_index": first,
-        "source_last_control_index": last,
+        "source_last_control_index": expected_source_indices[-1],
         "source_transition_count": source_count,
-        "selection": "relative_even_control_index_no_interpolation_v1",
+        "selection": "relative_all_control_index_no_interpolation_v1",
         "fps": 30,
-        "frames": [
-            _legacy_frame_mapping(frame)
-            if legacy
-            else _previous_frame_mapping(frame)
-            if previous
-            else frame.to_mapping()
-            for frame in frames
-        ],
-        "odd_control_indices": list(odd_indices),
-    }
-    if not legacy:
-        payload["gap_ticks"] = [
+        "frames": [frame.to_mapping() for frame in frames],
+        "gap_ticks": [
             {"control_index": index, "missing_control_periods_before": missing}
             for index, missing in gap_ticks
-        ]
+        ],
+    }
     derived_digest = _alignment_digest(payload)
     if digest != derived_digest:
         raise ValueError("alignment digest differs from canonical rows")
     return ExactAlignment(
         run_id=run_id,
         source_first_control_index=first,
-        source_last_control_index=last,
+        source_last_control_index=expected_source_indices[-1],
         source_transition_count=source_count,
         frames=tuple(frames),
-        odd_control_indices=odd_indices,
         digest_sha256=digest,
         gap_ticks=gap_ticks,
     )
 
 
-def write_alignment_artifact(
-    run_root: str | Path,
-    alignment: ExactAlignment,
-) -> Path:
-    """Publish canonical rows atomically without touching raw recording files.
-
-    ``frames.jsonl`` is the dependency-light canonical alignment table.  The
-    LeRobot exporter writes Parquet in its isolated environment from these same
-    rows; neither format changes the exact source-tick selection.
-    """
+def write_alignment_artifact(run_root: str | Path, alignment: ExactAlignment) -> Path:
+    """Publish canonical 30 Hz rows atomically without touching raw recordings."""
 
     root = _safe_run_root(run_root, expected_run_id=alignment.run_id)
     derived = root / "derived"
@@ -423,26 +284,16 @@ def write_alignment_artifact(
     temporary = Path(tempfile.mkdtemp(prefix=".alignment-", dir=derived))
     try:
         frames_path = temporary / "frames.jsonl"
-        frames_payload = b"".join(
-            json.dumps(
-                frame.to_mapping(),
-                sort_keys=True,
-                separators=(",", ":"),
-                allow_nan=False,
-            ).encode("utf-8")
-            + b"\n"
-            for frame in alignment.frames
-        )
-        frames_path.write_bytes(frames_payload)
-        odd_path = temporary / "odd_ticks.json"
-        odd_path.write_bytes(
-            _json_bytes(
-                {
-                    "schema": ALIGNMENT_SCHEMA,
-                    "run_id": alignment.run_id,
-                    "purpose": "unselected_60hz_transition_audit",
-                    "control_indices": list(alignment.odd_control_indices),
-                }
+        frames_path.write_bytes(
+            b"".join(
+                json.dumps(
+                    frame.to_mapping(),
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+                + b"\n"
+                for frame in alignment.frames
             )
         )
         gap_path = temporary / "gap_ticks.json"
@@ -462,12 +313,12 @@ def write_alignment_artifact(
                 }
             )
         )
-        material = (frames_path, odd_path, gap_path)
+        material = (frames_path, gap_path)
         manifest = {
             "schema": ALIGNMENT_ARTIFACT_SCHEMA,
             "run_id": alignment.run_id,
             "alignment_digest_sha256": alignment.digest_sha256,
-            "selection": "relative_even_control_index_no_interpolation_v1",
+            "selection": "relative_all_control_index_no_interpolation_v1",
             "fps": 30,
             "frame_count": len(alignment.frames),
             "source_transition_count": alignment.source_transition_count,
@@ -479,10 +330,10 @@ def write_alignment_artifact(
         manifest_path = temporary / "manifest.json"
         manifest_path.write_bytes(_json_bytes(manifest))
         checksummed = (*material, manifest_path)
-        checksum_text = "".join(
-            f"{_sha256(item)}  {item.name}\n" for item in checksummed
+        (temporary / "checksums.sha256").write_text(
+            "".join(f"{_sha256(item)}  {item.name}\n" for item in checksummed),
+            encoding="utf-8",
         )
-        (temporary / "checksums.sha256").write_text(checksum_text, encoding="utf-8")
         os.replace(temporary, destination)
     except BaseException:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -492,8 +343,6 @@ def write_alignment_artifact(
 
 __all__ = [
     "ALIGNMENT_ARTIFACT_SCHEMA",
-    "LEGACY_ALIGNMENT_ARTIFACT_SCHEMA",
-    "PREVIOUS_ALIGNMENT_ARTIFACT_SCHEMA",
     "load_alignment_artifact",
     "write_alignment_artifact",
 ]

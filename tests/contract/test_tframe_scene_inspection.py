@@ -87,7 +87,7 @@ def test_tframe_inspection_applies_only_the_confirmed_left_flange_clocking() -> 
         )
         np.testing.assert_allclose(
             rotation @ np.asarray([-1.0, 0.0, 0.0]),
-            [0.0, 1.0, 0.0],
+            [0.0, 0.0, -1.0],
             atol=1e-12,
         )
 
@@ -104,8 +104,8 @@ def test_tframe_startup_is_the_mirrored_hanging_l_inspection_pose() -> None:
     profile = load_nero_dual_simulation_startup_profile(STARTUP)
     nero = load_nero_model_profile(NERO_PROFILE)
     expected = {
-        "left": (-math.pi / 2.0, -math.pi / 2.0, math.pi / 2.0, math.pi / 2.0, 0.0, 0.0, 0.0),
-        "right": (-math.pi / 2.0, math.pi / 2.0, math.pi / 2.0, math.pi / 2.0, 0.0, 0.0, 0.0),
+        "left": (0.0, math.pi / 2.0, -math.pi / 2.0, math.pi / 2.0, 0.0, 0.0, 0.0),
+        "right": (0.0, math.pi / 2.0, math.pi / 2.0, math.pi / 2.0, 0.0, 0.0, 0.0),
     }
 
     for side in ("left", "right"):

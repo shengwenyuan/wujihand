@@ -16,45 +16,35 @@ RUNNER = ROOT / "tools/run_isaac_nero_hand2_ros.py"
 PREVIEW_VALIDATOR = ROOT / "tools/validate_dataset_preview_fixture_qualification.py"
 DEPLOYMENT = (
     "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 
 
-def test_versioned_record_chain_resolves_without_changing_historical_entry() -> None:
+def test_formal_record_chain_resolves_only_the_current_schedule() -> None:
     resolver = RosDeploymentResolver(ROOT)
     local = "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
 
     current = resolver.resolve(DEPLOYMENT, local_binding=local, verify_artifacts=False)
-    historical = resolver.resolve(
-        "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml",
-        local_binding=local,
-        verify_artifacts=False,
-    )
 
     assert {item.asset.revision for item in current.session.instances if "hand_" in item.instance_id} == {
         "beta1_description_v2026_8_3"
     }
-    assert {
-        item.asset.revision for item in historical.session.instances if "hand_" in item.instance_id
-    } == {"beta1_description_v2026_6_27"}
-    assert current.session.assembly_path.endswith("_v2026_8_3_v1.yaml")
-    assert historical.session.assembly_path.endswith("_v2026_6_27_v1.yaml")
+    assert current.deployment.deployment_id.endswith("_120_30_15_v1")
+    assert current.session.session.session_id.endswith("_120_30_15_v1")
+    assert current.session.assembly_path.endswith("_collision_proxy_v1.yaml")
+    assert current.session.session.dataset_profile is not None
+    assert current.session.session.dataset_profile.expected_id == (
+        "isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1"
+    )
     current_mounts = {
         item.parent.instance: item.transform.quat_wxyz
         for item in current.session.assembly.attachments
-        if item.parent.frame == "link7"
-    }
-    historical_mounts = {
-        item.parent.instance: item.transform.quat_wxyz
-        for item in historical.session.assembly.attachments
-        if item.parent.frame == "link7"
+        if item.parent.frame == "gripper_flange"
     }
     assert current_mounts == {
-        "nero_left": (0.5, 0.5, -0.5, -0.5),
-        "nero_right": (0.5, -0.5, -0.5, 0.5),
-    }
-    assert set(historical_mounts.values()) == {
-        (0.7071067811865476, 0.0, 0.7071067811865475, 0.0)
+        "nero_left": (0.0, 0.0, 1.0, 0.0),
+        "nero_right": (0.0, 0.0, 1.0, 0.0),
     }
 
 
@@ -104,8 +94,8 @@ def test_live_qualification_is_explicitly_dataset_ineligible() -> None:
 def test_preview_validator_pins_versioned_hand_link_inventories() -> None:
     source = PREVIEW_VALIDATOR.read_text(encoding="utf-8")
 
-    assert '"left_hand": 27' in source
     assert '"left_hand": 26' in source
+    assert '"left_arm": 9' in source
     assert "preview component inventory is not qualified" in source
 
 

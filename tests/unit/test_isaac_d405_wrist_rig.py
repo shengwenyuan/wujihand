@@ -26,7 +26,8 @@ SESSION = (
 SESSION_83 = (
     ROOT
     / "configs/sessions/"
-    "isaac_nero_dual_hand2_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
+    "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 
 

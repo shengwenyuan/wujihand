@@ -11,7 +11,7 @@ tracker:
   max_sample_gap_s: 0.25
   stale_after_s: 0.25
   minimum_quality: 0.5
-  max_consecutive_ik_failures: 5
+  max_consecutive_ik_failures: 3
 kinematics:
   adapter_id: isaac_lula_q7_v1
   end_effector_frame: link7

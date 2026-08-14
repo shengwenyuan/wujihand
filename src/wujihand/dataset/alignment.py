@@ -1,4 +1,4 @@
-"""Exact causal selection from immutable 60 Hz transitions to a 30 Hz grid."""
+"""Exact causal identity mapping from immutable 30 Hz transitions."""
 
 from __future__ import annotations
 
@@ -13,9 +13,7 @@ from typing import Iterable, cast
 from wujihand.domain.recording import validate_run_id
 
 
-ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v3"
-PREVIOUS_ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v2"
-LEGACY_ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v1"
+ALIGNMENT_SCHEMA = "wujihand.dataset_alignment.v4"
 
 
 def _vector54(value: Iterable[float], *, field: str) -> tuple[float, ...]:
@@ -226,7 +224,7 @@ class AlignmentFrame:
         if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
             raise ValueError(f"{field} must be a string-keyed mapping")
         data = cast(Mapping[str, object], value)
-        legacy_expected = frozenset(
+        expected = frozenset(
             {
                 "dataset_frame_index",
                 "source_control_index",
@@ -238,15 +236,14 @@ class AlignmentFrame:
                 "source_state_digest",
             }
         )
-        expected = legacy_expected | {
+        expected |= {
             "temporal_continuity",
             "missing_control_periods_before",
             "temporal_segment_index",
+            "gap_before_row",
+            "transition_valid",
         }
-        current_expected = expected | {"gap_before_row", "transition_valid"}
-        legacy = frozenset(data) == legacy_expected
-        previous = frozenset(data) == expected
-        if not legacy and not previous and frozenset(data) != current_expected:
+        if frozenset(data) != expected:
             raise ValueError(f"{field} keys differ from the alignment frame schema")
         for key in ("dataset_frame_index", "source_control_index", "source_tick_id"):
             if type(data[key]) is not int:
@@ -272,25 +269,13 @@ class AlignmentFrame:
             observation_q54_rad=vectors["observation_q54_rad"],
             action_q54_rad=vectors["action_q54_rad"],
             source_state_digest=digest,
-            temporal_continuity=(
-                True if legacy else cast(bool, data["temporal_continuity"])
+            temporal_continuity=cast(bool, data["temporal_continuity"]),
+            missing_control_periods_before=cast(
+                int, data["missing_control_periods_before"]
             ),
-            missing_control_periods_before=(
-                0 if legacy else cast(int, data["missing_control_periods_before"])
-            ),
-            temporal_segment_index=(
-                0 if legacy else cast(int, data["temporal_segment_index"])
-            ),
-            gap_before_row=(
-                False
-                if legacy
-                else cast(int, data["missing_control_periods_before"]) > 0
-                if previous
-                else cast(bool, data["gap_before_row"])
-            ),
-            transition_valid=(
-                True if legacy or previous else cast(bool, data["transition_valid"])
-            ),
+            temporal_segment_index=cast(int, data["temporal_segment_index"]),
+            gap_before_row=cast(bool, data["gap_before_row"]),
+            transition_valid=cast(bool, data["transition_valid"]),
         )
 
 
@@ -301,7 +286,6 @@ class ExactAlignment:
     source_last_control_index: int
     source_transition_count: int
     frames: tuple[AlignmentFrame, ...]
-    odd_control_indices: tuple[int, ...]
     digest_sha256: str
     gap_ticks: tuple[tuple[int, int], ...] = ()
 
@@ -312,10 +296,9 @@ class ExactAlignment:
             "source_first_control_index": self.source_first_control_index,
             "source_last_control_index": self.source_last_control_index,
             "source_transition_count": self.source_transition_count,
-            "selection": "relative_even_control_index_no_interpolation_v1",
+            "selection": "relative_all_control_index_no_interpolation_v1",
             "fps": 30,
             "frames": [frame.to_mapping() for frame in self.frames],
-            "odd_control_indices": list(self.odd_control_indices),
             "gap_ticks": [
                 {"control_index": index, "missing_control_periods_before": missing}
                 for index, missing in self.gap_ticks
@@ -383,36 +366,15 @@ def build_exact_30hz_alignment(
         for index, missing in missing_by_index.items()
         if missing > 0
     )
-    anchor = indices[0]
-    selected = tuple(row for row in rows if (row.control_index - anchor) % 2 == 0)
-    odd = tuple(row.control_index for row in rows if (row.control_index - anchor) % 2 == 1)
     frames: list[AlignmentFrame] = []
     temporal_segment_index = 0
-    previous_selected_control_index: int | None = None
-    selected_missing_before: list[int] = []
-    for row in selected:
-        first_covered = (
-            row.control_index
-            if previous_selected_control_index is None
-            else previous_selected_control_index + 1
-        )
-        missing_before = sum(
-            missing_by_index[index]
-            for index in range(first_covered, row.control_index + 1)
-        )
-        if previous_selected_control_index is not None and missing_before > 0:
-            temporal_segment_index += 1
-        selected_missing_before.append(missing_before)
-        previous_selected_control_index = row.control_index
-    temporal_segment_index = 0
-    for dataset_frame_index, (row, missing_before) in enumerate(
-        zip(selected, selected_missing_before, strict=True)
-    ):
+    for dataset_frame_index, row in enumerate(rows):
+        missing_before = missing_by_index[row.control_index]
         if dataset_frame_index > 0 and missing_before > 0:
             temporal_segment_index += 1
         transition_valid = (
-            dataset_frame_index + 1 < len(selected)
-            and selected_missing_before[dataset_frame_index + 1] == 0
+            dataset_frame_index + 1 < len(rows)
+            and missing_by_index[rows[dataset_frame_index + 1].control_index] == 0
         )
         frames.append(
             AlignmentFrame(
@@ -438,10 +400,9 @@ def build_exact_30hz_alignment(
         "source_first_control_index": indices[0],
         "source_last_control_index": indices[-1],
         "source_transition_count": len(rows),
-        "selection": "relative_even_control_index_no_interpolation_v1",
+        "selection": "relative_all_control_index_no_interpolation_v1",
         "fps": 30,
         "frames": [frame.to_mapping() for frame in frame_rows],
-        "odd_control_indices": list(odd),
         "gap_ticks": [
             {"control_index": index, "missing_control_periods_before": missing}
             for index, missing in gap_ticks
@@ -453,7 +414,6 @@ def build_exact_30hz_alignment(
         source_last_control_index=indices[-1],
         source_transition_count=len(rows),
         frames=frame_rows,
-        odd_control_indices=odd,
         digest_sha256=_alignment_digest(payload),
         gap_ticks=gap_ticks,
     )
@@ -461,8 +421,6 @@ def build_exact_30hz_alignment(
 
 __all__ = [
     "ALIGNMENT_SCHEMA",
-    "LEGACY_ALIGNMENT_SCHEMA",
-    "PREVIOUS_ALIGNMENT_SCHEMA",
     "AlignmentFrame",
     "ExactAlignment",
     "RawTransition",

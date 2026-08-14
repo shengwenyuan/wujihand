@@ -24,10 +24,10 @@ float64 simulation_time_before_s
 float64 simulation_time_after_s
 float64 target_effective_start_sim_time_s
 float64 target_effective_end_sim_time_s
-uint64[2] physics_substep_indices
-float64[2] physics_substep_sim_times_s
-uint64[2] physics_substep_start_ns
-uint64[2] physics_substep_end_ns
+uint64[4] physics_substep_indices
+float64[4] physics_substep_sim_times_s
+uint64[4] physics_substep_start_ns
+uint64[4] physics_substep_end_ns
 bool rendered
 bool has_render_index
 uint64 render_index

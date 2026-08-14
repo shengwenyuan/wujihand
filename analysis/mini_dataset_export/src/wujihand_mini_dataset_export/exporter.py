@@ -515,8 +515,8 @@ def _write_sidecars(
     (root / "README.md").write_text(
         "# WujiHand q54 tri-view mini simulation dataset\n\n"
         "This candidate dataset contains absolute q54 joint targets and pre-action q54 "
-        "observations at 30 Hz, derived by exact relative-even selection from immutable "
-        "60 Hz ROS 2/Isaac control facts. It includes scene RGB plus left/right wrist RGB.\n\n"
+        "observations at 30 Hz, mapped one-to-one from immutable "
+        "30 Hz ROS 2/Isaac control facts. It includes scene RGB plus left/right wrist RGB.\n\n"
         "The wrist views use a synthetic 140-degree pinhole projection for simulation "
         "composition. They are not physical RealSense D405 calibration or specifications.\n\n"
         "No reward, success predicate or task-completion label is present. Raw q21, Tracker, "

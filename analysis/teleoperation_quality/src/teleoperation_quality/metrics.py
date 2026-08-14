@@ -26,14 +26,14 @@ TICK_SCHEMA_V2 = "wujihand.teleoperation_tick_trace.v2"
 
 @dataclass(frozen=True, slots=True)
 class AnalysisConfig:
-    expected_control_hz: float = 60.0
+    expected_control_hz: float = 30.0
     expected_physics_hz: float = 120.0
-    expected_render_hz: float = 20.0
+    expected_render_hz: float = 15.0
     control_rate_tolerance_fraction: float = 0.02
     render_rate_tolerance_fraction: float = 0.05
     minimum_real_time_factor: float = 0.95
-    p95_tick_interval_limit_ms: float = 20.0
-    gui_p95_tick_interval_limit_ms: float = 25.0
+    p95_tick_interval_limit_ms: float = 35.0
+    gui_p95_tick_interval_limit_ms: float = 35.0
     p95_comparable_input_age_limit_ms: float = 20.0
     q27_composition_atol_rad: float = 1e-12
 
@@ -454,13 +454,15 @@ def _execution_metrics(
         execution = tick.execution
         if execution is None:
             continue
-        first_simulation_dt = (
-            execution.physics_substep_sim_times_s[0] - execution.simulation_time_before_s
+        substep_simulation_dt_s.extend(
+            current - previous
+            for previous, current in pairwise(
+                (
+                    execution.simulation_time_before_s,
+                    *execution.physics_substep_sim_times_s,
+                )
+            )
         )
-        second_simulation_dt = (
-            execution.physics_substep_sim_times_s[1] - execution.physics_substep_sim_times_s[0]
-        )
-        substep_simulation_dt_s.extend((first_simulation_dt, second_simulation_dt))
         substep_indices.extend(execution.physics_substep_indices)
         for start_ns, end_ns in zip(
             execution.physics_substep_start_ns,
@@ -471,8 +473,7 @@ def _execution_metrics(
         missed_periods += execution.missed_control_periods_before_tick
         if execution.rendered:
             render_tick_times_ns.append(tick.times.tick_time_ns)
-        rows.append(
-            {
+        row = {
                 "tick_id": tick.tick_id,
                 "schema": tick.schema,
                 "schedule_slot": execution.schedule_slot,
@@ -487,22 +488,22 @@ def _execution_metrics(
                 "simulation_advance_s": (
                     execution.simulation_time_after_s - execution.simulation_time_before_s
                 ),
-                "physics_substep_0_index": execution.physics_substep_indices[0],
-                "physics_substep_1_index": execution.physics_substep_indices[1],
-                "physics_substep_0_sim_time_s": (execution.physics_substep_sim_times_s[0]),
-                "physics_substep_1_sim_time_s": (execution.physics_substep_sim_times_s[1]),
-                "physics_substep_0_host_ms": (
-                    execution.physics_substep_end_ns[0] - execution.physics_substep_start_ns[0]
-                )
-                / 1e6,
-                "physics_substep_1_host_ms": (
-                    execution.physics_substep_end_ns[1] - execution.physics_substep_start_ns[1]
-                )
-                / 1e6,
                 "rendered": execution.rendered,
                 "render_index": execution.render_index,
             }
-        )
+        for ordinal, (substep_index, simulation_time, start_ns, end_ns) in enumerate(
+            zip(
+                execution.physics_substep_indices,
+                execution.physics_substep_sim_times_s,
+                execution.physics_substep_start_ns,
+                execution.physics_substep_end_ns,
+                strict=True,
+            )
+        ):
+            row[f"physics_substep_{ordinal}_index"] = substep_index
+            row[f"physics_substep_{ordinal}_sim_time_s"] = simulation_time
+            row[f"physics_substep_{ordinal}_host_ms"] = (end_ns - start_ns) / 1e6
+        rows.append(row)
     executions = [tick.execution for tick in representatives if tick.execution is not None]
     wall_span_s = (
         (representatives[-1].times.world_step_end_ns - representatives[0].times.world_step_start_ns)

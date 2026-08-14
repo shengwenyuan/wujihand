@@ -154,7 +154,8 @@ def test_q54_runtime_inventory_rejects_limit_drift() -> None:
 def test_mini_dataset_profile_freezes_rgb_only_triview_and_git_lerobot_pin() -> None:
     profile = load_mini_dataset_profile(ROOT, DATASET_PROFILE)
 
-    assert (profile.physics_hz, profile.control_hz, profile.gui_preview_hz) == (120, 60, 20)
+    assert (profile.physics_hz, profile.control_hz, profile.gui_preview_hz) == (120, 30, 15)
+    assert profile.profile_id == "isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1"
     assert profile.policy_fps == 30
     assert tuple(camera.logical_id for camera in profile.cameras) == (
         "scene_rgb",

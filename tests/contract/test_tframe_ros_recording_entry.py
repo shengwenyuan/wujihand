@@ -10,65 +10,38 @@ from wujihand.runtime.wuji_hand2_record_chain import (
 
 ROOT = Path(__file__).resolve().parents[2]
 LOCAL = "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
-BASELINE = (
-    "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
-)
-TFRAME = "configs/deployments/isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
-TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION = (
+CURRENT = (
     "configs/deployments/"
     "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
     "triview_q54_self_collision_v1.yaml"
 )
-POLICY = ROOT / "configs/qualifications/isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
+POLICY = ROOT / (
+    "configs/qualifications/"
+    "isaac_nero_hand2_tframe_gripper_flange_collision_proxy_"
+    "self_collision_record_chain_v1.yaml"
+)
 
 
-def test_tframe_entry_reuses_the_validated_ros_recording_graph() -> None:
-    resolver = RosDeploymentResolver(ROOT)
-    baseline = resolver.resolve(BASELINE, local_binding=LOCAL, verify_artifacts=False)
-    tframe = resolver.resolve(TFRAME, local_binding=LOCAL, verify_artifacts=False)
-
-    assert tframe.deployment.processes == baseline.deployment.processes
-    assert tframe.deployment.sources == baseline.deployment.sources
-    assert tframe.deployment.control_bindings == baseline.deployment.control_bindings
-    assert tframe.deployment.node_bindings == baseline.deployment.node_bindings
-    assert tframe.deployment.qos_profile == baseline.deployment.qos_profile
-    assert tframe.deployment.root_namespace == baseline.deployment.root_namespace
-    assert tframe.session.session.dataset_profile == baseline.session.session.dataset_profile
-    assert tframe.control_profile.physics_hz == baseline.control_profile.physics_hz == 120
-    assert tframe.control_profile.tracker == baseline.control_profile.tracker
-    assert tframe.control_profile.kinematics == baseline.control_profile.kinematics
-    assert tframe.control_profile.arm_supervision == baseline.control_profile.arm_supervision
-    assert tframe.control_profile.glove == baseline.control_profile.glove
-    assert tframe.control_profile.hand_supervision == baseline.control_profile.hand_supervision
-
-    assert tframe.session.workcell.workcell_id == ("isaac_dual_nero_tframe_candidate_20260811_v1")
-    assert tframe.session.assembly.assembly_id == (
-        "nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1"
-    )
-    assert "tabletop" not in tframe.mapping.provenance
-    assert tframe.deployment.tracking_setup.qualification_status == "pending"
-
-
-def test_collision_proxy_entry_reuses_control_graph_and_enables_current_scene_policy() -> None:
-    resolver = RosDeploymentResolver(ROOT)
-    baseline = resolver.resolve(TFRAME, local_binding=LOCAL, verify_artifacts=False)
-    current = resolver.resolve(
-        TFRAME_GRIPPER_FLANGE_COLLISION_PROXY_SELF_COLLISION,
-        local_binding=LOCAL,
-        verify_artifacts=False,
+def test_current_entry_closes_the_single_ros_recording_graph_and_scene_policy() -> None:
+    current = RosDeploymentResolver(ROOT).resolve(
+        CURRENT, local_binding=LOCAL, verify_artifacts=False
     )
 
-    assert current.deployment.processes == baseline.deployment.processes
-    assert current.deployment.sources == baseline.deployment.sources
-    assert current.deployment.control_bindings == baseline.deployment.control_bindings
-    assert current.deployment.node_bindings == baseline.deployment.node_bindings
-    assert current.deployment.qos_profile == baseline.deployment.qos_profile
-    assert current.route_plan.routes == baseline.route_plan.routes
-    assert current.control_profile == baseline.control_profile
-    assert current.session.session.dataset_profile == baseline.session.session.dataset_profile
-    assert baseline.self_collision_profile_path is None
+    assert tuple(process.process_id for process in current.deployment.processes) == (
+        "vive_source",
+        "glove_source",
+        "isaac_consumer",
+    )
+    assert len(current.route_plan.routes) == 4
+    assert current.control_profile.physics_hz == 120
+    assert current.control_profile.tracker.max_consecutive_ik_failures == 3
+    assert current.session.workcell.workcell_id == "isaac_dual_nero_tframe_candidate_20260811_v1"
     assert current.session.assembly.assembly_id == (
         "nero_dual_hand2_d405_wrist_rig_tframe_gripper_flange_collision_proxy_v1"
+    )
+    assert current.session.session.dataset_profile is not None
+    assert current.session.session.dataset_profile.expected_id == (
+        "isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1"
     )
     for side in ("left", "right"):
         assert current.session.instance(f"nero_{side}").asset.asset_id == (
@@ -77,7 +50,7 @@ def test_collision_proxy_entry_reuses_control_graph_and_enables_current_scene_po
     assert current.self_collision_profile_id == (
         "isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1"
     )
-    assert current.deployment_hash != baseline.deployment_hash
+    assert current.deployment.tracking_setup.qualification_status == "pending"
 
 
 def test_tframe_record_policy_keeps_task_scene_outside_the_session() -> None:
@@ -86,20 +59,23 @@ def test_tframe_record_policy_keeps_task_scene_outside_the_session() -> None:
     assert policy.task_scene is not None
     assert policy.task_scene.path == ("configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml")
     assert policy.nero.assembly_attachment_quaternion(HandSide.LEFT) == (
-        0.5,
-        -0.5,
-        -0.5,
-        0.5,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
     )
     assert policy.nero.assembly_attachment_quaternion(HandSide.RIGHT) == (
-        0.5,
-        -0.5,
-        -0.5,
-        0.5,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
     )
 
     session_text = (
-        ROOT / "configs/sessions/isaac_nero_dual_hand2_tframe_triview_q54_v2026_8_3_v1.yaml"
+        ROOT
+        / "configs/sessions/"
+        "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_"
+        "triview_q54_self_collision_v1.yaml"
     ).read_text(encoding="utf-8")
     assert "task_scene" not in session_text
     assert "banana" not in session_text
@@ -129,10 +105,15 @@ def test_both_isaac_processes_receive_the_same_task_scene_receipt() -> None:
     assert "load_nero_dual_simulation_startup_profile" in consumer
     assert "if QUALIFICATION.teleport_to_initial_position:" in consumer
     assert "load_nero_dual_simulation_startup_profile" in preview
-    assert "PREVIEW_BACKGROUND_COLOR_RGB = (0.30, 0.30, 0.30)" in preview
-    assert '"render_under_50_ms"' in preview
+    assert "PREVIEW_BACKGROUND_COLOR_RGB = (0.50, 0.50, 0.50)" in preview
+    assert "PREVIEW_ANTI_ALIASING_MODE = 2" in preview
+    assert "PREVIEW_MINIMAL_SHADING_MODE = 2" in preview
+    assert "PREVIEW_THREAD_LIMIT_CAP = 10" in preview
+    assert "ISAAC_CPU_THREAD_LIMIT_CAP = 14" in consumer
+    assert 'preview_settings.set_bool("/rtx/shadows/enabled", False)' in preview
+    assert 'preview_settings.set_bool("/rtx/ambientOcclusion/enabled", False)' in preview
+    assert '"render_under_period"' in preview
     assert '"--record-chain-qualification"' in qualifier
     assert '["python3", str(PREVIEW_VALIDATOR), "--run-root", str(run_root)]' in qualifier
-    assert "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1" in validator
-    assert "gripper_flange_collision_proxy_" in validator
+    assert "triview_q54_self_collision_120_30_15_v1" in validator
     assert '"task_scene_and_preview_visual_policy"' in validator

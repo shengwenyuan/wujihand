@@ -1,5 +1,5 @@
 schema: wujihand.session.v2
-session_id: isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+session_id: isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_120_30_15_v1
 backend: isaac
 runtime_role: teleop_consumer
 assembly:
@@ -49,4 +49,4 @@ runtime:
     expected_id: isaac_nero_hand2_self_collision_filtered_pairs_gripper_flange_collision_proxy_v1
 dataset_profile:
   path: configs/profiles/isaac_nero_hand2_triview_q54_mini_dataset_v1.yaml
-  expected_id: isaac_nero_hand2_triview_q54_mini_dataset_v1
+  expected_id: isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1

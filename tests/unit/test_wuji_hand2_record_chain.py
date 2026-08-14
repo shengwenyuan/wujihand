@@ -17,23 +17,12 @@ from wujihand.specs import RosLocalRuntimeBindingSpec
 
 
 ROOT = Path(__file__).resolve().parents[2]
-POLICY = ROOT / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
-DEPLOYMENT = (
-    ROOT / "configs/deployments/"
-    "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
-)
-TFRAME_POLICY = (
-    ROOT / "configs/qualifications/isaac_nero_hand2_tframe_record_chain_v2026_8_3_v1.yaml"
-)
-TFRAME_DEPLOYMENT = (
-    ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1.yaml"
-)
-TFRAME_PROXY_POLICY = (
+POLICY = (
     ROOT / "configs/qualifications/"
     "isaac_nero_hand2_tframe_gripper_flange_collision_proxy_"
     "self_collision_record_chain_v1.yaml"
 )
-TFRAME_PROXY_DEPLOYMENT = (
+DEPLOYMENT = (
     ROOT / "configs/deployments/"
     "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
     "triview_q54_self_collision_v1.yaml"
@@ -148,14 +137,14 @@ def _receipt(
     )
 
 
-def test_committed_record_chain_policy_is_qualification_only() -> None:
+def test_committed_record_chain_policy_pins_current_flange_attachment() -> None:
     policy = load_record_chain_qualification_policy(POLICY)
 
     assert policy.description.release == "v2026.8.3"
     assert policy.nero.attachment.quat_wxyz == (
-        0.7071067811865476,
         0.0,
-        0.7071067811865475,
+        0.0,
+        1.0,
         0.0,
     )
     assert policy.description.root_orientation_compensation(HandSide.LEFT) == (
@@ -175,44 +164,19 @@ def test_committed_record_chain_policy_is_qualification_only() -> None:
 
 @pytest.mark.parametrize(
     (
-        "policy_path",
-        "deployment_path",
         "input_mode",
         "dataset_source_mode",
-        "expected_task_scene",
     ),
     (
-        (POLICY, DEPLOYMENT, "stub", None, None),
-        (
-            TFRAME_POLICY,
-            TFRAME_DEPLOYMENT,
-            "stub",
-            None,
-            {
-                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
-                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
-            },
-        ),
-        (
-            TFRAME_PROXY_POLICY,
-            TFRAME_PROXY_DEPLOYMENT,
-            "glove",
-            "live_teleoperation",
-            {
-                "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
-                "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
-            },
-        ),
+        ("stub", "synthetic_fixture"),
+        ("glove", "live_teleoperation"),
     ),
 )
 def test_record_chain_preflight_closes_both_hands_and_sdk_processes(
     tmp_path: Path,
     monkeypatch: object,
-    policy_path: Path,
-    deployment_path: Path,
     input_mode: str,
-    dataset_source_mode: str | None,
-    expected_task_scene: dict[str, str] | None,
+    dataset_source_mode: str,
 ) -> None:
     interpreter = tmp_path / "isaac-python"
     overlay = tmp_path / "overlay"
@@ -257,8 +221,8 @@ hands:
     )
     receipt = preflight_wuji_hand2_record_chain(
         ROOT,
-        qualification_path=policy_path,
-        deployment_path=deployment_path,
+        qualification_path=POLICY,
+        deployment_path=DEPLOYMENT,
         local_runtime_binding_path=_runtime_binding(interpreter),
         matched_chain_binding_path=matched_local,
         input_mode=input_mode,
@@ -274,19 +238,19 @@ hands:
         "isaac_consumer",
     )
     mapping = receipt.to_mapping()
-    if expected_task_scene is None:
-        assert mapping["task_scene"] is None
-    else:
-        assert mapping["task_scene"]["path"] == expected_task_scene["path"]
-        assert mapping["task_scene"]["profile_id"] == expected_task_scene["profile_id"]
-        assert len(mapping["task_scene"]["sha256"]) == 64
+    assert mapping["task_scene"]["path"] == (
+        "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml"
+    )
+    assert mapping["task_scene"]["profile_id"] == (
+        "isaac_robolab_banana_bowl_low_table_v2"
+    )
+    assert len(mapping["task_scene"]["sha256"]) == 64
     assert set(mapping["hands"]) == {"left", "right"}
-    expected_source_mode = dataset_source_mode or "synthetic_fixture"
-    expected_eligible = expected_source_mode == "live_teleoperation"
+    expected_eligible = dataset_source_mode == "live_teleoperation"
     assert mapping["dataset"] == {
-        "profile_id": "isaac_nero_hand2_triview_q54_mini_dataset_v1",
+        "profile_id": "isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1",
         "q54_profile_id": "isaac_nero_hand2_q54_dataset_v1",
-        "source_mode": expected_source_mode,
+        "source_mode": dataset_source_mode,
         "qualification_only": not expected_eligible,
         "dataset_eligible": expected_eligible,
     }

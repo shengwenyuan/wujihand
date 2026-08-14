@@ -21,9 +21,9 @@ artifact, and has a checksum-closed bundle. A normal immutable local revision is
 ```bash
 analysis/mini_dataset_export/.venv/bin/wujihand-export-mini-dataset \
   --project-root "$PWD" \
-  --collection-root artifacts/datasets/isaac_nero_hand2_triview_q54_mini_dataset_v1/collection \
-  --collection-id isaac_nero_hand2_triview_q54_mini_dataset_v1 \
-  --destination artifacts/datasets/isaac_nero_hand2_triview_q54_mini_dataset_v1/revisions/<REVISION_ID> \
+  --collection-root artifacts/datasets/isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1/collection \
+  --collection-id isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1 \
+  --destination artifacts/datasets/isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1/revisions/<REVISION_ID> \
   --repo-id local/wujihand-mini-sim \
   --revision-id <REVISION_ID>
 ```

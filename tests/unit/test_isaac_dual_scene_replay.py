@@ -226,3 +226,52 @@ def test_dataset_state_uses_backend_qdot_and_restores_exact_pre_action(
     )
     with pytest.raises(ValueError, match="pre_action"):
         scene.restore_dataset_state_frame(post_frame, q54_profile=profile)
+
+
+def test_dataset_and_operator_preview_reuse_one_full_link_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    profile = load_q54_joint_profile(
+        ROOT,
+        "configs/profiles/isaac_nero_hand2_q54_dataset_v1.yaml",
+    )
+    scene = DualNeroHand2IsaacScene.__new__(DualNeroHand2IsaacScene)
+    scene.dataset_dynamic_object_paths = {}
+    scene.dataset_kinematic_link_paths = {
+        ("left", "palm"): "/World/Robots/Hand2Left/l_base_link",
+    }
+    monkeypatch.setattr(scene, "rigid_body_snapshots", lambda: ())
+    full_links = (
+        SceneKinematicLinkSnapshot(
+            side="left",
+            logical_link_id="link1",
+            prim_path="/World/Robots/NeroLeft/link1",
+            position_m=(0.0, 0.0, 0.0),
+            quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+        ),
+        SceneKinematicLinkSnapshot(
+            side="left",
+            logical_link_id="l_wrist",
+            prim_path="/World/Robots/Hand2Left/l_base_link",
+            position_m=(0.1, 0.2, 0.3),
+            quat_wxyz=(1.0, 0.0, 0.0, 0.0),
+        ),
+    )
+    q27 = {side: np.zeros(27) for side in ("left", "right")}
+
+    dataset = scene.dataset_state_snapshot(
+        q54_profile=profile,
+        q27_by_side=q27,
+        qdot27_by_side=q27,
+        link_snapshots=full_links,
+    )
+    preview = scene.operator_preview_state_snapshot(
+        dataset_snapshot=dataset,
+        link_snapshots=full_links,
+    )
+
+    assert tuple(item.logical_link_id for item in dataset.kinematic_links) == ("palm",)
+    assert tuple(item.logical_link_id for item in preview.kinematic_links) == (
+        "link1",
+        "l_wrist",
+    )

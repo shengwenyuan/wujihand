@@ -518,15 +518,15 @@ class TickExecutionTrace:
             object.__setattr__(self, field, value)
         indices = tuple(self.physics_substep_indices)
         if (
-            len(indices) != 2
+            len(indices) != 4
             or any(type(value) is not int or value < 0 for value in indices)
-            or indices[1] != indices[0] + 1
+            or indices != tuple(range(indices[0], indices[0] + 4))
         ):
-            raise ValueError("physics_substep_indices must contain two consecutive indices")
+            raise ValueError("physics_substep_indices must contain four consecutive indices")
         object.__setattr__(self, "physics_substep_indices", indices)
         simulation_times = _finite_vector(
             self.physics_substep_sim_times_s,
-            size=2,
+            size=4,
             field="physics_substep_sim_times_s",
         )
         if any(value < 0.0 for value in simulation_times):
@@ -534,10 +534,10 @@ class TickExecutionTrace:
         object.__setattr__(self, "physics_substep_sim_times_s", simulation_times)
         for field in ("physics_substep_start_ns", "physics_substep_end_ns"):
             values = tuple(self.__getattribute__(field))
-            if len(values) != 2 or any(
+            if len(values) != 4 or any(
                 type(value) is not int or value < 0 for value in values
             ):
-                raise ValueError(f"{field} must contain two non-negative integers")
+                raise ValueError(f"{field} must contain four non-negative integers")
             object.__setattr__(self, field, values)
         if any(
             start > end
@@ -546,12 +546,21 @@ class TickExecutionTrace:
                 self.physics_substep_end_ns,
                 strict=True,
             )
-        ) or self.physics_substep_end_ns[0] > self.physics_substep_start_ns[1]:
+        ) or any(
+            end > start
+            for end, start in zip(
+                self.physics_substep_end_ns,
+                self.physics_substep_start_ns[1:],
+                strict=False,
+            )
+        ):
             raise ValueError("physics substep host times must be monotonic")
         if not (
             self.simulation_time_before_s
             <= simulation_times[0]
             <= simulation_times[1]
+            <= simulation_times[2]
+            <= simulation_times[3]
             <= self.simulation_time_after_s
         ):
             raise ValueError("physics substep simulation times must be monotonic")
@@ -559,7 +568,7 @@ class TickExecutionTrace:
             self.target_effective_start_sim_time_s != self.simulation_time_before_s
             or self.target_effective_end_sim_time_s != self.simulation_time_after_s
         ):
-            raise ValueError("target effective interval must span both physics substeps")
+            raise ValueError("target effective interval must span all physics substeps")
         if type(self.rendered) is not bool:
             raise ValueError("rendered must be a boolean")
         object.__setattr__(
@@ -624,7 +633,7 @@ class TeleoperationTickTrace:
         if not (
             self.times.physics_start_ns
             <= self.execution.physics_substep_start_ns[0]
-            <= self.execution.physics_substep_end_ns[1]
+            <= self.execution.physics_substep_end_ns[-1]
             <= self.times.physics_end_ns
         ):
             raise ValueError("physics substeps must lie within the physics stage")

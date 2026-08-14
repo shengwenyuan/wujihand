@@ -66,8 +66,8 @@ def _episode(
                 run_id=run.name,
                 control_index=index + 10,
                 tick_id=index + 10,
-                simulation_time_before_s=index / 60.0,
-                simulation_time_after_s=(index + 1) / 60.0,
+                simulation_time_before_s=index / 30.0,
+                simulation_time_after_s=(index + 1) / 30.0,
                 pre_feedback_q54_rad=(float(index),) * 54,
                 applied_target_q54_rad=(float(index) + 0.25,) * 54,
                 post_feedback_q54_rad=(float(index + 1),) * 54,
@@ -173,8 +173,8 @@ def test_policy_episode_closes_annotation_alignment_and_three_camera_payloads(
     episode = load_policy_episode(run)
 
     assert episode.run_id == "episode-001"
-    assert len(episode.frames) == 2
-    assert episode.frames[1].source_control_index == 12
+    assert len(episode.frames) == 3
+    assert episode.frames[1].source_control_index == 11
     assert len(episode.frames[0].image_paths) == 3
     assert episode.task.startswith("Move the left hand")
     assert episode.quality_grade == "A"

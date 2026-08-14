@@ -222,9 +222,9 @@ def test_fixed_state_renderer_publishes_exact_three_camera_grid(tmp_path: Path) 
         backend=_Backend(profile),
     )
 
-    assert artifact.frame_count == 2
-    assert len(artifact.frames) == 6
-    assert artifact.frame(1, "right_wrist_rgb").source_control_index == 2
+    assert artifact.frame_count == 4
+    assert len(artifact.frames) == 12
+    assert artifact.frame(1, "right_wrist_rgb").source_control_index == 1
     assert artifact.payload(artifact.frame(0, "scene_rgb")).read_bytes().startswith(b"\x89PNG")
 
 
@@ -245,7 +245,7 @@ def test_fixed_state_renderer_rejects_simulation_advance_atomically(tmp_path: Pa
 def test_replay_clock_uses_frame_index_and_fixed_source_origin() -> None:
     facts, _ = _episode()
     first = _retime(facts.ticks[0].pre_action_frame, 3.58333352)
-    second = _retime(facts.ticks[2].pre_action_frame, 3.61666685)
+    second = _retime(facts.ticks[1].pre_action_frame, 3.61666685)
     clock = _ReplayClock(physics_hz=120.0, policy_fps=30.0)
 
     assert clock.observe(first, dataset_frame_index=0) == 0.0

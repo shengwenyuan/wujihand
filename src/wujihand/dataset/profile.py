@@ -221,11 +221,11 @@ class MiniDatasetProfile:
     def __post_init__(self) -> None:
         if (self.physics_hz, self.control_hz, self.gui_preview_hz, self.policy_fps) != (
             120,
-            60,
-            20,
+            30,
+            15,
             30,
         ):
-            raise ValueError("dataset timing must remain 120/60/20/30")
+            raise ValueError("dataset timing must remain 120/30/15/30")
         logical = tuple(camera.logical_id for camera in self.cameras)
         if logical != ("scene_rgb", "left_wrist_rgb", "right_wrist_rgb"):
             raise ValueError("camera roles must be scene, left wrist, right wrist RGB")
@@ -785,8 +785,8 @@ def load_mini_dataset_profile(
         ),
         field="timing",
     )
-    if timing["selection"] != "relative_even_control_index_no_interpolation_v1":
-        raise ValueError("timing.selection must preserve exact relative-even selection")
+    if timing["selection"] != "relative_all_control_index_no_interpolation_v1":
+        raise ValueError("timing.selection must preserve exact all-control selection")
     if timing["observation_phase"] != "pre_action":
         raise ValueError("timing.observation_phase must be pre_action")
 

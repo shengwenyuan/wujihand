@@ -62,8 +62,10 @@ def test_generated_recording_interfaces_have_fixed_control_shapes() -> None:
     assert len(tick.arm_command_q7_rad) == 7
     assert len(tick.hand_intent_q20_rad) == 20
     assert len(tick.applied_target_q27_rad) == 27
-    assert len(tick.physics_substep_indices) == 2
-    assert len(tick.physics_substep_sim_times_s) == 2
+    assert len(tick.physics_substep_indices) == 4
+    assert len(tick.physics_substep_sim_times_s) == 4
+    assert len(tick.physics_substep_start_ns) == 4
+    assert len(tick.physics_substep_end_ns) == 4
     assert legacy_tick.spin_start_ns == 0
     assert len(scene.position_m) == 3
     assert status.state == ""

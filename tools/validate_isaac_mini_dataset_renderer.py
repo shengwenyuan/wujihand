@@ -27,7 +27,10 @@ from wujihand.runtime.isaac_dual_scene import resolve_dual_side_runtimes
 
 
 DEFAULT_DEPLOYMENT = (
-    ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml"
+    ROOT
+    / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv5_ros_v2.yaml"
 

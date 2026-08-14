@@ -55,7 +55,11 @@ def test_dataset_rosbag_qos_closes_rgb_free_fact_allowlist() -> None:
     )
     assert isinstance(projection, dict)
     resolved = RosDeploymentResolver(ROOT).resolve(
-        "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml",
+        (
+            "configs/deployments/"
+            "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+            "triview_q54_self_collision_v1.yaml"
+        ),
         local_binding=(
             "configs/examples/workstation2_nv5_ros_local_runtime_binding.example.yaml"
         ),

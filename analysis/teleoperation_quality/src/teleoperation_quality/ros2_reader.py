@@ -300,7 +300,7 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
         )
         simulation_times = _vector(
             message.physics_substep_sim_times_s,
-            2,
+            4,
             field="physics substep simulation times",
         )
         substep_starts = tuple(
@@ -312,14 +312,17 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
             for value in message.physics_substep_end_ns
         )
         if (
-            len(indices) != 2
-            or indices[1] != indices[0] + 1
-            or len(substep_starts) != 2
-            or len(substep_ends) != 2
+            len(indices) != 4
+            or indices != tuple(range(indices[0], indices[0] + 4))
+            or len(substep_starts) != 4
+            or len(substep_ends) != 4
             or any(start > end for start, end in zip(substep_starts, substep_ends, strict=True))
-            or substep_ends[0] > substep_starts[1]
+            or any(
+                end > start
+                for end, start in zip(substep_ends, substep_starts[1:], strict=False)
+            )
         ):
-            raise ValueError("tick must contain two consecutive monotonic physics substeps")
+            raise ValueError("tick must contain four consecutive monotonic physics substeps")
         control_index = _non_negative_int(message.control_index, field="control index")
         schedule_slot = _non_negative_int(message.schedule_slot, field="schedule slot")
         scheduled_time_ns = _non_negative_int(
@@ -358,7 +361,7 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
         if not (
             times.world_step_start_ns
             <= substep_starts[0]
-            <= substep_ends[1]
+            <= substep_ends[-1]
             <= times.world_step_end_ns
         ):
             raise ValueError("physics substeps fall outside the physics stage")
@@ -368,6 +371,8 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
                 <= simulation_before
                 <= simulation_times[0]
                 <= simulation_times[1]
+                <= simulation_times[2]
+                <= simulation_times[3]
                 <= simulation_after
             )
             or target_start != simulation_before
@@ -389,7 +394,7 @@ def _tick(message: Any, *, bag_time_ns: int, expected_run_id: str) -> TickRecord
             target_effective_start_sim_time_s=target_start,
             target_effective_end_sim_time_s=target_end,
             physics_substep_indices=indices,
-            physics_substep_sim_times_s=cast(tuple[float, float], simulation_times),
+            physics_substep_sim_times_s=cast(tuple[float, ...], simulation_times),
             physics_substep_start_ns=substep_starts,
             physics_substep_end_ns=substep_ends,
             rendered=rendered,

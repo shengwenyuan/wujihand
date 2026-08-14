@@ -241,18 +241,9 @@ def test_banana_bowl_teleop_keeps_the_qualified_mount_baseline() -> None:
 def test_banana_bowl_scene_camera_is_centered_and_covers_task_table() -> None:
     session = SessionResolver(ROOT).resolve(
         "configs/sessions/"
-        "isaac_nero_dual_hand2_triview_q54_mini_dataset_v1.yaml"
+        "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_"
+        "triview_q54_self_collision_v1.yaml"
     )
-    left = workcell_pose(
-        session,
-        session.workcell.mount("table_near_left").frame,
-        session.workcell.mount("table_near_left").transform,
-    ).position_m
-    right = workcell_pose(
-        session,
-        session.workcell.mount("table_near_right").frame,
-        session.workcell.mount("table_near_right").transform,
-    ).position_m
     eye = workcell_frame_position(
         session,
         "simulation_nominal_camera_oblique_eye",
@@ -262,21 +253,19 @@ def test_banana_bowl_scene_camera_is_centered_and_covers_task_table() -> None:
         "simulation_nominal_camera_oblique_target",
     )
 
-    assert eye == pytest.approx((0.0, -0.52, 1.50))
-    assert eye[:2] == pytest.approx(
-        tuple((left[index] + right[index]) / 2.0 for index in range(2))
-    )
-    assert target == pytest.approx((0.0, 0.03, 0.80))
-    downward_pitch_deg = math.degrees(
-        math.atan2(eye[2] - target[2], target[1] - eye[1])
-    )
-    assert downward_pitch_deg == pytest.approx(51.8427734126)
+    assert eye == pytest.approx((1.15, 1.35, 0.95))
+    assert target == pytest.approx((0.0, 0.0, 0.34))
 
     forward_delta = tuple(target[index] - eye[index] for index in range(3))
     forward_norm = math.sqrt(sum(value**2 for value in forward_delta))
     forward = tuple(value / forward_norm for value in forward_delta)
-    right = (1.0, 0.0, 0.0)
-    up = (0.0, -forward[2], forward[1])
+    right_norm = math.hypot(forward[0], forward[1])
+    right = (forward[1] / right_norm, -forward[0] / right_norm, 0.0)
+    up = (
+        right[1] * forward[2],
+        -right[0] * forward[2],
+        right[0] * forward[1] - right[1] * forward[0],
+    )
 
     def dot(first: tuple[float, ...], second: tuple[float, ...]) -> float:
         return sum(lhs * rhs for lhs, rhs in zip(first, second, strict=True))
@@ -285,11 +274,11 @@ def test_banana_bowl_scene_camera_is_centered_and_covers_task_table() -> None:
     vertical_half_fov_deg = math.degrees(
         math.atan(math.tan(math.radians(horizontal_half_fov_deg)) * 480.0 / 640.0)
     )
-    # Source-locked table_oak world bounds after the +90-degree Workcell alignment.
+    # Frozen low-table primitive bounds from the task-scene profile.
     tabletop_corners = (
-        (x, y, 0.8029985)
-        for x in (-0.5, 0.5)
-        for y in (-0.3228054, 0.3771946)
+        (x, y, 0.20)
+        for x in (-0.35, 0.35)
+        for y in (0.05, 1.05)
     )
     for corner in tabletop_corners:
         relative = tuple(corner[index] - eye[index] for index in range(3))

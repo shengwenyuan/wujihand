@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ruff: noqa: E402  # Isaac modules must be imported only after SimulationApp starts.
-"""Render a passive 20 Hz GUI replica for one headless dataset recording."""
+"""Render the passive GUI replica for one headless dataset recording."""
 
 from __future__ import annotations
 
@@ -52,25 +52,32 @@ from wujihand.runtime.wuji_hand2_record_chain import (
 
 
 DEFAULT_DEPLOYMENT = (
-    ROOT / "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml"
+    ROOT
+    / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 DEFAULT_LOCAL_BINDING = ROOT / "configs/local/workstation2_nv5_ros_v2.yaml"
 NERO_LULA_DESCRIPTION = ROOT / "configs/profiles/agilex_nero_lula_kinematics_v1.yaml"
-PREVIEW_HZ = 20
 PREVIEW_MAXIMUM_CATCH_UP_TICKS = 2
-PREVIEW_WIDTH = 480
-PREVIEW_HEIGHT = 300
+PREVIEW_WIDTH = 800
+PREVIEW_HEIGHT = 500
 PREVIEW_RENDERER = "MinimalRendering"
-PREVIEW_MINIMAL_SHADING_MODE = 3
-PREVIEW_THREAD_LIMIT_CAP = 32
+PREVIEW_MINIMAL_SHADING_MODE = 2
+PREVIEW_ANTI_ALIASING_MODE = 2
+PREVIEW_THREAD_LIMIT_CAP = 10
 PREVIEW_CONSUMER_WAIT_TIMEOUT_S = 180.0
 PREVIEW_SHUTDOWN_GRACE_S = 8.0
 PREVIEW_WARMUP_MIN_RENDERS = 30
 PREVIEW_WARMUP_MAX_RENDERS = 120
 PREVIEW_WARMUP_STABLE_RENDERS = 10
 PREVIEW_WARMUP_RENDER_BUDGET_NS = 40_000_000
-PREVIEW_RENDER_BUDGET_NS = 50_000_000
-PREVIEW_BACKGROUND_COLOR_RGB = (0.30, 0.30, 0.30)
+PREVIEW_RENDER_HARD_LIMIT_NS = 66_666_667
+PREVIEW_RENDER_P99_TARGET_NS = 55_000_000
+PREVIEW_BACKGROUND_COLOR_RGB = (0.50, 0.50, 0.50)
+PREVIEW_LOCAL_LIGHT_PATH = "/WujiHandOperatorPreviewLight"
+PREVIEW_LOCAL_LIGHT_INTENSITY = 500.0
+PREVIEW_LOCAL_LIGHT_COLOR_RGB = (1.0, 1.0, 1.0)
 STATE_CLOSURE_LIMIT = 2e-5
 OPERATOR_PREVIEW_STATE_TOPIC = "operator_preview/simulation_state"
 PREVIEW_TRANSFORM_SYNC = "full_link_truth_to_official_episode_replay_usd_v3"
@@ -641,6 +648,7 @@ def main(argv: list[str] | None = None) -> int:
     dataset_profile = load_mini_dataset_profile(ROOT, profile_ref.path)
     if dataset_profile.profile_id != profile_ref.expected_id:
         raise SystemExit("live preview dataset profile identity differs")
+    preview_hz = dataset_profile.gui_preview_hz
     sides = resolve_dual_side_runtimes(ROOT, resolved.session)
     sides_by_name = {runtime.side: runtime for runtime in sides}
     component_prefixes = {
@@ -721,7 +729,7 @@ def main(argv: list[str] | None = None) -> int:
             "headless": False,
             "width": PREVIEW_WIDTH,
             "height": PREVIEW_HEIGHT,
-            "anti_aliasing": 0,
+            "anti_aliasing": PREVIEW_ANTI_ALIASING_MODE,
             "renderer": PREVIEW_RENDERER,
             "minimal_shading_mode": PREVIEW_MINIMAL_SHADING_MODE,
             "multi_gpu": False,
@@ -760,7 +768,7 @@ def main(argv: list[str] | None = None) -> int:
         capture_viewport_to_buffer,
         get_active_viewport,
     )
-    from pxr import Sdf, Usd, UsdGeom  # type: ignore[import-not-found]
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux  # type: ignore[import-not-found]
     from wujihand_interfaces.msg import (  # type: ignore[import-not-found]
         OperatorPreviewStateFrame as OperatorPreviewStateFrameMessage,
         RunRecordingStatus as RunRecordingStatusMessage,
@@ -787,6 +795,7 @@ def main(argv: list[str] | None = None) -> int:
     missed_render_periods = 0
     render_total_ns = 0
     render_max_ns = 0
+    render_durations_ns: list[int] = []
     slow_render_events: list[dict[str, int | bool | None]] = []
     pose_apply_total_ns = 0
     pose_apply_max_ns = 0
@@ -885,6 +894,10 @@ def main(argv: list[str] | None = None) -> int:
         "/rtx/hydra/supportMultiTickRate"
     )
     background_color_readback: tuple[float, float, float] | None = None
+    anti_aliasing_mode_readback: int | None = None
+    shadows_enabled_readback: bool | None = None
+    ambient_occlusion_enabled_readback: bool | None = None
+    local_light_readback: dict[str, object] | None = None
     passed = False
     acceptance_failures: list[str] = []
 
@@ -917,9 +930,17 @@ def main(argv: list[str] | None = None) -> int:
             "/rtx/background/source/color",
             list(PREVIEW_BACKGROUND_COLOR_RGB),
         )
+        preview_settings.set_int("/rtx/post/aa/op", PREVIEW_ANTI_ALIASING_MODE)
+        preview_settings.set_bool("/rtx/shadows/enabled", False)
+        preview_settings.set_bool("/rtx/ambientOcclusion/enabled", False)
         background_color_readback = tuple(
             float(value)
             for value in preview_settings.get("/rtx/background/source/color")
+        )
+        anti_aliasing_mode_readback = preview_settings.get_as_int("/rtx/post/aa/op")
+        shadows_enabled_readback = preview_settings.get_as_bool("/rtx/shadows/enabled")
+        ambient_occlusion_enabled_readback = preview_settings.get_as_bool(
+            "/rtx/ambientOcclusion/enabled"
         )
         if not np.allclose(
             background_color_readback,
@@ -930,6 +951,19 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("operator preview background override was not applied")
         if not scene.visual_replay_only or scene.articulations:
             raise RuntimeError("live preview materialized an active articulation runtime")
+        previous_edit_target = scene.stage.GetEditTarget()
+        scene.stage.SetEditTarget(Usd.EditTarget(scene.stage.GetSessionLayer()))
+        local_light = UsdLux.DomeLight.Define(scene.stage, PREVIEW_LOCAL_LIGHT_PATH)
+        local_light.CreateIntensityAttr(PREVIEW_LOCAL_LIGHT_INTENSITY)
+        local_light.CreateColorAttr(Gf.Vec3f(*PREVIEW_LOCAL_LIGHT_COLOR_RGB))
+        scene.stage.SetEditTarget(previous_edit_target)
+        local_light_readback = {
+            "prim_path": str(local_light.GetPath()),
+            "type": local_light.GetPrim().GetTypeName(),
+            "intensity": float(local_light.GetIntensityAttr().Get()),
+            "color_rgb": [float(value) for value in local_light.GetColorAttr().Get()],
+            "layer": "session",
+        }
         simulation_manager_physics_view_active = (
             SimulationManager.get_physics_simulation_view() is not None
         )
@@ -1085,12 +1119,12 @@ def main(argv: list[str] | None = None) -> int:
         python_gc_frozen_object_count = gc.get_freeze_count()
         executor_worker.start()
         print(
-            f"DATASET LIVE PREVIEW READY: run_id={args.run_id} rate_hz={PREVIEW_HZ} passive=true",
+            f"DATASET LIVE PREVIEW READY: run_id={args.run_id} rate_hz={preview_hz} passive=true",
             flush=True,
         )
 
         scheduler = FixedRateScheduler(
-            rate_hz=PREVIEW_HZ,
+            rate_hz=preview_hz,
             start_ns=time.monotonic_ns(),
             maximum_catch_up_ticks=PREVIEW_MAXIMUM_CATCH_UP_TICKS,
         )
@@ -1233,6 +1267,7 @@ def main(argv: list[str] | None = None) -> int:
                 rendered_active_frames += 1
                 render_total_ns += render_duration_ns
                 render_max_ns = max(render_max_ns, render_duration_ns)
+                render_durations_ns.append(render_duration_ns)
                 render_completion_ns.append(time.monotonic_ns())
             if int(scene.world.current_time_step_index) != physics_step_anchor:
                 raise RuntimeError("live preview advanced the physics step index")
@@ -1522,6 +1557,11 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             render_effective_hz = 0.0
+        render_p95_ns, render_p99_ns = (
+            tuple(float(value) for value in np.percentile(render_durations_ns, (95, 99)))
+            if render_durations_ns
+            else (math.inf, math.inf)
+        )
         simulation_manager_physics_view_active = bool(
             simulation_manager_physics_view_active
             or SimulationManager.get_physics_simulation_view() is not None
@@ -1540,8 +1580,9 @@ def main(argv: list[str] | None = None) -> int:
             "source_state_applied": source_frames_applied > 0,
             "active_frames_rendered": rendered_active_frames >= 2,
             "render_schedule_closed": missed_render_periods == 0,
-            "render_under_50_ms": render_max_ns < PREVIEW_RENDER_BUDGET_NS,
-            "effective_render_rate": (abs(render_effective_hz - PREVIEW_HZ) / PREVIEW_HZ <= 0.05),
+            "render_under_period": render_max_ns < PREVIEW_RENDER_HARD_LIMIT_NS,
+            "render_p99_target": render_p99_ns <= PREVIEW_RENDER_P99_TARGET_NS,
+            "effective_render_rate": (abs(render_effective_hz - preview_hz) / preview_hz <= 0.05),
             "complete_link_inventory": source_kinematic_link_count > 14,
             "visual_only_scene": (
                 not simulation_manager_physics_view_active
@@ -1629,10 +1670,17 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             effective_hz = 0.0
+        render_p95_ns, render_p99_ns = (
+            tuple(float(value) for value in np.percentile(render_durations_ns, (95, 99)))
+            if render_durations_ns
+            else (math.inf, math.inf)
+        )
         receipt = {
             "schema": "wujihand.dataset_live_preview_receipt.v1",
             "passed": passed and primary_error is None,
             "run_id": args.run_id,
+            "dataset_profile_id": dataset_profile.profile_id,
+            "dataset_profile_sha256": dataset_profile.file_sha256,
             "role": "passive_external_gui_preview",
             "control_authority": False,
             "recorded_to_mcap": False,
@@ -1654,6 +1702,15 @@ def main(argv: list[str] | None = None) -> int:
                 if background_color_readback is None
                 else list(background_color_readback)
             ),
+            "anti_aliasing_mode_requested": PREVIEW_ANTI_ALIASING_MODE,
+            "anti_aliasing_mode_readback": anti_aliasing_mode_readback,
+            "shadows_enabled_requested": False,
+            "shadows_enabled_readback": shadows_enabled_readback,
+            "ambient_occlusion_enabled_requested": False,
+            "ambient_occlusion_enabled_readback": (
+                ambient_occlusion_enabled_readback
+            ),
+            "preview_local_light": local_light_readback,
             "transform_sync": PREVIEW_TRANSFORM_SYNC,
             "pose_replay_backend": PREVIEW_POSE_REPLAY_BACKEND,
             "pose_write_backend": PREVIEW_POSE_BACKEND,
@@ -1686,7 +1743,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             "terminal_state": terminal_state,
             "shutdown_signal": shutdown_signal,
-            "configured_render_hz": PREVIEW_HZ,
+            "configured_render_hz": preview_hz,
             "maximum_consecutive_catch_up_ticks": PREVIEW_MAXIMUM_CATCH_UP_TICKS,
             "viewport_width": PREVIEW_WIDTH,
             "viewport_height": PREVIEW_HEIGHT,
@@ -1701,7 +1758,10 @@ def main(argv: list[str] | None = None) -> int:
                 else None
             ),
             "render_max_ms": render_max_ns / 1_000_000,
-            "render_budget_ms": PREVIEW_RENDER_BUDGET_NS / 1_000_000,
+            "render_p95_ms": render_p95_ns / 1_000_000,
+            "render_p99_ms": render_p99_ns / 1_000_000,
+            "render_hard_limit_ms": PREVIEW_RENDER_HARD_LIMIT_NS / 1_000_000,
+            "render_p99_target_ms": PREVIEW_RENDER_P99_TARGET_NS / 1_000_000,
             "slow_render_events": slow_render_events,
             "pose_apply_mean_ms": (
                 pose_apply_total_ns / source_frames_applied / 1_000_000

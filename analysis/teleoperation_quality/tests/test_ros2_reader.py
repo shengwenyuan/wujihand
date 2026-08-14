@@ -36,13 +36,13 @@ def v2_tick_message() -> SimpleNamespace:
         control_lateness_ns=100,
         missed_control_periods_before_tick=0,
         simulation_time_before_s=1.0,
-        simulation_time_after_s=1.0 + 1.0 / 60.0,
+        simulation_time_after_s=1.0 + 1.0 / 30.0,
         target_effective_start_sim_time_s=1.0,
-        target_effective_end_sim_time_s=1.0 + 1.0 / 60.0,
-        physics_substep_indices=(0, 1),
-        physics_substep_sim_times_s=(1.0 + 1.0 / 120.0, 1.0 + 1.0 / 60.0),
-        physics_substep_start_ns=(1_061, 1_070),
-        physics_substep_end_ns=(1_069, 1_079),
+        target_effective_end_sim_time_s=1.0 + 1.0 / 30.0,
+        physics_substep_indices=(0, 1, 2, 3),
+        physics_substep_sim_times_s=tuple(1.0 + index / 120.0 for index in range(1, 5)),
+        physics_substep_start_ns=(1_061, 1_066, 1_071, 1_076),
+        physics_substep_end_ns=(1_065, 1_070, 1_075, 1_079),
         rendered=False,
         has_render_index=False,
         render_index=0,
@@ -85,7 +85,7 @@ def test_v2_tick_reader_preserves_schedule_and_substeps() -> None:
 
     assert record.schema == "wujihand.teleoperation_tick_trace.v2"
     assert record.execution is not None
-    assert record.execution.physics_substep_indices == (0, 1)
+    assert record.execution.physics_substep_indices == (0, 1, 2, 3)
     assert record.execution.control_lateness_ns == 100
 
 

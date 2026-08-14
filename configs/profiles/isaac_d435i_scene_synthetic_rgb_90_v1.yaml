@@ -33,7 +33,7 @@ payload:
   output_encoding: rgb8
 schedule:
   capture_phase: offline_fixed_state_pre_action
-  control_ticks_per_capture: 2
+  control_ticks_per_capture: 1
   completed_frame_identity: completed_render_product_reference_time_v1
 provenance:
   design_scope: synthetic_scene_composition_not_physical_intrinsics

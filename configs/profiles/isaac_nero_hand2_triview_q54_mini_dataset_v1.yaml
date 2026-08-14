@@ -1,6 +1,6 @@
 schema: wujihand.mini_dataset_profile.v1
-profile_id: isaac_nero_hand2_triview_q54_mini_dataset_v1
-status: implemented_device_free_qualified_live_episode_pending
+profile_id: isaac_nero_hand2_triview_q54_mini_dataset_120_30_15_v1
+status: implemented_120_30_15_qualification_pending
 robot_configuration: dual_nero_q7_dual_wuji_hand2_beta1_q20
 joint_profile:
   path: configs/profiles/isaac_nero_hand2_q54_dataset_v1.yaml
@@ -8,10 +8,10 @@ joint_profile:
   sha256: a96db8d2542b684b5c6a15cfa17eb44c23da02a812b1d47fb88a03df8fc20b77
 timing:
   physics_hz: 120
-  control_hz: 60
-  gui_preview_hz: 20
+  control_hz: 30
+  gui_preview_hz: 15
   policy_fps: 30
-  selection: relative_even_control_index_no_interpolation_v1
+  selection: relative_all_control_index_no_interpolation_v1
   observation_phase: pre_action
 episode:
   identity: one_run_one_episode
@@ -29,7 +29,7 @@ cameras:
     profile:
       path: configs/profiles/isaac_d435i_scene_synthetic_rgb_90_v1.yaml
       expected_id: isaac_d435i_scene_synthetic_rgb_90_v1
-      sha256: fa8cb520c98747fe68ee6480b1a1e09b77202138fc168bc92559022ed53820a5
+      sha256: a83cfd2045e746ada7c09e07cd7d4d7bf9f2971f7b2bee42a4f74633140007f7
     payload_whitelist: [rgb]
     physical_calibration_compatible: false
   - logical_id: left_wrist_rgb
@@ -38,7 +38,7 @@ cameras:
     profile:
       path: configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml
       expected_id: isaac_d405_synthetic_wide_angle_140_v1
-      sha256: 3490a24afe69ff2743dc336c98deb1d32e5c7121a67aad7c9351533677483374
+      sha256: 042d214e39d4c9494d275408782830dc2e3348e9009a58eca7ca064933d9bf85
     payload_whitelist: [rgb]
     physical_calibration_compatible: false
   - logical_id: right_wrist_rgb
@@ -47,7 +47,7 @@ cameras:
     profile:
       path: configs/profiles/isaac_d405_synthetic_wide_angle_140_v1.yaml
       expected_id: isaac_d405_synthetic_wide_angle_140_v1
-      sha256: 3490a24afe69ff2743dc336c98deb1d32e5c7121a67aad7c9351533677483374
+      sha256: 042d214e39d4c9494d275408782830dc2e3348e9009a58eca7ca064933d9bf85
     payload_whitelist: [rgb]
     physical_calibration_compatible: false
 vision_storage:

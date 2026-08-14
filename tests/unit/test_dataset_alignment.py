@@ -23,8 +23,8 @@ def _transitions(*, first: int = 5, count: int = 5) -> tuple[RawTransition, ...]
                 run_id="episode-001",
                 control_index=index,
                 tick_id=index,
-                simulation_time_before_s=offset / 60.0,
-                simulation_time_after_s=(offset + 1) / 60.0,
+                simulation_time_before_s=offset / 30.0,
+                simulation_time_after_s=(offset + 1) / 30.0,
                 pre_feedback_q54_rad=pre,
                 applied_target_q54_rad=(float(index) + 0.5,) * 54,
                 post_feedback_q54_rad=post,
@@ -34,24 +34,22 @@ def _transitions(*, first: int = 5, count: int = 5) -> tuple[RawTransition, ...]
     return tuple(result)
 
 
-def test_alignment_selects_relative_even_ticks_from_nonzero_anchor() -> None:
+def test_alignment_maps_every_30hz_tick_from_nonzero_anchor() -> None:
     alignment = build_exact_30hz_alignment(_transitions())
 
-    assert tuple(frame.source_control_index for frame in alignment.frames) == (5, 7, 9)
-    assert alignment.odd_control_indices == (6, 8)
+    assert tuple(frame.source_control_index for frame in alignment.frames) == (5, 6, 7, 8, 9)
     assert tuple(frame.timestamp_s for frame in alignment.frames) == pytest.approx(
-        (0.0, 1.0 / 30.0, 2.0 / 30.0)
+        (0.0, 1.0 / 30.0, 2.0 / 30.0, 3.0 / 30.0, 4.0 / 30.0)
     )
     assert alignment.frames[0].observation_q54_rad == (5.0,) * 54
     assert alignment.frames[0].action_q54_rad == (5.5,) * 54
     assert len(alignment.digest_sha256) == 64
 
 
-def test_alignment_retains_a_trailing_odd_tick_only_in_audit_sidecar() -> None:
+def test_alignment_retains_every_trailing_tick() -> None:
     alignment = build_exact_30hz_alignment(_transitions(count=4))
 
-    assert tuple(frame.source_control_index for frame in alignment.frames) == (5, 7)
-    assert alignment.odd_control_indices == (6, 8)
+    assert tuple(frame.source_control_index for frame in alignment.frames) == (5, 6, 7, 8)
 
 
 def test_alignment_carries_missed_period_mask_without_bridging_segments() -> None:
@@ -73,6 +71,8 @@ def test_alignment_carries_missed_period_mask_without_bridging_segments() -> Non
     ) == (
         (True, 0, 0, False, False),
         (False, 1, 1, True, True),
+        (True, 0, 1, False, True),
+        (True, 0, 1, False, True),
         (True, 0, 1, False, False),
     )
 

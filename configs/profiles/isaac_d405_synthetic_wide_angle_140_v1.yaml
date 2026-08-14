@@ -40,7 +40,7 @@ payloads:
     invalid_value_policy: nonfinite_or_nonpositive_to_qnan_0x7fc00000
 schedule:
   physics_substeps_per_capture: 4
-  control_ticks_per_capture: 2
+  control_ticks_per_capture: 1
   capture_phase: completed_fourth_physics_substep
   completed_frame_identity: camera_sensor_writer_reference_time_v1
 assumptions:

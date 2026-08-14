@@ -1,8 +1,8 @@
 schema: wujihand.deployment.v2
-deployment_id: isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+deployment_id: isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_120_30_15_v1
 session:
   path: configs/sessions/isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1.yaml
-  expected_id: isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_v1
+  expected_id: isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_triview_q54_self_collision_120_30_15_v1
 local_binding_id: workstation2_nv5_ros_v2
 tracking_setup:
   setup_revision: workstation2_steamvr_standing_tframe_unqualified_v1
@@ -62,7 +62,7 @@ control_bindings:
   - instance_id: hand_right
     group_id: finger_joints
     source_id: glove_right
-report_root: artifacts/runs/nv5/tframe-banana-bowl-v2026-8-3-gripper-flange-collision-proxy-self-collision
+report_root: artifacts/runs/nv5/tframe-banana-bowl-v2026-8-3-gripper-flange-collision-proxy-self-collision-120-30-15
 root_namespace: wujihand/v1/teleop
 interface_set_id: wujihand_interfaces_dataset_v3
 qos_profile:

@@ -30,7 +30,7 @@ from wujihand.application.qualification.dataset_preview_fixture import (
     RETURN_FRAMES,
     fixture_profile_sha256,
 )
-from wujihand.dataset import load_mini_dataset_profile
+from wujihand.dataset import load_mini_dataset_profile, parse_dataset_truth_inventories
 
 
 MIN_GROUP_DELTA_RAD = 0.05
@@ -68,37 +68,13 @@ def _expected_preview_component_source_counts(
     )
     known = {
         (
-            "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3",
-            "isaac_nero_dual_hand2_triview_q54_mini_dataset_v1",
-            (
-                "configs/assemblies/"
-                "nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_6_27_v1.yaml"
-            ),
-        ): {"left_arm": 8, "left_hand": 27, "right_arm": 8, "right_hand": 27},
-        (
-            "isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1",
-            "isaac_nero_dual_hand2_triview_q54_mini_dataset_v2026_8_3_v1",
-            (
-                "configs/assemblies/"
-                "nero_dual_hand2_d405_wrist_rig_simulation_nominal_v2026_8_3_v1.yaml"
-            ),
-        ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
-        (
-            "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1",
-            "isaac_nero_dual_hand2_tframe_triview_q54_v2026_8_3_v1",
-            (
-                "configs/assemblies/"
-                "nero_dual_hand2_d405_wrist_rig_tframe_v2026_8_3_v1.yaml"
-            ),
-        ): {"left_arm": 8, "left_hand": 26, "right_arm": 8, "right_hand": 26},
-        (
             (
                 "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
-                "triview_q54_self_collision_v1"
+                "triview_q54_self_collision_120_30_15_v1"
             ),
             (
                 "isaac_nero_dual_hand2_tframe_gripper_flange_collision_proxy_"
-                "triview_q54_self_collision_v1"
+                "triview_q54_self_collision_120_30_15_v1"
             ),
             (
                 "configs/assemblies/"
@@ -200,7 +176,11 @@ def _command_deltas(
     return motion, returned
 
 
-def _q54_closure(dataset: BagDataset, profile: Any) -> tuple[float, dict[str, float]]:
+def _q54_closure(
+    dataset: BagDataset,
+    profile: Any,
+    expected_links: dict[tuple[str, str], str],
+) -> tuple[float, dict[str, float]]:
     ticks: dict[tuple[int, str], TickRecord] = {
         (item.tick_id, item.side): item for item in dataset.ticks
     }
@@ -229,7 +209,11 @@ def _q54_closure(dataset: BagDataset, profile: Any) -> tuple[float, dict[str, fl
         )
         minimum = np.minimum(minimum, actual)
         maximum = np.maximum(maximum, actual)
-        if len(state.kinematic_links) != 14 or not all(
+        observed_links = {
+            (item.side, item.logical_link_id): item.prim_path
+            for item in state.kinematic_links
+        }
+        if observed_links != expected_links or not all(
             item.valid for item in state.kinematic_links
         ):
             raise ValueError("post-action state lacks the complete 14-link truth")
@@ -263,11 +247,21 @@ def validate(run_root: Path) -> dict[str, Any]:
         _expected_preview_component_source_counts(deployment_manifest)
     )
     profile = load_mini_dataset_profile(ROOT, dataset_manifest["profile_path"])
+    _, expected_links = parse_dataset_truth_inventories(dataset_manifest)
     bag = Ros2BagReader().read(root / "raw/rosbag2", expected_run_id=run_id)
+    left_tick_times = tuple(
+        item.times.tick_time_ns for item in bag.ticks if item.side == "left"
+    )
+    observed_control_hz = (
+        (len(left_tick_times) - 1)
+        / ((left_tick_times[-1] - left_tick_times[0]) / 1_000_000_000)
+        if len(left_tick_times) >= 2
+        else 0.0
+    )
 
     plateaus, plateau_counts = _plateau_commands(bag)
     motion_deltas, return_deltas = _command_deltas(plateaus)
-    q54_error, q54_ranges = _q54_closure(bag, profile)
+    q54_error, q54_ranges = _q54_closure(bag, profile, expected_links)
     topic_names = {item.topic for item in bag.topics}
     boundaries_isolated = bool(bag.dataset_boundaries) and all(
         item.source_mode == "synthetic_fixture" and not item.dataset_eligible
@@ -324,15 +318,10 @@ def validate(run_root: Path) -> dict[str, Any]:
         preview.get("component_renderable_motion_passed"),
         field="preview component renderable motion passed",
     )
-    expected_task_scene = (
-        {
-            "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
-            "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
-        }
-        if deployment_manifest.get("deployment_id")
-        == "isaac_nero_hand2_ros_dual_tframe_triview_q54_v2026_8_3_v1"
-        else None
-    )
+    expected_task_scene = {
+        "path": "configs/scenes/isaac_robolab_banana_bowl_low_table_v2.yaml",
+        "profile_id": "isaac_robolab_banana_bowl_low_table_v2",
+    }
     resolved_control = _mapping(
         manifest.get("resolved_control_artifacts"),
         field="manifest resolved control artifacts",
@@ -382,20 +371,29 @@ def validate(run_root: Path) -> dict[str, Any]:
             and main.get("failure_reason") is None
             and main.get("recording_failure_reason") is None
         ),
-        "main_60hz_zero_miss": (
+        "main_30hz_zero_miss": (
             _mapping(main.get("controller_health"), field="main controller health").get(
                 "scheduler.missed_control_periods",
                 -1,
             )
             == 0
+            and abs(observed_control_hz - profile.control_hz) / profile.control_hz <= 0.02
         ),
         "physics_120hz_ratio": (
-            int(main.get("completed_physics_steps", -1)) == 2 * int(main.get("completed_ticks", 0))
+            int(main.get("completed_physics_steps", -1)) == 4 * int(main.get("completed_ticks", 0))
         ),
-        "preview_20hz_zero_miss": (
+        "control_p99_budget": (
+            float(
+                _mapping(main.get("stage_timing"), field="main stage timing")
+                .get("control.tick", {})
+                .get("p99_ms", math.inf)
+            )
+            <= 31.0
+        ),
+        "preview_15hz_zero_miss": (
             preview.get("passed") is True
             and int(preview.get("missed_render_periods", -1)) == 0
-            and abs(float(preview.get("effective_render_hz", 0.0)) - 20.0) / 20.0 <= 0.05
+            and abs(float(preview.get("effective_render_hz", 0.0)) - 15.0) / 15.0 <= 0.05
         ),
         "task_scene_and_preview_visual_policy": (
             _contains_fields(record_chain.get("task_scene"), expected_task_scene)
@@ -414,8 +412,22 @@ def validate(run_root: Path) -> dict[str, Any]:
                 or preview_scene_plan.get("task_scene_profile_id")
                 == expected_task_scene["profile_id"]
             )
-            and preview.get("background_color_rgb_readback") == [0.3, 0.3, 0.3]
-            and float(preview.get("render_max_ms", math.inf)) < 50.0
+            and preview.get("background_color_rgb_readback") == [0.5, 0.5, 0.5]
+            and int(preview.get("viewport_width", 0)) == 800
+            and int(preview.get("viewport_height", 0)) == 500
+            and int(preview.get("anti_aliasing_mode_readback", -1)) == 2
+            and preview.get("shadows_enabled_readback") is False
+            and preview.get("ambient_occlusion_enabled_readback") is False
+            and preview.get("preview_local_light")
+            == {
+                "prim_path": "/WujiHandOperatorPreviewLight",
+                "type": "DomeLight",
+                "intensity": 500.0,
+                "color_rgb": [1.0, 1.0, 1.0],
+                "layer": "session",
+            }
+            and float(preview.get("render_max_ms", math.inf)) < 66.667
+            and float(preview.get("render_p99_ms", math.inf)) <= 55.0
         ),
         "preview_q54_four_group_motion": all(
             float(preview_groups.get(group, 0.0)) >= MIN_GROUP_DELTA_RAD for group in q54_ranges
@@ -493,6 +505,7 @@ def validate(run_root: Path) -> dict[str, Any]:
         "observed": {
             "fixture_completed_frames": fixture.get("completed_frames"),
             "fixture_effective_hz": fixture.get("effective_hz"),
+            "observed_control_hz": observed_control_hz,
             "plateau_counts": plateau_counts,
             "command_plateaus_rad": plateaus,
             "command_motion_max_delta_rad": motion_deltas,

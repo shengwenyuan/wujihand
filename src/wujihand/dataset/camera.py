@@ -575,7 +575,7 @@ def _load_scene_projection(
         ),
         field=f"{field}.schedule",
     )
-    if payload["annotator"] != "rgb" or schedule["control_ticks_per_capture"] != 2:
+    if payload["annotator"] != "rgb":
         raise ValueError(f"{field} RGB schedule differs")
     shape = tuple(
         _positive_integer(item, field=f"{field}.payload.source_shape[{index}]")
@@ -704,6 +704,23 @@ def load_dataset_camera_projections(
             if mapping.get("schema") == DATASET_SCENE_CAMERA_PROFILE_SCHEMA
             else _load_wrist_projection(role, document)
         )
+        schedule = _mapping(
+            mapping.get("schedule"),
+            field=f"camera profile {role.logical_id}.schedule",
+        )
+        expected_control_ticks = dataset_profile.control_hz // int(projection.rate_hz)
+        if (
+            dataset_profile.control_hz % int(projection.rate_hz) != 0
+            or schedule.get("control_ticks_per_capture") != expected_control_ticks
+        ):
+            raise ValueError(f"dataset camera control schedule differs: {role.logical_id}")
+        if "physics_substeps_per_capture" in schedule:
+            expected_physics_steps = dataset_profile.physics_hz // int(projection.rate_hz)
+            if (
+                dataset_profile.physics_hz % int(projection.rate_hz) != 0
+                or schedule["physics_substeps_per_capture"] != expected_physics_steps
+            ):
+                raise ValueError(f"dataset camera physics schedule differs: {role.logical_id}")
         result.append(projection)
     expected = tuple(camera.logical_id for camera in dataset_profile.cameras)
     if tuple(item.logical_id for item in result) != expected:

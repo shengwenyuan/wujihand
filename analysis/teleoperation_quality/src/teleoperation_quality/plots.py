@@ -396,7 +396,7 @@ def _stage_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
             ("snapshot_ms", "input snapshot", COLORS[0]),
             ("control_ms", "control", COLORS[1]),
             ("apply_ms", "apply", COLORS[2]),
-            ("physics_ms", "two physics substeps", COLORS[3]),
+            ("physics_ms", "four physics substeps", COLORS[3]),
             ("pipeline_ms", "full pipeline", COLORS[4]),
         )
         if rows and "snapshot_ms" in rows[0]
@@ -425,9 +425,10 @@ def _execution_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
     figure, axes = plt.subplots(1, 2, figsize=(11.0, 4.7), constrained_layout=True)
     lateness = [row["control_lateness_ms"] for row in rows]
     substep_host = [
-        row[field]
+        value
         for row in rows
-        for field in ("physics_substep_0_host_ms", "physics_substep_1_host_ms")
+        for field, value in row.items()
+        if field.startswith("physics_substep_") and field.endswith("_host_ms")
     ]
     _plot_ecdf(axes[0], lateness, label="control deadline lateness", color=COLORS[0])
     _plot_ecdf(axes[0], substep_host, label="physics substep host time", color=COLORS[1])
@@ -465,7 +466,7 @@ def _execution_plot(bundle: MetricBundle, output: Path) -> dict[str, str]:
         )
     axes[1].set_xlabel("Control tick")
     axes[1].set_ylabel("Simulation advance (ms)")
-    axes[1].set_title("Two-substep and render cadence")
+    axes[1].set_title("Four-substep and render cadence")
     axes[1].legend(loc="best")
     path = output / "13_scheduler_physics_render.png"
     _save(figure, path)

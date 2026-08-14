@@ -64,7 +64,7 @@ def _strict_sequence(value: object, *, field: str) -> Sequence[object]:
 
 @dataclass(frozen=True, slots=True)
 class ReleaseGateConfig:
-    expected_control_hz: float = 60.0
+    expected_control_hz: float = 30.0
     expected_physics_hz: float = 120.0
     control_rate_tolerance_fraction: float = 0.02
     minimum_real_time_factor: float = 0.95
@@ -114,7 +114,7 @@ class ReleaseGateConfig:
 class EpisodeQualityConfig:
     """Versioned ABCD thresholds; no grade produced here is a release veto."""
 
-    control_hz_lower: tuple[float, float, float] = (59.5, 58.0, 55.0)
+    control_hz_lower: tuple[float, float, float] = (29.75, 29.0, 27.5)
     real_time_factor_lower: tuple[float, float, float] = (0.99, 0.97, 0.90)
     missed_fraction_upper: tuple[float, float, float] = (0.005, 0.02, 0.03)
     consecutive_misses_upper: tuple[float, float, float] = (1.0, 2.0, 5.0)
@@ -198,7 +198,7 @@ class ControlTickFacts:
     tick_time_ns: int
     schedule_slot: int
     missed_control_periods_before_tick: int
-    physics_substep_indices: tuple[int, int]
+    physics_substep_indices: tuple[int, ...]
     route_fact_keys: frozenset[str]
     source_epochs: tuple[SourceEpochFact, ...]
     comparable_input_age_ms: tuple[tuple[str, float], ...]
@@ -210,9 +210,13 @@ class ControlTickFacts:
             raise ValueError("tick_time_ns and schedule_slot must be non-negative")
         if self.missed_control_periods_before_tick < 0:
             raise ValueError("missed_control_periods_before_tick must be non-negative")
-        first, second = self.physics_substep_indices
-        if first < 0 or second != first + 1:
-            raise ValueError("each control tick must contain two consecutive physics substeps")
+        indices = self.physics_substep_indices
+        if (
+            len(indices) != 4
+            or indices[0] < 0
+            or indices != tuple(range(indices[0], indices[0] + 4))
+        ):
+            raise ValueError("each control tick must contain four consecutive physics substeps")
         if len({fact.source_id for fact in self.source_epochs}) != len(self.source_epochs):
             raise ValueError("source epoch facts must contain unique source IDs")
         age_keys = tuple(key for key, _ in self.comparable_input_age_ms)
@@ -276,7 +280,7 @@ class ControlTickFacts:
         if any(type(data[key]) is not int for key in integer_fields):
             raise ValueError(f"{field} integer types differ")
         indices = _strict_sequence(data["physics_substep_indices"], field=f"{field}.indices")
-        if len(indices) != 2 or any(type(item) is not int for item in indices):
+        if len(indices) != 4 or any(type(item) is not int for item in indices):
             raise ValueError(f"{field}.physics_substep_indices differ")
         raw_keys = _strict_sequence(data["route_fact_keys"], field=f"{field}.route_fact_keys")
         if any(not isinstance(item, str) for item in raw_keys):
@@ -306,7 +310,7 @@ class ControlTickFacts:
                 int,
                 data["missed_control_periods_before_tick"],
             ),
-            physics_substep_indices=cast(tuple[int, int], tuple(indices)),
+            physics_substep_indices=cast(tuple[int, ...], tuple(indices)),
             route_fact_keys=frozenset(cast(Sequence[str], raw_keys)),
             source_epochs=tuple(
                 SourceEpochFact.from_mapping(item, field=f"{field}.source_epochs[{index}]")
@@ -921,14 +925,14 @@ def _physics_grid_closure(
 ) -> tuple[bool, dict[str, object]]:
     origins: set[int] = set()
     maximum_time_error_s = 0.0
-    per_tick_2_to_1 = bool(ticks)
+    per_tick_4_to_1 = bool(ticks)
     for tick in ticks:
         pre = tick.pre_action_frame
         post = tick.post_action_frame
-        per_tick_2_to_1 = per_tick_2_to_1 and (
+        per_tick_4_to_1 = per_tick_4_to_1 and (
             tick.physics_substep_indices
-            == (pre.physics_boundary_index, pre.physics_boundary_index + 1)
-            and post.physics_boundary_index == pre.physics_boundary_index + 2
+            == tuple(range(pre.physics_boundary_index, pre.physics_boundary_index + 4))
+            and post.physics_boundary_index == pre.physics_boundary_index + 4
         )
         for frame in (pre, post):
             grid_index = round(frame.simulation_time_s * physics_hz)
@@ -939,19 +943,19 @@ def _physics_grid_closure(
             )
             origins.add(grid_index - frame.physics_boundary_index)
     cross_tick_indices = bool(ticks) and all(
-        current.physics_substep_indices[0] == previous.physics_substep_indices[1] + 1
+        current.physics_substep_indices[0] == previous.physics_substep_indices[-1] + 1
         and current.pre_action_frame.physics_boundary_index
         == previous.post_action_frame.physics_boundary_index
         for previous, current in zip(ticks, ticks[1:], strict=False)
     )
     passed = (
-        per_tick_2_to_1
+        per_tick_4_to_1
         and cross_tick_indices
         and len(origins) == 1
         and maximum_time_error_s <= time_atol_s
     )
     return passed, {
-        "per_tick_2_to_1": per_tick_2_to_1,
+        "per_tick_4_to_1": per_tick_4_to_1,
         "cross_tick_indices": cross_tick_indices,
         "source_grid_origins": sorted(origins),
         "maximum_time_error_s": maximum_time_error_s,
@@ -1469,11 +1473,11 @@ def validate_episode_release(
             reason="pre_post_state_closure_failed",
         ),
         _gate(
-            "physics_2_to_1_and_time_grid",
+            "physics_4_to_1_and_time_grid",
             physics_grid_closed,
             expected={
                 "physics_hz": config.expected_physics_hz,
-                "substeps_per_actual_control_tick": 2,
+                "substeps_per_actual_control_tick": 4,
                 "one_fixed_integer_origin": True,
                 "maximum_float_time_error_s": config.physics_grid_time_atol_s,
             },

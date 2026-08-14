@@ -72,11 +72,11 @@ def test_quality_report_is_deterministic_and_contains_no_outcome_label(
     summary = json.loads((first.root / "summary.json").read_text(encoding="utf-8"))
 
     assert first == second
-    assert summary["frame_count"] == 2
+    assert summary["frame_count"] == 4
     assert summary["camera_frame_counts"] == {
-        "scene_rgb": 2,
-        "left_wrist_rgb": 2,
-        "right_wrist_rgb": 2,
+        "scene_rgb": 4,
+        "left_wrist_rgb": 4,
+        "right_wrist_rgb": 4,
     }
     assert "success" not in json.dumps(summary).lower()
     assert (first.root / "plots" / "q54_groups.svg").is_file()
@@ -86,7 +86,7 @@ def test_quality_report_is_deterministic_and_contains_no_outcome_label(
     assert (first.root / "plots" / "vision_samples.html").is_file()
     assert (first.root / "camera_metrics.csv").is_file()
     assert (first.root / "group_metrics.csv").is_file()
-    assert summary["control_timing"]["observed_control_hz"] == pytest.approx(60.0)
+    assert summary["control_timing"]["observed_control_hz"] == pytest.approx(30.0)
     assert summary["object_metrics"] == {}
 
 
@@ -123,6 +123,6 @@ def test_quality_report_keeps_metrics_for_every_scene_object(
     assert summary["dynamic_object_ids"] == ["banana", "bowl"]
     assert set(summary["object_metrics"]) == {"banana", "bowl"}
     assert all(
-        metrics["sample_count"] == 2
+        metrics["sample_count"] == 4
         for metrics in summary["object_metrics"].values()
     )

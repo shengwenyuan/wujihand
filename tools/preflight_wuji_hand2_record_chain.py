@@ -24,11 +24,16 @@ from wujihand.runtime.wuji_hand2_record_chain import (
 
 
 DEFAULT_QUALIFICATION = (
-    ROOT / "configs/qualifications/isaac_nero_hand2_record_chain_v2026_8_3_v1.yaml"
+    ROOT
+    / "configs/qualifications/"
+    "isaac_nero_hand2_tframe_gripper_flange_collision_proxy_"
+    "self_collision_record_chain_v1.yaml"
 )
 DEFAULT_DEPLOYMENT = (
     ROOT
-    / "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v2026_8_3_v1.yaml"
+    / "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 
 

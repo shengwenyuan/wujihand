@@ -18,8 +18,8 @@ def _alignment():
                 run_id="episode-001",
                 control_index=index,
                 tick_id=index,
-                simulation_time_before_s=index / 60.0,
-                simulation_time_after_s=(index + 1) / 60.0,
+                simulation_time_before_s=index / 30.0,
+                simulation_time_after_s=(index + 1) / 30.0,
                 pre_feedback_q54_rad=(float(index),) * 54,
                 applied_target_q54_rad=(float(index) + 0.5,) * 54,
                 post_feedback_q54_rad=(float(index + 1),) * 54,
@@ -40,8 +40,8 @@ def test_alignment_artifact_is_atomic_checksummed_and_idempotent(tmp_path: Path)
     assert first == second
     manifest = json.loads((first / "manifest.json").read_text())
     assert manifest["alignment_digest_sha256"] == alignment.digest_sha256
-    assert manifest["frame_count"] == 2
-    assert len((first / "frames.jsonl").read_text().splitlines()) == 2
+    assert manifest["frame_count"] == 3
+    assert len((first / "frames.jsonl").read_text().splitlines()) == 3
     assert not tuple((run / "derived").glob(".alignment-*"))
 
     loaded = load_alignment_artifact(first, expected_run_id="episode-001")
@@ -66,8 +66,8 @@ def test_alignment_artifact_round_trips_control_gap_mask(tmp_path: Path) -> None
             run_id="episode-001",
             control_index=index,
             tick_id=index,
-            simulation_time_before_s=index / 60.0,
-            simulation_time_after_s=(index + 1) / 60.0,
+            simulation_time_before_s=index / 30.0,
+            simulation_time_after_s=(index + 1) / 30.0,
             pre_feedback_q54_rad=(float(index),) * 54,
             applied_target_q54_rad=(float(index) + 0.5,) * 54,
             post_feedback_q54_rad=(float(index + 1),) * 54,

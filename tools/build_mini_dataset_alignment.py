@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build one immutable exact 30 Hz alignment artifact from normalized 60 Hz rows."""
+"""Build one immutable exact 30 Hz alignment artifact from normalized 30 Hz rows."""
 
 from __future__ import annotations
 

@@ -93,10 +93,10 @@ class TickExecution:
     simulation_time_after_s: float
     target_effective_start_sim_time_s: float
     target_effective_end_sim_time_s: float
-    physics_substep_indices: tuple[int, int]
-    physics_substep_sim_times_s: tuple[float, float]
-    physics_substep_start_ns: tuple[int, int]
-    physics_substep_end_ns: tuple[int, int]
+    physics_substep_indices: tuple[int, ...]
+    physics_substep_sim_times_s: tuple[float, ...]
+    physics_substep_start_ns: tuple[int, ...]
+    physics_substep_end_ns: tuple[int, ...]
     rendered: bool
     render_index: int | None
 

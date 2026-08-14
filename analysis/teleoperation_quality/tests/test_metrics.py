@@ -87,19 +87,49 @@ def test_missing_acquisition_time_stays_missing(
     assert hand["input_age_ms_count"] == 4
 
 
-def test_v2_execution_trace_enforces_100_50_25_schedule(
+def test_v2_execution_trace_enforces_120_30_15_schedule(
     artifact: RunArtifact,
     dataset: BagDataset,
     tmp_path: Path,
 ) -> None:
     ticks = []
     for tick in dataset.ticks:
-        simulation_before_s = tick.tick_id * 0.02
+        simulation_before_s = tick.tick_id / 30.0
         rendered = tick.tick_id % 2 == 1
+        desired_tick_time_ns = 1_002_000_000 + round(tick.tick_id * 1_000_000_000 / 30)
+        shift_ns = desired_tick_time_ns - tick.times.tick_time_ns
+        times = replace(
+            tick.times,
+            spin_start_ns=tick.times.spin_start_ns + shift_ns,
+            spin_end_ns=tick.times.spin_end_ns + shift_ns,
+            tick_time_ns=desired_tick_time_ns,
+            control_start_ns=tick.times.control_start_ns + shift_ns,
+            control_end_ns=tick.times.control_end_ns + shift_ns,
+            apply_start_ns=tick.times.apply_start_ns + shift_ns,
+            apply_end_ns=tick.times.apply_end_ns + shift_ns,
+            world_step_start_ns=tick.times.world_step_start_ns + shift_ns,
+            world_step_end_ns=tick.times.world_step_end_ns + shift_ns,
+            trace_time_ns=tick.times.trace_time_ns + shift_ns,
+        )
+        arm_source = replace(
+            tick.arm.source,
+            source_time_ns=tick.arm.source.source_time_ns + shift_ns,
+            receive_time_ns=tick.arm.source.receive_time_ns + shift_ns,
+            callback_time_ns=tick.arm.source.callback_time_ns + shift_ns,
+        )
+        assert tick.hand is not None and tick.hand.source is not None
+        hand_source = replace(
+            tick.hand.source,
+            receive_time_ns=tick.hand.source.receive_time_ns + shift_ns,
+            callback_time_ns=tick.hand.source.callback_time_ns + shift_ns,
+        )
         ticks.append(
             replace(
                 tick,
                 schema="wujihand.teleoperation_tick_trace.v2",
+                times=times,
+                arm=replace(tick.arm, source=arm_source, active_source=arm_source),
+                hand=replace(tick.hand, source=hand_source, active_source=hand_source),
                 execution=TickExecution(
                     control_index=tick.tick_id,
                     schedule_slot=tick.tick_id,
@@ -107,21 +137,21 @@ def test_v2_execution_trace_enforces_100_50_25_schedule(
                     control_lateness_ns=0,
                     missed_control_periods_before_tick=0,
                     simulation_time_before_s=simulation_before_s,
-                    simulation_time_after_s=simulation_before_s + 0.02,
+                    simulation_time_after_s=simulation_before_s + 1.0 / 30.0,
                     target_effective_start_sim_time_s=simulation_before_s,
-                    target_effective_end_sim_time_s=simulation_before_s + 0.02,
-                    physics_substep_indices=(tick.tick_id * 2, tick.tick_id * 2 + 1),
-                    physics_substep_sim_times_s=(
-                        simulation_before_s + 0.01,
-                        simulation_before_s + 0.02,
+                    target_effective_end_sim_time_s=simulation_before_s + 1.0 / 30.0,
+                    physics_substep_indices=tuple(
+                        tick.tick_id * 4 + index for index in range(4)
                     ),
-                    physics_substep_start_ns=(
-                        tick.times.world_step_start_ns,
-                        tick.times.world_step_start_ns + 400_000,
+                    physics_substep_sim_times_s=tuple(
+                        simulation_before_s + (index + 1) / 120.0 for index in range(4)
                     ),
-                    physics_substep_end_ns=(
-                        tick.times.world_step_start_ns + 400_000,
-                        tick.times.world_step_end_ns,
+                    physics_substep_start_ns=tuple(
+                        times.world_step_start_ns + index * 200_000 for index in range(4)
+                    ),
+                    physics_substep_end_ns=tuple(
+                        times.world_step_start_ns + (index + 1) * 200_000
+                        for index in range(4)
                     ),
                     rendered=rendered,
                     render_index=(tick.tick_id // 2 if rendered else None),
@@ -146,22 +176,22 @@ def test_v2_execution_trace_enforces_100_50_25_schedule(
             **artifact.manifest,
             "simulation_timing": {
                 "gui": True,
-                "physics_hz": 100,
-                "control_hz": 50,
-                "rendering_hz": 25,
-                "physics_substeps_per_control": 2,
+                "physics_hz": 120,
+                "control_hz": 30,
+                "rendering_hz": 15,
+                "physics_substeps_per_control": 4,
                 "control_ticks_per_render": 2,
             },
         },
         receipt={
             **artifact.receipt,
-            "completed_physics_steps": 8,
+            "completed_physics_steps": 16,
             "completed_renders": 2,
             "configured_timing": {
-                "physics_hz": 100,
-                "control_hz": 50,
-                "render_hz": 25,
-                "physics_substeps_per_control": 2,
+                "physics_hz": 120,
+                "control_hz": 30,
+                "render_hz": 15,
+                "physics_substeps_per_control": 4,
                 "control_ticks_per_render": 2,
             },
             "input_health": v2_input_health,
@@ -172,12 +202,12 @@ def test_v2_execution_trace_enforces_100_50_25_schedule(
         v2_artifact,
         replace(dataset, ticks=tuple(ticks)),
         AnalysisConfig(
-            expected_control_hz=50.0,
-            expected_physics_hz=100.0,
-            expected_render_hz=25.0,
+            expected_control_hz=30.0,
+            expected_physics_hz=120.0,
+            expected_render_hz=15.0,
             control_rate_tolerance_fraction=0.01,
-            p95_tick_interval_limit_ms=19.0,
-            gui_p95_tick_interval_limit_ms=20.1,
+            p95_tick_interval_limit_ms=35.0,
+            gui_p95_tick_interval_limit_ms=35.0,
             p95_comparable_input_age_limit_ms=10.0,
         ),
     )
@@ -185,9 +215,9 @@ def test_v2_execution_trace_enforces_100_50_25_schedule(
 
     assert bundle.summary["structural_gates_passed"] is True
     assert bundle.summary["planned_targets_passed"] is True
-    assert bundle.summary["control"]["execution"]["physics_substep_count"] == 8
-    assert bundle.summary["control"]["execution"]["render_effective_hz"] == pytest.approx(25.0)
-    assert bundle.summary["config"]["effective_p95_tick_interval_limit_ms"] == 20.1
+    assert bundle.summary["control"]["execution"]["physics_substep_count"] == 16
+    assert bundle.summary["control"]["execution"]["render_effective_hz"] == pytest.approx(15.0)
+    assert bundle.summary["config"]["effective_p95_tick_interval_limit_ms"] == 35.0
     assert bundle.summary["control"]["p95_limit_exceedance_ratio"] == 0.0
     assert gates["v2_execution_facts_complete"]["passed"] is True
     assert gates["physics_substep_dt"]["passed"] is True

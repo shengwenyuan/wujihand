@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from wujihand.runtime import new_run_id
 
 DEFAULT_DEPLOYMENT = (
-    "configs/deployments/isaac_nero_hand2_ros_dual_triview_q54_mini_dataset_v3.yaml"
+    "configs/deployments/"
+    "isaac_nero_hand2_ros_dual_tframe_gripper_flange_collision_proxy_"
+    "triview_q54_self_collision_v1.yaml"
 )
 DEFAULT_LOCAL_BINDING = "configs/local/workstation2_nv5_ros_v2.yaml"
 PREVIEW_VALIDATOR = ROOT / "tools/validate_dataset_preview_fixture_qualification.py"

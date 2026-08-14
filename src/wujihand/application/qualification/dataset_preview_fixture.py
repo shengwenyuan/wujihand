@@ -17,9 +17,9 @@ FIXTURE_PRODUCER: Final = "nv5-dataset-preview-fixture"
 SELF_COLLISION_FIXTURE_PROFILE_ID: Final = "self_collision_aba_contact_v1"
 SELF_COLLISION_FIXTURE_PRODUCER: Final = "nv5-self-collision-fixture"
 FIXTURE_RATE_HZ: Final = 120
-REFERENCE_FRAMES: Final = 600
-MOTION_FRAMES: Final = 600
-RETURN_FRAMES: Final = 600
+REFERENCE_FRAMES: Final = 1050
+MOTION_FRAMES: Final = 300
+RETURN_FRAMES: Final = 1050
 REQUIRED_FRAMES: Final = REFERENCE_FRAMES + MOTION_FRAMES + RETURN_FRAMES
 
 FixturePhase = Literal["a_reference", "b_motion", "a_return"]

@@ -63,9 +63,17 @@ def _is_capture_phase(
     control_tick_id: int,
     physics_substep_ordinal: int,
 ) -> bool:
+    schedule = profile.schedule
+    if schedule.physics_substeps_per_capture % schedule.control_ticks_per_capture != 0:
+        raise ValueError("camera capture schedule does not close on control ticks")
+    final_substep_ordinal = (
+        schedule.physics_substeps_per_capture // schedule.control_ticks_per_capture - 1
+    )
     return (
         control_tick_id + 1
-    ) % profile.schedule.control_ticks_per_capture == 0 and physics_substep_ordinal == 1
+    ) % schedule.control_ticks_per_capture == 0 and (
+        physics_substep_ordinal == final_substep_ordinal
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -625,8 +633,8 @@ class DualD405CameraCapture:
 
         if not self.active:
             raise RuntimeError("camera capture is not active")
-        if physics_substep_ordinal not in (0, 1):
-            raise ValueError("physics_substep_ordinal must be zero or one")
+        if type(physics_substep_ordinal) is not int or physics_substep_ordinal < 0:
+            raise ValueError("physics_substep_ordinal must be non-negative")
         for side, pipeline in self._pipelines.items():
             profile = pipeline.runtime.camera_profile
             if not _is_capture_phase(
@@ -857,10 +865,10 @@ def scheduled_capture_stamp_ns(
     rate_hz = int(capture_rate_hz)
     if rate_hz <= 0:
         raise ValueError("capture rate must be a positive integer-valued frequency")
-    if control_tick_id < 0 or control_tick_id % 2 != 1:
-        raise ValueError("D405 capture control tick must be a non-negative odd index")
+    if control_tick_id < 0:
+        raise ValueError("D405 capture control tick must be non-negative")
     activation_grid_index = (activation_stamp_ns * rate_hz + 500_000_000) // 1_000_000_000
-    capture_ordinal = (control_tick_id + 1) // 2
+    capture_ordinal = control_tick_id + 1
     scaled = (activation_grid_index + capture_ordinal) * 1_000_000_000
     quotient, remainder = divmod(scaled, rate_hz)
     return quotient + int(remainder * 2 >= rate_hz)

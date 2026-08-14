@@ -1,7 +1,7 @@
 schema: wujihand.mini_dataset_gate_profile.v1
-profile_id: mini_dataset_integrity_quality_gate_v1
+profile_id: mini_dataset_integrity_quality_gate_120_30_v1
 integrity:
-  expected_control_hz: 60.0
+  expected_control_hz: 30.0
   expected_physics_hz: 120.0
   q54_continuity_atol_rad: 0.00000001
   simulation_time_atol_s: 0.000000001
@@ -10,7 +10,7 @@ integrity:
   static_reference_rotation_limit_rad: 0.000001
   replay_link_position_limit_m: 0.00002
 quality:
-  control_hz_lower: [59.5, 58.0, 55.0]
+  control_hz_lower: [29.75, 29.0, 27.5]
   real_time_factor_lower: [0.99, 0.97, 0.90]
   missed_fraction_upper: [0.005, 0.02, 0.03]
   consecutive_misses_upper: [1.0, 2.0, 5.0]

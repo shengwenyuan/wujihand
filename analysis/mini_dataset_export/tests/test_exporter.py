@@ -213,7 +213,6 @@ def _episode(tmp_path: Path, run_id: str, *, offset: int) -> PolicyEpisode:
         source_last_control_index=offset,
         source_transition_count=1,
         frames=(alignment_frame,),
-        odd_control_indices=(),
         digest_sha256="d" * 64,
     )
     vision = VisionArtifact(

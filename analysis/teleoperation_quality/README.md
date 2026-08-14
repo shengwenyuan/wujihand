@@ -3,8 +3,8 @@
 This package is the read-only, offline consumer of immutable ROS 2 teleoperation run
 artifacts. It is intentionally separate from `src/wujihand` and the ROS control graph.
 
-Version `0.3.0` reads both `wujihand.teleoperation_tick_trace.v1` and `.v2`. It retains the
-explicit 120/60/20 scheduler facts from `0.2.x` and adds fail-closed validation for the dual
+Version `0.3.0` reads both `wujihand.teleoperation_tick_trace.v1` and `.v2`. It validates the
+current explicit 120/30/15 scheduler facts and adds fail-closed validation for the dual
 synthetic D405 bundles, deterministic 30 Hz stamps, raw RTX frame identities, CameraInfo,
 dynamic/static TF closure and manifest/receipt calibration provenance:
 
@@ -15,7 +15,7 @@ The ROS wire contracts are separately versioned as `TeleoperationTickTrace` (v1)
 - Tracker/Glove intrinsic rate, interval, sequence and raw observation quality;
 - full-window trace-selected input rate and receipt inbox accounting;
 - control rate, tick jitter, target-period miss ratio, source age and stage durations;
-- scheduler lateness/missed slots, two physics substeps per control target, real-time factor and
+- scheduler lateness/missed slots, four physics substeps per control target, real-time factor and
   GUI render cadence when the v2 trace is present;
 - arm/hand safety state, mapping, IK and retargeting distributions;
 - q7/q20 command to applied-q27 composition invariants;
@@ -41,7 +41,7 @@ python tools/analysis/analyze_teleoperation_run.py \
   --output-root /path/to/new-analysis-directory
 ```
 
-The default performance references are the already documented NV-5.1 targets: 60 Hz control,
-20 Hz GUI preview, P95 tick interval at most 20 ms headless or 25 ms with GUI, and P95
+The default performance references are the current NV-5.1 targets: 30 Hz control,
+15 Hz GUI preview, P95 tick interval at most 35 ms, and P95
 active-source age below 20 ms. They are reported as planned targets, not silently promoted to
 data-release thresholds.
